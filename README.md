@@ -603,14 +603,14 @@ Every mismatch resolution lands here, never auto-approved.
 
 These were not in the brief but the product will need them:
 
-- **Bet slip & settlement** — how a bet is recorded and paid out against results. Without this, History has nothing to show.
-- **Deposit / withdrawal queue** — a manual approval list with mobile money transaction references, matching the "manual" phase you described.
-- **Append-only ledger** — every balance change recorded with who, when, and why. Essential for disputes.
-- **Ban & audit log** — who banned which user, when, and the reason.
+- **Bet slip & settlement** — ✅ implemented in Phase 3.
+- **Deposit / withdrawal queue** — a manual approval list with mobile money transaction references, matching the "manual" phase you described. *(Admin credit endpoint exists; a dedicated queue UI is still pending.)*
+- **Append-only ledger** — ✅ implemented in Phase 3.
+- **Ban & audit log** — ✅ implemented in Phase 2.
 - **Community moderation** — report, hide, and delete posts; mute or ban repeat offenders.
-- **Match locking** — automatic stop on betting at kickoff, so late bets can't be accepted.
+- **Match locking** — ✅ implemented: betting closes automatically at kickoff.
 - **Announcements** — a lightweight notice pushed to all users (text-only, low data).
-- **Payout / commission rules** — how winnings are calculated and what the house keeps.
+- **Payout / commission rules** — ✅ payout maths implemented; final commercial margin still open.
 - **Export** — CSV export of users and finances for accounting and tax.
 - **A second, limited admin** — support staff who can view but not change money.
 
@@ -1168,11 +1168,11 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 - [ ] **Password policy** — "simple password" needs a floor: minimum length, and whether weak/common passwords are rejected.
 - [ ] **Nickname rules** — must nicknames be unique, and what is allowed (length, characters, profanity filter)?
 - [ ] **Profile picture spec** — target dimensions and format for the < 10 KB limit (e.g. 96×96 or 128×128 WebP).
-- [ ] **CSV template** — the exact column set for the matches file (no odds column needed, since markets are Yes/Over 0.5).
+- [x] ~~**CSV template**~~ — resolved: template lives at `frontend/public/matches-template.csv`.
 - [x] ~~**Match & option model**~~ — resolved: only Full Time Over 0.5 Goals and Over 0.5 Half Time.
 - [x] ~~**Settlement rules**~~ — resolved: official source decides, admin approves, corrections are reversing ledger entries.
-- [ ] **History contents** — does it show only bets, or deposits and withdrawals too?
-- [ ] **Commission** — what percentage the house keeps on winning bets.
+- [x] ~~**History contents**~~ — resolved: History shows bets only; the wallet ledger lives on Profile.
+- [ ] **Commission** — the payout multiplier is configurable (`PAYOUT_MULTIPLIER_BP`, default 1.50×), but the final commercial margin and whether a separate commission line is shown still need sign-off.
 - [ ] **Access fee** — how much, how often (one-time or monthly), and what happens to a user who stops paying.
 - [x] ~~**Notification policy**~~ — resolved: max 2/day, quiet hours 22:00–07:00 EAT, per-category mute.
 
@@ -1216,7 +1216,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Development Status
 
-**Phase 2 complete — matches admin, CSV import, and manual user activation are working end to end.** Phases 3–6 remain.
+**Phase 3 complete — bet slip, wallet, ledger, settlement, corrections, and refunds are working end to end.** Phases 4–6 remain.
 
 ### What exists now
 
@@ -1231,7 +1231,12 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Users list, search, manual activation, suspend / ban, audit log | ✅ Working | `frontend/src/pages/admin/users.astro` |
 | Astro + Tailwind user app (PWA shell) | ✅ Working | `frontend/` |
 | Admin app (separate layout) | ✅ Working | `frontend/src/pages/admin/` |
-| Bets, wallet, ledger settlement | ⬜ Next phase | — |
+| Bet slip with fixed stake tiers | ✅ Working | `frontend/src/pages/index.astro` |
+| Wallet balance and append-only ledger | ✅ Working | `backend/internal/httpapi/bets.go` |
+| Bet placement (atomic debit + bet row + ledger) | ✅ Working | `backend/internal/httpapi/bets.go` |
+| Settlement, correction with reversal, postponed refunds | ✅ Working | `backend/internal/httpapi/settlement.go` |
+| History with final scores and visible losses | ✅ Working | `frontend/src/pages/history.astro` |
+| Admin settle / correct / refund modal | ✅ Working | `frontend/src/pages/admin/matches.astro` |
 | Community, push notifications, AI results | ⬜ Later | — |
 
 ### Matches CSV format
@@ -1261,6 +1266,54 @@ Behaviour:
 - **Import log** — every upload records admin, date, file name, totals, failures, and whether it replaced.
 - **Visibility** — users only ever see today and tomorrow; later dates are stored and appear when they enter the window.
 
+### Wallet, bets, and settlement
+
+Money is stored in **cents** (`balance_cents`, `stake_cents`, `payout_cents`); the UI divides by 100 for TZS. Every movement writes a row to the append-only `ledger` table.
+
+**Placing a bet** — one transaction, in this order:
+
+1. Lock the user row (`SELECT … FOR UPDATE`) so two taps cannot overspend.
+2. Check the account is `active` and `access_expires_at` has not passed.
+3. Check the optional daily cap (`MAX_BET_PER_DAY_CENTS`, `0` = off).
+4. Check the match is `upcoming` and kickoff has not passed, and the market is offered.
+5. Reject a second slip on the same user + match + market (`idx_bets_one_per_market`).
+6. Debit the stake, insert the bet, insert a `bet_placed` ledger row, commit.
+
+The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later changes to either do not rewrite history.
+
+**Fixed stake tiers.** Stakes are never free-form. The server validates `stake_cents` against `STAKE_TIERS_CENTS`; the client renders the same list from `GET /api/v1/config`.
+
+**Settlement** (`ft_over_0_5` wins when full-time goals ≥ 1; `ht_over_0_5` wins when half-time goals ≥ 1):
+
+- Payout = `stake × PAYOUT_MULTIPLIER_BP / 10000`, credited with a `bet_won` ledger row. The stake was already debited, so this is the full return.
+- Half-time score is required when any bet exists on the HT market.
+- The result is written to `results_archive` and the match is marked `finished` / `settled_at`.
+
+**Corrections** (`correct=true` plus a reason):
+
+- Old winning payouts are reversed with a **negative ledger row** (`bet_correction_reversal`); nothing is edited in place.
+- The old result stays in `results_archive`; the correction is a **new row** linked by `corrects_id`, with reviewer, reason, and timestamp.
+- Bets are reset to `pending`, re-settled against the corrected score, and users are notified in the product copy.
+
+**Postponed / cancelled matches** are refunded, never left pending:
+
+- Every pending bet becomes `refunded` with `void_reason`, the stake is credited back, and a `bet_refund` ledger row is written.
+- The match is marked `postponed` or `cancelled`.
+
+### User API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/auth/register` | Register with phone, nickname, password |
+| `POST` | `/api/v1/auth/login` | Login → user JWT |
+| `GET` | `/api/v1/me` | Current profile |
+| `PUT` | `/api/v1/me` | Update password / nickname |
+| `GET` | `/api/v1/matches` | Today + tomorrow, with `is_open` and markets |
+| `GET` | `/api/v1/config` | Stake tiers, payout multiplier, markets |
+| `POST` | `/api/v1/bets` | Place a slip: `match_id`, `market`, `stake_cents` |
+| `GET` | `/api/v1/wallet` | Balance + last 50 ledger entries |
+| `GET` | `/api/v1/history` | User bets for the last 6 months, with scores |
+
 ### Admin API
 
 | Method | Path | Purpose |
@@ -1268,11 +1321,15 @@ Behaviour:
 | `POST` | `/api/v1/admin/login` | Env-var credentials → admin JWT |
 | `GET` | `/api/v1/admin/me` | Current admin identity |
 | `POST` | `/api/v1/admin/matches/upload` | Multipart: `date`, `file`, optional `replace` |
-| `GET` | `/api/v1/admin/matches?date=YYYY-MM-DD` | All matches for one date |
+| `GET` | `/api/v1/admin/matches?date=YYYY-MM-DD` | All matches for one date, with `settled` and scores |
 | `PUT` | `/api/v1/admin/matches/{id}` | Change `confidence` / `status` |
+| `GET` | `/api/v1/admin/matches/{id}/bets` | Exposure for one match |
+| `POST` | `/api/v1/admin/matches/{id}/settle` | Record result and settle pending bets; `correct=true` reverses first |
+| `POST` | `/api/v1/admin/matches/{id}/refund` | Refund pending bets; `status` is `postponed` or `cancelled` |
 | `GET` | `/api/v1/admin/imports` | Recent upload log |
 | `GET` | `/api/v1/admin/users?q=&status=` | Search and filter users |
 | `PUT` | `/api/v1/admin/users/{id}/status` | Activate (with days), suspend, ban, deactivate |
+| `POST` | `/api/v1/admin/users/{id}/credit` | Manual deposit / withdrawal with a reason |
 
 ### Running locally
 
@@ -1282,6 +1339,7 @@ psql -U postgres -c "CREATE USER betva WITH PASSWORD 'betva';"
 psql -U postgres -c "CREATE DATABASE betva OWNER betva;"
 psql -U betva -d betva -f backend/migrations/001_init.sql
 psql -U betva -d betva -f backend/migrations/002_matches_admin.sql
+psql -U betva -d betva -f backend/migrations/003_wallet_settlement.sql
 
 # 2. Backend
 cd backend
@@ -1308,8 +1366,11 @@ Admin app: `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `AD
 | `CORS_ORIGINS` | Production | Comma-separated frontend origins |
 | `PORT` | No | Defaults to `8080` |
 | `ENV` | No | `development` or `production` |
+| `STAKE_TIERS_CENTS` | No | Comma-separated fixed stakes in cents; default `50000,100000,200000,500000` (500–5,000 TZS) |
+| `PAYOUT_MULTIPLIER_BP` | No | Basis points returned on a win; default `15000` = 1.50× |
+| `MAX_BET_PER_DAY_CENTS` | No | Optional per-user daily stake cap in cents; `0` disables it |
 
-**Next:** Phase 3 — bet slip, wallet, and atomic settlement.
+**Next:** Phase 4 — community feed, guardrails, and notifications.
 
 **Decisions locked in:**
 - Frontend hosting: **Vercel**

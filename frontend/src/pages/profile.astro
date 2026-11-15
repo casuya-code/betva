@@ -7,80 +7,160 @@ import Layout from '../layouts/Layout.astro';
 
     <div class="glass p-4 space-y-3">
       <div class="flex items-center gap-3">
-        <div class="w-14 h-14 rounded-full bg-[var(--surface-el)] flex items-center justify-center text-xl">👤</div>
-        <div>
-          <div class="font-semibold" id="p-nickname">—</div>
+        <div class="w-14 h-14 rounded-full bg-[var(--surface-el)] flex items-center justify-center text-xl" aria-hidden="true">👤</div>
+        <div class="min-w-0">
+          <div class="font-semibold truncate" id="p-nickname">—</div>
           <div class="text-sm text-[var(--text-2)]" id="p-phone">—</div>
           <span class="badge badge-pending" id="p-status">—</span>
         </div>
       </div>
     </div>
 
+    <!-- Wallet -->
     <div class="glass p-4">
-      <h3 class="font-semibold mb-3">Account status</h3>
-      <div class="space-y-2 text-sm">
-        <div class="flex justify-between"><span class="text-[var(--text-2)]">Status</span><span id="p-astatus">—</span></div>
-        <div class="flex justify-between"><span class="text-[var(--text-2)]">Balance</span><span class="counter" id="p-balance">—</span></div>
-        <div class="flex justify-between"><span class="text-[var(--text-2)]">Expires</span><span id="p-expiry">—</span></div>
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="font-semibold">Wallet</h3>
+        <span class="text-xs text-[var(--text-3)]">Balance</span>
+      </div>
+      <div class="text-3xl font-bold counter" id="p-balance">—</div>
+      <div class="text-sm text-[var(--text-2)]">TZS available</div>
+
+      <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
+        <div class="glass-el p-3">
+          <div class="text-xs text-[var(--text-3)]">Account status</div>
+          <div id="p-astatus">—</div>
+        </div>
+        <div class="glass-el p-3">
+          <div class="text-xs text-[var(--text-3)]">Access expires</div>
+          <div id="p-expiry">—</div>
+        </div>
       </div>
     </div>
 
+    <!-- Ledger -->
     <div class="glass p-4">
-      <h3 class="font-semibold mb-3">Payment &amp; activation</h3>
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">Recent activity</h3>
+        <span class="text-xs text-[var(--text-3)]">Last 50 entries</span>
+      </div>
+      <div id="ledger" class="text-sm text-[var(--text-2)]">Loading…</div>
+    </div>
+
+    <div class="glass p-4">
+      <h3 class="font-semibold mb-3">Deposit &amp; activation</h3>
       <p class="text-sm text-[var(--text-2)] mb-3">
-        To activate or renew, pay via mobile money to the admin number below, then wait for manual activation.
+        Pay via mobile money to the admin number below, then send your transaction reference.
+        Deposits and access activation are applied manually by an admin.
       </p>
       <div class="glass-el p-3 text-center">
         <div class="text-xs text-[var(--text-3)]">Admin payment number</div>
         <div class="text-lg font-bold counter" id="admin-number">+255 700 000 000</div>
       </div>
-      <p class="text-xs text-[var(--text-3)] mt-2">Keep your transaction reference number.</p>
+      <p class="text-xs text-[var(--text-3)] mt-2">Every wallet movement is recorded in the ledger above — nothing is edited or removed.</p>
     </div>
 
     <div class="glass p-4 space-y-3">
       <h3 class="font-semibold">Edit profile</h3>
       <form id="editForm" class="space-y-3">
         <div>
-          <label class="text-sm text-[var(--text-2)] mb-1 block">New password</label>
-          <input class="input" name="password" type="password" minlength="6" />
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="pw">New password</label>
+          <input class="input" id="pw" name="password" type="password" minlength="6" autocomplete="new-password" />
         </div>
         <button class="btn btn-secondary w-full" type="submit">Save changes</button>
       </form>
-      <div id="msg" class="text-center text-sm"></div>
+      <div id="msg" class="text-center text-sm" aria-live="polite"></div>
     </div>
 
-    <button id="logoutBtn" class="btn btn-danger w-full">Logout</button>
+    <button id="logoutBtn" class="btn btn-danger w-full" type="button">Logout</button>
   </div>
 
   <script>
-    const API = (window as any).BETVA_API;
-    const token = localStorage.getItem('betva_token');
-    async function authFetch(path: string, opts: any = {}) {
-      const r = await fetch(`${API}${path}`, {
-        ...opts,
-        headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` },
-      });
-      return r;
+    import { authFetch, esc, money, clearToken, toast } from '../lib/api';
+
+    const statusClass: Record<string, string> = {
+      active: 'badge-win',
+      inactive: 'badge-pending',
+      suspended: 'badge-live',
+      banned: 'badge-loss',
+    };
+
+    const REASON_LABEL: Record<string, string> = {
+      bet_placed: 'Slip placed',
+      bet_won: 'Winning payout',
+      bet_refund: 'Stake refunded',
+      bet_correction_reversal: 'Correction reversal',
+    };
+
+    function reasonLabel(reason: string): string {
+      if (REASON_LABEL[reason]) return REASON_LABEL[reason];
+      if (reason.startsWith('admin_adjustment:')) return reason.replace('admin_adjustment:', 'Admin:').trim();
+      return reason.replace(/_/g, ' ');
     }
-    async function load() {
-      if (!token) { window.location.href = '/login'; return; }
+
+    async function loadMe() {
       const res = await authFetch('/api/v1/me');
-      if (!res.ok) { window.location.href = '/login'; return; }
+      if (!res.ok) return;
       const d = await res.json();
-      (document.getElementById('p-nickname') as HTMLElement).textContent = d.nickname;
-      (document.getElementById('p-phone') as HTMLElement).textContent = d.phone;
-      (document.getElementById('p-status') as HTMLElement).textContent = d.status.toUpperCase();
-      (document.getElementById('p-astatus') as HTMLElement).textContent = d.status;
-      (document.getElementById('p-balance') as HTMLElement).textContent = (d.balance_cents / 100).toFixed(0);
-      (document.getElementById('p-expiry') as HTMLElement).textContent = d.access_expires_at || '—';
+      document.getElementById('p-nickname')!.textContent = d.nickname || '—';
+      document.getElementById('p-phone')!.textContent = d.phone || '—';
+
+      const statusEl = document.getElementById('p-status')!;
+      statusEl.textContent = (d.status || 'unknown').toUpperCase();
+      statusEl.className = `badge ${statusClass[d.status] || 'badge-pending'}`;
+
+      document.getElementById('p-astatus')!.textContent = d.status || '—';
+      document.getElementById('p-expiry')!.textContent = d.access_expires_at
+        ? String(d.access_expires_at).slice(0, 10)
+        : 'No active period';
     }
-    load();
+
+    async function loadWallet() {
+      const res = await authFetch('/api/v1/wallet');
+      if (!res.ok) throw new Error('failed');
+      const d = await res.json();
+
+      document.getElementById('p-balance')!.textContent = money(d.balance_cents);
+
+      const entries: Array<{ amount_cents: number; reason: string; created_at: string }> = d.entries || [];
+      const el = document.getElementById('ledger')!;
+      if (!entries.length) {
+        el.innerHTML = '<div class="text-[var(--text-3)]">No wallet activity yet.</div>';
+        return;
+      }
+
+      el.innerHTML = `
+        <ul class="divide-y divide-[var(--border)]">
+          ${entries
+            .map((e) => {
+              const positive = e.amount_cents > 0;
+              return `
+                <li class="flex items-center justify-between gap-3 py-2">
+                  <div class="min-w-0">
+                    <div class="truncate">${esc(reasonLabel(e.reason))}</div>
+                    <div class="text-xs text-[var(--text-3)]">${esc(e.created_at)}</div>
+                  </div>
+                  <div class="counter shrink-0 ${positive ? 'text-green-400' : 'text-red-400'}">
+                    ${positive ? '+' : '−'}${money(Math.abs(e.amount_cents))}
+                  </div>
+                </li>`;
+            })
+            .join('')}
+        </ul>`;
+    }
+
+    (async () => {
+      try {
+        await loadMe();
+        await loadWallet();
+      } catch {
+        toast('Could not load your wallet', 'error');
+      }
+    })();
 
     const form = document.getElementById('editForm') as HTMLFormElement;
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const fd = new FormData(form);
-      const pw = fd.get('password');
+      const pw = (new FormData(form).get('password') || '').toString();
       if (!pw) return;
       const res = await authFetch('/api/v1/me', {
         method: 'PUT',
@@ -89,12 +169,13 @@ import Layout from '../layouts/Layout.astro';
       });
       const data = await res.json();
       const msg = document.getElementById('msg')!;
-      msg.textContent = res.ok ? 'Saved.' : (data.error || 'Failed');
+      msg.textContent = res.ok ? 'Saved.' : data.error || 'Failed';
       msg.className = res.ok ? 'text-center text-sm text-green-400' : 'text-center text-sm text-red-400';
+      if (res.ok) form.reset();
     });
 
     document.getElementById('logoutBtn')!.addEventListener('click', () => {
-      localStorage.removeItem('betva_token');
+      clearToken();
       window.location.href = '/login';
     });
   </script>

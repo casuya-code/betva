@@ -15,6 +15,11 @@ type Config struct {
 	AdminPass   string
 	Env         string
 	CORSOrigins []string
+
+	// Wallet / betting rules.
+	StakeTiers       []int64 // allowed stake amounts, in cents
+	PayoutMultiplier int     // basis points, e.g. 15000 = 1.50x returned on a win
+	MaxBetPerUserDay int64   // optional daily cap in cents; 0 = no cap
 }
 
 func Load() *Config {
@@ -31,6 +36,7 @@ func Load() *Config {
 			}
 		}
 	}
+
 	return &Config{
 		Port:        getEnv("PORT", "8080"),
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://betva:betva@localhost:5432/betva?sslmode=disable"),
@@ -40,7 +46,29 @@ func Load() *Config {
 		AdminPass:   getEnv("ADMIN_PASSWORD", ""),
 		Env:         getEnv("ENV", "development"),
 		CORSOrigins: origins,
+
+		StakeTiers:       parseStakeTiers(getEnv("STAKE_TIERS_CENTS", "50000,100000,200000,500000")),
+		PayoutMultiplier: Atoi(getEnv("PAYOUT_MULTIPLIER_BP", "15000"), 15000),
+		MaxBetPerUserDay: int64(Atoi(getEnv("MAX_BET_PER_DAY_CENTS", "0"), 0)),
 	}
+}
+
+func parseStakeTiers(raw string) []int64 {
+	var out []int64
+	for _, p := range strings.Split(raw, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		n, err := strconv.ParseInt(p, 10, 64)
+		if err == nil && n > 0 {
+			out = append(out, n)
+		}
+	}
+	if len(out) == 0 {
+		out = []int64{50000, 100000, 200000, 500000}
+	}
+	return out
 }
 
 func getEnv(key, def string) string {
@@ -51,6 +79,22 @@ func getEnv(key, def string) string {
 }
 
 func (c *Config) IsProd() bool { return c.Env == "production" }
+
+// IsValidStake reports whether cents is one of the fixed stake tiers.
+func (c *Config) IsValidStake(cents int64) bool {
+	for _, t := range c.StakeTiers {
+		if t == cents {
+			return true
+		}
+	}
+	return false
+}
+
+// PayoutFor returns the gross amount credited on a winning bet.
+// The stake was already debited at placement, so this is the full return.
+func (c *Config) PayoutFor(stakeCents int64) int64 {
+	return stakeCents * int64(c.PayoutMultiplier) / 10000
+}
 
 func Atoi(s string, def int) int {
 	n, err := strconv.Atoi(s)

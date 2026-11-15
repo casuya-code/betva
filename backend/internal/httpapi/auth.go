@@ -217,22 +217,3 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
-
-func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
-	u := UserFromCtx(r)
-	if u == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	// placeholder: return empty list
-	writeJSON(w, http.StatusOK, map[string]interface{}{"bets": []interface{}{}})
-}
-
-func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
-	u := UserFromCtx(r)
-	if u == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented yet"})
-}

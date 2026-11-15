@@ -30,6 +30,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 
 		// matches (public read)
 		api.Get("/matches", s.handleListMatches)
+		api.Get("/config", s.handleConfig)
 
 		// admin login uses env credentials, never the database
 		api.Post("/admin/login", s.handleAdminLogin)
@@ -39,6 +40,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			protected.Use(s.authMiddleware)
 			protected.Get("/me", s.handleMe)
 			protected.Put("/me", s.handleUpdateMe)
+			protected.Get("/wallet", s.handleWallet)
 			protected.Get("/history", s.handleHistory)
 			protected.Post("/bets", s.handlePlaceBet)
 		})
@@ -51,10 +53,14 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			adm.Get("/matches", s.handleAdminListMatches)
 			adm.Post("/matches/upload", s.handleUploadMatches)
 			adm.Put("/matches/{id}", s.handleAdminUpdateMatch)
+			adm.Get("/matches/{id}/bets", s.handleAdminMatchBets)
+			adm.Post("/matches/{id}/settle", s.handleAdminSettleMatch)
+			adm.Post("/matches/{id}/refund", s.handleAdminRefundMatch)
 			adm.Get("/imports", s.handleImportLog)
 
 			adm.Get("/users", s.handleAdminListUsers)
 			adm.Put("/users/{id}/status", s.handleAdminUpdateUserStatus)
+			adm.Post("/users/{id}/credit", s.handleAdminCredit)
 		})
 	})
 }

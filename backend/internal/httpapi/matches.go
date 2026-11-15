@@ -431,7 +431,10 @@ func (s *Server) handleAdminListMatches(w http.ResponseWriter, r *http.Request) 
 	rows, err := s.Pool.Query(ctx, `
 		SELECT m.id, to_char(m.match_date, 'YYYY-MM-DD'), to_char(m.kickoff_time, 'HH24:MI'), COALESCE(m.league, ''),
 		       m.home_team, m.away_team, m.status, m.confidence,
-		       COALESCE(array_agg(mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}')
+		       COALESCE(array_agg(mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}'),
+		       (m.settled_at IS NOT NULL),
+		       COALESCE(m.home_goals, -1), COALESCE(m.away_goals, -1),
+		       COALESCE(m.home_goals_ht, -1), COALESCE(m.away_goals_ht, -1)
 		FROM matches m
 		LEFT JOIN match_markets mm ON mm.match_id = m.id
 		WHERE m.match_date = $1
@@ -445,22 +448,28 @@ func (s *Server) handleAdminListMatches(w http.ResponseWriter, r *http.Request) 
 	defer rows.Close()
 
 	type matchRow struct {
-		ID         string   `json:"id"`
-		MatchDate  string   `json:"match_date"`
-		Kickoff    string   `json:"kickoff"`
-		League     string   `json:"league"`
-		HomeTeam   string   `json:"home_team"`
-		AwayTeam   string   `json:"away_team"`
-		Status     string   `json:"status"`
-		Confidence string   `json:"confidence"`
-		Markets    []string `json:"markets"`
+		ID          string   `json:"id"`
+		MatchDate   string   `json:"match_date"`
+		Kickoff     string   `json:"kickoff"`
+		League      string   `json:"league"`
+		HomeTeam    string   `json:"home_team"`
+		AwayTeam    string   `json:"away_team"`
+		Status      string   `json:"status"`
+		Confidence  string   `json:"confidence"`
+		Markets     []string `json:"markets"`
+		Settled     bool     `json:"settled"`
+		HomeGoals   int      `json:"home_goals"`
+		AwayGoals   int      `json:"away_goals"`
+		HomeGoalsHT int      `json:"home_goals_ht"`
+		AwayGoalsHT int      `json:"away_goals_ht"`
 	}
 
 	out := []matchRow{}
 	for rows.Next() {
 		var m matchRow
 		if err := rows.Scan(&m.ID, &m.MatchDate, &m.Kickoff, &m.League, &m.HomeTeam,
-			&m.AwayTeam, &m.Status, &m.Confidence, &m.Markets); err != nil {
+			&m.AwayTeam, &m.Status, &m.Confidence, &m.Markets,
+			&m.Settled, &m.HomeGoals, &m.AwayGoals, &m.HomeGoalsHT, &m.AwayGoalsHT); err != nil {
 			continue
 		}
 		out = append(out, m)

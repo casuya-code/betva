@@ -3,38 +3,186 @@ import Layout from '../layouts/Layout.astro';
 ---
 <Layout title="Betva — History" active="history">
   <div class="px-4 pt-4 space-y-4">
-    <h1 class="text-2xl font-bold">History</h1>
-    <p class="text-sm text-[var(--text-2)]">Last 6 months of your bets.</p>
+    <div>
+      <h1 class="text-2xl font-bold">History</h1>
+      <p class="text-sm text-[var(--text-2)]">Your bets from the last 6 months. Nothing is hidden — wins and losses both stay here.</p>
+    </div>
+
+    <!-- Personal record -->
+    <div class="glass p-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-[var(--text-2)]">Your record</span>
+        <span class="text-xs text-[var(--text-3)]" id="h-range">—</span>
+      </div>
+      <div class="grid grid-cols-4 gap-2 text-center">
+        <div>
+          <div class="text-xl font-bold counter" id="h-settled">—</div>
+          <div class="text-[11px] text-[var(--text-3)]">Settled</div>
+        </div>
+        <div>
+          <div class="text-xl font-bold counter text-green-400" id="h-wins">—</div>
+          <div class="text-[11px] text-[var(--text-3)]">Wins</div>
+        </div>
+        <div>
+          <div class="text-xl font-bold counter text-red-400" id="h-losses">—</div>
+          <div class="text-[11px] text-[var(--text-3)]">Losses</div>
+        </div>
+        <div>
+          <div class="text-xl font-bold counter" id="h-rate">—</div>
+          <div class="text-[11px] text-[var(--text-3)]">Win rate</div>
+        </div>
+      </div>
+      <div class="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between text-sm">
+        <span class="text-[var(--text-2)]">Net return</span>
+        <span class="counter" id="h-net">—</span>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold">All bets</h2>
+      <span class="text-xs text-[var(--text-3)]" id="h-count"></span>
+    </div>
+
     <div id="list" class="space-y-3">
-      <div class="card"><div class="skeleton h-16"></div></div>
-      <div class="card"><div class="skeleton h-16"></div></div>
+      <div class="card"><div class="skeleton h-24"></div></div>
+      <div class="card"><div class="skeleton h-24"></div></div>
     </div>
   </div>
+
   <script>
-    const API = (window as any).BETVA_API;
-    const token = localStorage.getItem('betva_token');
-    async function load() {
-      if (!token) { window.location.href = '/login'; return; }
-      const res = await fetch(`${API}/api/v1/history`, { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      const el = document.getElementById('list')!;
-      if (!data.bets || data.bets.length === 0) {
-        el.innerHTML = '<div class="card text-center text-[var(--text-2)]">No bets yet.</div>';
+    import { authFetch, esc, money, MARKET_LABEL, betStatus, toast } from '../lib/api';
+
+    type Bet = {
+      id: string;
+      market: string;
+      stake_cents: number;
+      status: string;
+      payout_cents: number;
+      placed_at: string;
+      match_id: string;
+      match_date: string;
+      kickoff: string;
+      league: string;
+      home_team: string;
+      away_team: string;
+      home_goals: number | null;
+      away_goals: number | null;
+      home_goals_ht: number | null;
+      away_goals_ht: number | null;
+      match_status: string;
+      confidence: string;
+      void_reason: string | null;
+    };
+
+    function score(b: Bet): string {
+      if (b.home_goals === null || b.away_goals === null) return '—';
+      let s = `${b.home_goals}–${b.away_goals}`;
+      if (b.home_goals_ht !== null && b.away_goals_ht !== null) {
+        s += ` <span class="text-[var(--text-3)]">(HT ${b.home_goals_ht}–${b.away_goals_ht})</span>`;
+      }
+      return s;
+    }
+
+    function render(bets: Bet[]) {
+      const list = document.getElementById('list')!;
+      if (!bets.length) {
+        list.innerHTML =
+          '<div class="card text-center text-[var(--text-2)]">No bets yet. Open Home to place your first slip.</div>';
         return;
       }
-      el.innerHTML = data.bets.map((b: any) => `
-        <div class="card flex items-center justify-between">
-          <div>
-            <div class="font-semibold">${b.match || 'Match'}</div>
-            <div class="text-xs text-[var(--text-3)]">${b.market} · ${b.placed_at}</div>
-          </div>
-          <div class="text-right">
-            <div class="counter">${b.stake} TZS</div>
-            <span class="badge badge-${b.status === 'win' ? 'win' : b.status === 'loss' ? 'loss' : b.status === 'pending' ? 'pending' : 'postponed'}">${b.status.toUpperCase()}</span>
-          </div>
-        </div>
-      `).join('');
+
+      list.innerHTML = bets
+        .map((b) => {
+          const st = betStatus(b.status);
+          const payout =
+            b.status === 'win'
+              ? `<div class="text-green-400 counter">+${money(b.payout_cents)} TZS</div>`
+              : b.status === 'refunded'
+                ? `<div class="text-[var(--text-2)] counter">${money(b.stake_cents)} TZS returned</div>`
+                : b.status === 'loss'
+                  ? `<div class="text-red-400 counter">−${money(b.stake_cents)} TZS</div>`
+                  : `<div class="text-[var(--text-2)] counter">${money(b.stake_cents)} TZS at stake</div>`;
+
+          const reason = b.void_reason
+            ? `<div class="mt-2 text-xs text-[var(--text-3)]">Reason: ${esc(b.void_reason)}</div>`
+            : '';
+
+          return `
+            <div class="card">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <span class="text-xs text-[var(--text-3)] truncate">
+                  ${esc(b.league || 'Match')} · ${esc(b.match_date)} ${esc(b.kickoff)}
+                </span>
+                <span class="badge ${st.cls} shrink-0">${st.label}</span>
+              </div>
+
+              <div class="flex items-center justify-between gap-3">
+                <div class="font-semibold truncate">${esc(b.home_team)}</div>
+                <div class="counter text-sm shrink-0">${score(b)}</div>
+                <div class="font-semibold truncate text-right">${esc(b.away_team)}</div>
+              </div>
+
+              <div class="mt-2 flex items-center justify-between gap-2 text-sm">
+                <span class="badge badge-pending">${esc(MARKET_LABEL[b.market] || b.market)}</span>
+                <span class="text-xs text-[var(--text-3)]">Placed ${esc(b.placed_at)}</span>
+              </div>
+
+              <div class="mt-3 pt-3 border-t border-[var(--border)] flex items-end justify-between">
+                <div>
+                  <div class="text-xs text-[var(--text-3)]">Stake</div>
+                  <div class="counter">${money(b.stake_cents)} TZS</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs text-[var(--text-3)]">${b.status === 'win' ? 'Payout' : b.status === 'pending' ? 'Potential' : 'Result'}</div>
+                  ${payout}
+                </div>
+              </div>
+              ${reason}
+            </div>`;
+        })
+        .join('');
     }
+
+    function summarise(bets: Bet[]) {
+      const settled = bets.filter((b) => b.status === 'win' || b.status === 'loss');
+      const wins = bets.filter((b) => b.status === 'win').length;
+      const losses = bets.filter((b) => b.status === 'loss').length;
+      const rate = settled.length ? Math.round((wins / settled.length) * 100) : 0;
+
+      let net = 0;
+      for (const b of bets) {
+        if (b.status === 'win') net += b.payout_cents - b.stake_cents;
+        else if (b.status === 'loss') net -= b.stake_cents;
+      }
+
+      document.getElementById('h-settled')!.textContent = String(settled.length);
+      document.getElementById('h-wins')!.textContent = String(wins);
+      document.getElementById('h-losses')!.textContent = String(losses);
+      document.getElementById('h-rate')!.textContent = settled.length ? `${rate}%` : '—';
+
+      const netEl = document.getElementById('h-net')!;
+      netEl.textContent = `${net >= 0 ? '+' : '−'}${money(Math.abs(net))} TZS`;
+      netEl.className = `counter ${net > 0 ? 'text-green-400' : net < 0 ? 'text-red-400' : ''}`;
+
+      document.getElementById('h-count')!.textContent = `${bets.length} bet${bets.length === 1 ? '' : 's'}`;
+      document.getElementById('h-range')!.textContent = 'Last 6 months';
+    }
+
+    async function load() {
+      try {
+        const res = await authFetch('/api/v1/history');
+        if (!res.ok) throw new Error('failed');
+        const data = await res.json();
+        const bets: Bet[] = data.bets || [];
+        summarise(bets);
+        render(bets);
+      } catch {
+        document.getElementById('list')!.innerHTML =
+          '<div class="card text-center text-[var(--text-2)]">Could not load your history. Check your connection and try again.</div>';
+        toast('Could not load history', 'error');
+      }
+    }
+
     load();
   </script>
 </Layout>

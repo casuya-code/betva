@@ -73,12 +73,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       requireAdmin,
       todayISO,
       esc,
+      money,
       confidenceBadge,
       statusBadge,
     } from '../../lib/admin';
 
     const uploadDate = document.getElementById('uploadDate') as HTMLInputElement;
     const viewDate = document.getElementById('viewDate') as HTMLInputElement;
+    let dayCache: any[] = [];
     uploadDate.value = todayISO();
     viewDate.value = todayISO();
 
@@ -178,7 +180,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
               <thead>
                 <tr>
                   <th>Kickoff</th><th>League</th><th>Fixture</th><th>Markets</th>
-                  <th>Confidence</th><th>Status</th><th></th>
+                  <th>Confidence</th><th>Status</th><th></th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -205,12 +207,18 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                       </select>
                     </td>
                     <td><button class="btn btn-secondary text-xs admin-save" type="button">Save</button></td>
+                    <td>
+                      <button class="btn text-xs ${m.settled ? 'btn-secondary' : 'btn-primary'} admin-manage" type="button">
+                        ${m.settled ? 'Correct' : 'Settle'}
+                      </button>
+                    </td>
                   </tr>`
                   )
                   .join('')}
               </tbody>
             </table>
           </div>`;
+        dayCache = matches;
       } catch {
         el.textContent = 'Could not load matches.';
       }
@@ -246,6 +254,266 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         btn.classList.remove('text-green-400');
       }, 1500);
     });
+
+    // ---- settlement ---------------------------------------------------
+    type SettleCtx = { match: any; correction: boolean };
+
+    let settleCtx: SettleCtx | null = null;
+
+    const modal = document.getElementById('settleModal')!;
+    const modalBody = document.getElementById('settleBody')!;
+    const modalTitle = document.getElementById('settleTitle')!;
+
+    function closeModal() {
+      modal.classList.add('hidden');
+      settleCtx = null;
+      document.body.style.overflow = '';
+    }
+
+    document.getElementById('settleClose')!.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+    });
+
+    document.getElementById('dayList')!.addEventListener('click', async (e) => {
+      const btn = (e.target as HTMLElement).closest('.admin-manage') as HTMLElement | null;
+      if (!btn) return;
+      const row = btn.closest('tr')!;
+      const id = row.dataset.id!;
+      const match = dayCache.find((m) => m.id === id);
+      if (!match) return;
+      await openSettle(match);
+    });
+
+    async function openSettle(match: any) {
+      settleCtx = { match, correction: !!match.settled };
+      modalTitle.textContent = match.settled ? 'Correct result' : 'Settle match';
+      document.body.style.overflow = 'hidden';
+      modal.classList.remove('hidden');
+      modalBody.innerHTML = '<div class="text-sm text-[var(--text-2)]">Loading exposure…</div>';
+
+      let exposure: any = { bets: [], count: 0, total_stake_cents: 0 };
+      try {
+        const res = await adminFetch(`/api/v1/admin/matches/${match.id}/bets`);
+        if (res.ok) exposure = await res.json();
+      } catch {
+        /* show the form anyway */
+      }
+
+      const hasHT = (match.markets || []).includes('ht_over_0_5');
+      const fh = match.home_goals >= 0 ? match.home_goals : '';
+      const fa = match.away_goals >= 0 ? match.away_goals : '';
+      const hh = match.home_goals_ht >= 0 ? match.home_goals_ht : '';
+      const ha = match.away_goals_ht >= 0 ? match.away_goals_ht : '';
+
+      const betsHtml = exposure.count
+        ? `
+          <div class="overflow-x-auto max-h-56 overflow-y-auto rounded-lg border border-[var(--border)]">
+            <table class="admin-table">
+              <thead>
+                <tr><th>User</th><th>Market</th><th>Stake</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                ${(exposure.bets || [])
+                  .map(
+                    (b: any) => `
+                  <tr>
+                    <td>${esc(b.nickname || b.phone)}</td>
+                    <td>${b.market === 'ft_over_0_5' ? 'FT O0.5' : 'HT O0.5'}</td>
+                    <td class="counter">${money(b.stake_cents)}</td>
+                    <td><span class="badge ${statusBadge(b.status)}">${esc(b.status.toUpperCase())}</span></td>
+                  </tr>`
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="text-xs text-[var(--text-3)] mt-1">
+            ${exposure.count} bet${exposure.count === 1 ? '' : 's'} · total stake ${money(exposure.total_stake_cents)} TZS
+          </div>`
+        : '<div class="text-sm text-[var(--text-3)]">No bets on this match. The result is still archived.</div>';
+
+      modalBody.innerHTML = `
+        <div class="text-sm text-[var(--text-2)] mb-3">
+          ${esc(match.home_team)} vs ${esc(match.away_team)} · ${esc(match.match_date)} ${esc(match.kickoff)}
+        </div>
+
+        ${
+          match.settled
+            ? `<div class="glass-el p-3 mb-3 border-l-4" style="border-left-color:var(--warning)">
+                 <div class="text-sm font-semibold">Already settled</div>
+                 <div class="text-xs text-[var(--text-2)]">
+                   Saving a correction reverses the old payout with a new ledger entry. The original result stays in the archive.
+                 </div>
+               </div>`
+            : ''
+        }
+
+        <div class="mb-3">${betsHtml}</div>
+
+        <form id="settleForm" class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-sm text-[var(--text-2)] mb-1 block" for="ftHome">Full-time home goals</label>
+              <input class="input" id="ftHome" type="number" min="0" max="50" required value="${fh}" />
+            </div>
+            <div>
+              <label class="text-sm text-[var(--text-2)] mb-1 block" for="ftAway">Full-time away goals</label>
+              <input class="input" id="ftAway" type="number" min="0" max="50" required value="${fa}" />
+            </div>
+            <div>
+              <label class="text-sm text-[var(--text-2)] mb-1 block" for="htHome">
+                Half-time home${hasHT ? '' : ' (optional)'}
+              </label>
+              <input class="input" id="htHome" type="number" min="0" max="50" ${hasHT ? 'required' : ''} value="${hh}" />
+            </div>
+            <div>
+              <label class="text-sm text-[var(--text-2)] mb-1 block" for="htAway">
+                Half-time away${hasHT ? '' : ' (optional)'}
+              </label>
+              <input class="input" id="htAway" type="number" min="0" max="50" ${hasHT ? 'required' : ''} value="${ha}" />
+            </div>
+          </div>
+
+          <div>
+            <label class="text-sm text-[var(--text-2)] mb-1 block" for="source">Result source</label>
+            <input class="input" id="source" type="text" placeholder="e.g. official league / Forebet" value="manual" />
+          </div>
+
+          <div>
+            <label class="text-sm text-[var(--text-2)] mb-1 block" for="reason">
+              Reason ${match.settled ? '(required for a correction)' : '(optional)'}
+            </label>
+            <textarea class="input" id="reason" rows="2" placeholder="${match.settled ? 'What changed and why' : 'Optional note'}"></textarea>
+          </div>
+
+          <div id="settleMsg" class="text-sm" aria-live="polite"></div>
+
+          <div class="flex gap-2 flex-wrap">
+            <button class="btn btn-primary flex-1" type="submit" id="settleSubmit">
+              ${match.settled ? 'Save correction' : 'Settle match'}
+            </button>
+            ${
+              match.settled
+                ? ''
+                : `<button class="btn btn-secondary" type="button" id="refundPostponed">Refund · postponed</button>
+                   <button class="btn btn-danger" type="button" id="refundCancelled">Refund · cancelled</button>`
+            }
+          </div>
+        </form>`;
+
+      document.getElementById('settleForm')!.addEventListener('submit', submitSettle);
+      document.getElementById('refundPostponed')?.addEventListener('click', () => submitRefund('postponed'));
+      document.getElementById('refundCancelled')?.addEventListener('click', () => submitRefund('cancelled'));
+    }
+
+    function num(id: string): number | null {
+      const v = (document.getElementById(id) as HTMLInputElement).value.trim();
+      if (v === '') return null;
+      const n = Number(v);
+      return Number.isInteger(n) && n >= 0 && n <= 50 ? n : null;
+    }
+
+    function settleMessage(text: string, ok: boolean) {
+      const el = document.getElementById('settleMsg')!;
+      el.textContent = text;
+      el.className = `text-sm ${ok ? 'text-green-400' : 'text-red-400'}`;
+    }
+
+    async function submitSettle(e: Event) {
+      e.preventDefault();
+      if (!settleCtx) return;
+      const btn = document.getElementById('settleSubmit') as HTMLButtonElement;
+      const ftHome = num('ftHome');
+      const ftAway = num('ftAway');
+      const htHome = num('htHome');
+      const htAway = num('htAway');
+      const source = (document.getElementById('source') as HTMLInputElement).value.trim() || 'manual';
+      const reason = (document.getElementById('reason') as HTMLTextAreaElement).value.trim();
+
+      if (ftHome === null || ftAway === null) {
+        settleMessage('Enter a valid full-time score (0–50).', false);
+        return;
+      }
+      if ((htHome === null) !== (htAway === null)) {
+        settleMessage('Enter both half-time scores, or leave both blank.', false);
+        return;
+      }
+      if (settleCtx.correction && !reason) {
+        settleMessage('A correction requires a reason.', false);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {
+        const res = await adminFetch(`/api/v1/admin/matches/${settleCtx.match.id}/settle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            home_goals: ftHome,
+            away_goals: ftAway,
+            home_goals_ht: htHome,
+            away_goals_ht: htAway,
+            source,
+            reason,
+            correct: settleCtx.correction,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          settleMessage(data.error || 'Settlement failed.', false);
+          return;
+        }
+        settleMessage(
+          `Settled ${data.bets_settled} bet(s): ${data.wins} win, ${data.losses} loss, ${money(data.paid_out_cents)} TZS paid.`,
+          true
+        );
+        loadDay(viewDate.value);
+        setTimeout(closeModal, 1600);
+      } catch {
+        settleMessage('Settlement failed.', false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = settleCtx?.correction ? 'Save correction' : 'Settle match';
+      }
+    }
+
+    async function submitRefund(status: 'postponed' | 'cancelled') {
+      if (!settleCtx) return;
+      const reason =
+        (document.getElementById('reason') as HTMLTextAreaElement).value.trim() ||
+        (status === 'postponed' ? 'Match postponed' : 'Match cancelled');
+
+      const ok = window.confirm(
+        `Refund every pending bet on this match and mark it ${status}? This cannot be undone.`
+      );
+      if (!ok) return;
+
+      try {
+        const res = await adminFetch(`/api/v1/admin/matches/${settleCtx.match.id}/refund`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status, reason }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          settleMessage(data.error || 'Refund failed.', false);
+          return;
+        }
+        settleMessage(
+          `Refunded ${data.bets_refunded} bet(s), ${money(data.refunded_cents)} TZS returned. Match marked ${status}.`,
+          true
+        );
+        loadDay(viewDate.value);
+        setTimeout(closeModal, 1600);
+      } catch {
+        settleMessage('Refund failed.', false);
+      }
+    }
 
     // ---- import log ---------------------------------------------------
     async function loadImports() {
@@ -292,6 +560,17 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     void statusBadge;
   </script>
 
+  <!-- Settlement modal -->
+  <div id="settleModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settleTitle">
+    <div class="modal-card">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <h2 id="settleTitle" class="text-lg font-bold">Settle match</h2>
+        <button id="settleClose" type="button" class="btn btn-secondary text-sm" aria-label="Close">✕</button>
+      </div>
+      <div id="settleBody" class="text-sm text-[var(--text-2)]">Loading…</div>
+    </div>
+  </div>
+
   <style>
     .admin-table {
       width: 100%;
@@ -319,6 +598,34 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       font-size: 13px;
       min-height: 40px;
       width: auto;
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-card {
+      width: 100%;
+      max-width: 560px;
+      max-height: 92dvh;
+      overflow-y: auto;
+      background: #10161d;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 20px 20px 0 0;
+      padding: 16px 20px calc(24px + env(safe-area-inset-bottom));
+      box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.5);
+    }
+    @media (min-width: 640px) {
+      .modal-overlay { align-items: center; padding: 24px; }
+      .modal-card { border-radius: 16px; border-bottom: 1px solid var(--border); }
     }
   </style>
 </AdminLayout>
