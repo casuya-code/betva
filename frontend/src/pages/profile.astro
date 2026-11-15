@@ -46,6 +46,55 @@ import Layout from '../layouts/Layout.astro';
       <div id="ledger" class="text-sm text-[var(--text-2)]">Loading…</div>
     </div>
 
+    <!-- Inbox -->
+    <div class="glass p-4">
+      <div class="flex items-center justify-between mb-3 gap-2">
+        <h3 class="font-semibold">Notifications</h3>
+        <div class="flex items-center gap-2">
+          <span class="badge badge-pending" id="unreadBadge">0 UNREAD</span>
+          <button class="btn btn-ghost text-xs" id="markAll" type="button">Mark all read</button>
+        </div>
+      </div>
+      <div id="inbox" class="text-sm text-[var(--text-2)]">Loading…</div>
+    </div>
+
+    <!-- Notification preferences -->
+    <div class="glass p-4 space-y-3">
+      <h3 class="font-semibold">Notification settings</h3>
+      <p class="text-xs text-[var(--text-3)]">
+        Push is capped at 2 per day and stays silent 22:00–07:00 EAT. The inbox below always works, even if push is blocked.
+      </p>
+
+      <div class="glass-el p-3 flex items-center justify-between gap-3">
+        <div>
+          <div class="text-sm font-medium">Push on this device</div>
+          <div class="text-xs text-[var(--text-3)]" id="pushStatus">Checking…</div>
+        </div>
+        <button class="btn btn-secondary text-sm" id="enablePushBtn" type="button">Enable</button>
+      </div>
+      <div id="pushMsg" class="text-sm" aria-live="polite"></div>
+
+      <div id="prefList" class="space-y-1"></div>
+    </div>
+
+    <!-- Self-exclusion -->
+    <div class="glass p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="font-semibold">Take a break</h3>
+        <span class="badge badge-pending" id="exclusionBadge">NOT ACTIVE</span>
+      </div>
+      <p class="text-sm text-[var(--text-2)]">
+        Lock betting for a set period. Your balance stays safe, you can still browse, and the pause cannot be shortened.
+      </p>
+      <div id="exclusionStatus" class="text-sm text-[var(--text-2)]"></div>
+      <div class="grid grid-cols-3 gap-2">
+        <button class="btn btn-secondary text-sm exclusion" data-hours="24" type="button">24 hours</button>
+        <button class="btn btn-secondary text-sm exclusion" data-hours="168" type="button">7 days</button>
+        <button class="btn btn-secondary text-sm exclusion" data-hours="720" type="button">30 days</button>
+      </div>
+      <div id="exclusionMsg" class="text-sm" aria-live="polite"></div>
+    </div>
+
     <div class="glass p-4">
       <h3 class="font-semibold mb-3">Deposit &amp; activation</h3>
       <p class="text-sm text-[var(--text-2)] mb-3">
@@ -76,6 +125,7 @@ import Layout from '../layouts/Layout.astro';
 
   <script>
     import { authFetch, esc, money, clearToken, toast } from '../lib/api';
+    import { enablePush, pushSupported } from '../lib/push';
 
     const statusClass: Record<string, string> = {
       active: 'badge-win',
@@ -89,6 +139,14 @@ import Layout from '../layouts/Layout.astro';
       bet_won: 'Winning payout',
       bet_refund: 'Stake refunded',
       bet_correction_reversal: 'Correction reversal',
+    };
+
+    const CATEGORY_LABEL: Record<string, string> = {
+      match_start: 'Match starting soon',
+      results: 'Results & payouts',
+      account: 'Account & payments',
+      announcements: 'Announcements',
+      community: 'Community activity',
     };
 
     function reasonLabel(reason: string): string {
@@ -119,10 +177,13 @@ import Layout from '../layouts/Layout.astro';
       if (!res.ok) throw new Error('failed');
       const d = await res.json();
 
-      document.getElementById('p-balance')!.textContent = money(d.balance_cents);
+      if (document.getElementById('p-balance')) {
+        document.getElementById('p-balance')!.textContent = money(d.balance_cents);
+      }
 
       const entries: Array<{ amount_cents: number; reason: string; created_at: string }> = d.entries || [];
-      const el = document.getElementById('ledger')!;
+      const el = document.getElementById('ledger');
+      if (!el) return;
       if (!entries.length) {
         el.innerHTML = '<div class="text-[var(--text-3)]">No wallet activity yet.</div>';
         return;
@@ -148,12 +209,199 @@ import Layout from '../layouts/Layout.astro';
         </ul>`;
     }
 
+    async function loadInbox() {
+      const res = await authFetch('/api/v1/notifications?limit=20');
+      if (!res.ok) {
+        document.getElementById('inbox')!.textContent = 'Could not load notifications. Check your connection.';
+        return;
+      }
+      const d = await res.json();
+      const items: Array<any> = d.notifications || [];
+      const el = document.getElementById('inbox')!;
+      document.getElementById('unreadBadge')!.textContent = `${d.unread || 0} UNREAD`;
+
+      if (!items.length) {
+        el.innerHTML = '<div class="text-[var(--text-3)]">Nothing yet. Results and account updates land here.</div>';
+        return;
+      }
+
+      el.innerHTML = `
+        <ul class="divide-y divide-[var(--border)]">
+          ${items
+            .map(
+              (n) => `
+              <li class="py-2 ${n.read ? 'opacity-60' : ''}" data-notif="${esc(n.id)}" data-link="${esc(n.link)}">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="font-medium text-[var(--text)]">${esc(n.title)}</div>
+                    <div class="text-[var(--text-2)]">${esc(n.body)}</div>
+                    <div class="text-xs text-[var(--text-3)]">${esc(CATEGORY_LABEL[n.category] || n.category)} · ${esc(n.created_at)}</div>
+                  </div>
+                  ${n.read ? '' : '<span class="badge badge-win shrink-0">NEW</span>'}
+                </div>
+              </li>`
+            )
+            .join('')}
+        </ul>`;
+
+      el.querySelectorAll('[data-notif]').forEach((li) => {
+        li.addEventListener('click', async () => {
+          const id = (li as HTMLElement).dataset.notif!;
+          const link = (li as HTMLElement).dataset.link!;
+          await authFetch(`/api/v1/notifications/${id}/read`, { method: 'POST' });
+          if (link) window.location.href = link;
+          else {
+            (li as HTMLElement).classList.add('opacity-60');
+            (li.querySelector('.badge') as HTMLElement | null)?.remove();
+          }
+        });
+      });
+    }
+
+    document.getElementById('markAll')!.addEventListener('click', async () => {
+      await authFetch('/api/v1/notifications/read-all', { method: 'POST' });
+      loadInbox();
+    });
+
+    type Prefs = {
+      match_start: boolean;
+      results: boolean;
+      account: boolean;
+      announcements: boolean;
+      community: boolean;
+    };
+
+    async function loadPrefs() {
+      const res = await authFetch('/api/v1/notifications/prefs');
+      if (!res.ok) {
+        document.getElementById('prefList')!.innerHTML =
+          '<div class="text-sm text-[var(--text-3)]">Could not load preferences.</div>';
+        return;
+      }
+      const prefs: Prefs = await res.json();
+      const el = document.getElementById('prefList')!;
+      const keys = Object.keys(CATEGORY_LABEL) as Array<keyof Prefs>;
+
+      el.innerHTML = keys
+        .map(
+          (key) => `
+          <label class="flex items-center justify-between gap-3 py-2 border-b border-[var(--border)] last:border-0">
+            <span class="text-sm">${esc(CATEGORY_LABEL[key])}</span>
+            <input type="checkbox" class="pref-toggle" data-key="${key}" ${prefs[key] ? 'checked' : ''} />
+          </label>`
+        )
+        .join('');
+
+      el.querySelectorAll('.pref-toggle').forEach((input) => {
+        input.addEventListener('change', async (e) => {
+          const target = e.target as HTMLInputElement;
+          const key = target.dataset.key!;
+          const next = target.checked;
+          const res2 = await authFetch('/api/v1/notifications/prefs', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [key]: next }),
+          });
+          if (res2.ok) {
+            toast(next ? 'Notifications on for this type' : 'Muted this notification type');
+          } else {
+            target.checked = !next;
+            toast('Could not save the preference', 'error');
+          }
+        });
+      });
+    }
+
+    function pushStatus() {
+      const el = document.getElementById('pushStatus')!;
+      const btn = document.getElementById('enablePushBtn') as HTMLButtonElement;
+      if (!pushSupported()) {
+        el.textContent = 'This browser cannot receive push. The inbox still works.';
+        btn.disabled = true;
+        return;
+      }
+      if (Notification.permission === 'granted') {
+        el.textContent = 'On — capped at 2/day, silent 22:00–07:00 EAT.';
+        btn.textContent = 'Refresh';
+      } else if (Notification.permission === 'denied') {
+        el.textContent = 'Blocked in browser settings. The inbox still works.';
+        btn.disabled = true;
+      } else {
+        el.textContent = 'Off. Turn on only if you want match and result alerts.';
+      }
+    }
+
+    document.getElementById('enablePushBtn')!.addEventListener('click', async () => {
+      const btn = document.getElementById('enablePushBtn') as HTMLButtonElement;
+      const msg = document.getElementById('pushMsg')!;
+      btn.disabled = true;
+      const result = await enablePush();
+      msg.textContent = result.message;
+      msg.className = `text-sm ${result.ok ? 'text-green-400' : 'text-[var(--text-2)]'}`;
+      pushStatus();
+      btn.disabled = false;
+    });
+
+    async function loadExclusion() {
+      const res = await authFetch('/api/v1/self-exclusion');
+      if (!res.ok) return;
+      const d = await res.json();
+      const badge = document.getElementById('exclusionBadge')!;
+      const status = document.getElementById('exclusionStatus')!;
+      const buttons = document.querySelectorAll<HTMLButtonElement>('.exclusion');
+
+      if (d.active) {
+        badge.textContent = 'PAUSED';
+        badge.className = 'badge badge-postponed';
+        status.textContent = `Betting is paused until ${d.until}. This cannot be shortened.`;
+        buttons.forEach((b) => (b.disabled = true));
+      } else {
+        badge.textContent = 'NOT ACTIVE';
+        badge.className = 'badge badge-pending';
+        status.textContent = 'No pause is active. Choose a period if you want to stop betting for a while.';
+        buttons.forEach((b) => (b.disabled = false));
+      }
+    }
+
+    document.querySelectorAll<HTMLButtonElement>('.exclusion').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const hours = Number(btn.dataset.hours);
+        const label = hours === 24 ? '24 hours' : hours === 168 ? '7 days' : '30 days';
+        if (!confirm(`Pause betting for ${label}? This cannot be undone early.`)) return;
+
+        const msg = document.getElementById('exclusionMsg')!;
+        btn.disabled = true;
+        const res = await authFetch('/api/v1/self-exclusion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hours }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          msg.textContent = data.error || 'Could not pause betting.';
+          msg.className = 'text-sm text-red-400';
+          btn.disabled = false;
+          return;
+        }
+        msg.textContent = `Betting paused until ${data.until}.`;
+        msg.className = 'text-sm text-green-400';
+        loadExclusion();
+      });
+    });
+
+    // Load in parallel: on a slow connection five serial round-trips is five
+    // times the wait. One failing section must not block the others.
     (async () => {
-      try {
-        await loadMe();
-        await loadWallet();
-      } catch {
-        toast('Could not load your wallet', 'error');
+      const results = await Promise.allSettled([
+        loadMe(),
+        loadWallet(),
+        loadInbox(),
+        loadPrefs(),
+        loadExclusion(),
+      ]);
+      pushStatus();
+      if (results.some((r) => r.status === 'rejected')) {
+        toast('Some profile sections could not load. Pull to refresh.', 'error');
       }
     })();
 
@@ -176,6 +424,8 @@ import Layout from '../layouts/Layout.astro';
 
     document.getElementById('logoutBtn')!.addEventListener('click', () => {
       clearToken();
+      localStorage.removeItem('betva_session_start');
+      localStorage.removeItem('betva_push_asked');
       window.location.href = '/login';
     });
   </script>

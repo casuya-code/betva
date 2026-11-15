@@ -3,14 +3,394 @@ import Layout from '../layouts/Layout.astro';
 ---
 <Layout title="Betva — Community" active="community">
   <div class="px-4 pt-4 space-y-4">
-    <h1 class="text-2xl font-bold">Community</h1>
-    <div class="glass p-3 flex gap-2">
-      <input class="input" placeholder="Share something..." />
-      <button class="btn btn-primary">Post</button>
+    <div class="flex items-end justify-between gap-2">
+      <div>
+        <h1 class="text-2xl font-bold">Community</h1>
+        <p class="text-sm text-[var(--text-2)]">Real posts from real users. No fake activity, ever.</p>
+      </div>
+      <span class="text-xs text-[var(--text-3)]" id="feed-count"></span>
     </div>
+
+    <!-- Composer -->
+    <div class="glass p-4 space-y-3">
+      <label class="text-sm text-[var(--text-2)] block" for="postBody">Share something</label>
+      <textarea
+        id="postBody"
+        class="input"
+        rows="3"
+        maxlength="500"
+        placeholder="Talk about a match, a slip, or the league…"></textarea>
+      <div class="flex items-center justify-between text-xs text-[var(--text-3)]">
+        <span id="charCount">0 / 500</span>
+        <span>Text only is cheapest on data.</span>
+      </div>
+
+      <div id="mediaPreview" class="hidden"></div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <label class="btn btn-secondary text-sm cursor-pointer" for="mediaInput">
+          <span aria-hidden="true">📎</span> Photo / short video
+        </label>
+        <input id="mediaInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" class="hidden" />
+        <span class="text-xs text-[var(--text-3)]">Images ≤ 400 KB · video ≤ 3 MB</span>
+        <button class="btn btn-primary ml-auto" id="postBtn" type="button">Post</button>
+      </div>
+      <div id="composeMsg" class="text-sm" aria-live="polite"></div>
+    </div>
+
     <div id="feed" class="space-y-3">
-      <div class="card"><div class="skeleton h-24"></div></div>
-      <div class="card"><div class="skeleton h-24"></div></div>
+      <div class="card"><div class="skeleton h-28"></div></div>
+      <div class="card"><div class="skeleton h-28"></div></div>
+    </div>
+
+    <div id="sentinel" class="h-8" aria-hidden="true"></div>
+    <div id="feedMsg" class="text-center text-sm text-[var(--text-3)]"></div>
+  </div>
+
+  <!-- Report sheet -->
+  <div id="reportModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+    <div class="modal-card">
+      <div class="flex items-center justify-between mb-3">
+        <h2 id="reportTitle" class="text-lg font-bold">Report post</h2>
+        <button type="button" class="btn btn-secondary text-sm" id="reportClose" aria-label="Close">✕</button>
+      </div>
+      <p class="text-sm text-[var(--text-2)] mb-3">Reports are reviewed by a moderator. Three independent reports hide a post until review.</p>
+      <div class="space-y-2 mb-3">
+        <label class="text-sm text-[var(--text-2)] block" for="reportReason">What is wrong?</label>
+        <textarea id="reportReason" class="input" rows="2" maxlength="280" placeholder="e.g. abuse, scam link, misleading claim"></textarea>
+      </div>
+      <div id="reportMsg" class="text-sm mb-2" aria-live="polite"></div>
+      <button class="btn btn-danger w-full" id="reportSubmit" type="button">Send report</button>
     </div>
   </div>
+
+  <script>
+    import { API, authFetch, esc, getToken, toast } from '../lib/api';
+    import { maybeAskPush } from '../lib/push';
+
+    type Post = {
+      id: string;
+      body: string;
+      media_url: string;
+      media_type: string;
+      media_bytes: number;
+      created_at: string;
+      user_id: string;
+      nickname: string;
+      profile_pic: string;
+      is_mine: boolean;
+      reported: boolean;
+      report_count: number;
+    };
+
+    let cursor: string | null = null;
+    let loading = false;
+    let done = false;
+    let media: { url: string; type: string; bytes: number } | null = null;
+    let pendingReportId: string | null = null;
+
+    const feed = document.getElementById('feed')!;
+    const feedMsg = document.getElementById('feedMsg')!;
+    const postBtn = document.getElementById('postBtn') as HTMLButtonElement;
+    const bodyEl = document.getElementById('postBody') as HTMLTextAreaElement;
+    const composeMsg = document.getElementById('composeMsg')!;
+    const mediaPreview = document.getElementById('mediaPreview')!;
+    const reportModal = document.getElementById('reportModal')!;
+
+    if (!getToken()) {
+      window.location.href = '/login';
+    }
+
+    function mediaSrc(url: string): string {
+      return url.startsWith('http') ? url : `${API}${url}`;
+    }
+
+    function renderMedia(p: Post): string {
+      if (!p.media_url) return '';
+      const src = esc(mediaSrc(p.media_url));
+      if (p.media_type === 'video') {
+        // No autoplay, no preload: the user decides whether to spend data.
+        return `<video class="post-media mt-3" controls preload="none" playsinline src="${src}"></video>`;
+      }
+      return `<img class="post-media mt-3" src="${src}" alt="Photo shared by ${esc(p.nickname)}" loading="lazy" decoding="async" />`;
+    }
+
+    function postHtml(p: Post): string {
+      const initial = esc((p.nickname || '?').slice(0, 1).toUpperCase());
+      const avatar = p.profile_pic
+        ? `<img src="${esc(p.profile_pic)}" alt="" class="w-9 h-9 rounded-full object-cover" />`
+        : `<div class="w-9 h-9 rounded-full bg-[var(--surface-el)] grid place-items-center font-semibold">${initial}</div>`;
+
+      return `
+        <article class="card" data-post="${esc(p.id)}">
+          <div class="flex items-center gap-2 mb-2">
+            ${avatar}
+            <div class="min-w-0">
+              <div class="font-semibold truncate">${esc(p.nickname)}</div>
+              <div class="text-xs text-[var(--text-3)]">${esc(p.created_at)}</div>
+            </div>
+            <div class="ml-auto flex items-center gap-1">
+              ${
+                p.is_mine
+                  ? `<button class="btn btn-ghost text-xs post-delete" type="button">Delete</button>`
+                  : p.reported
+                    ? `<span class="badge badge-pending">REPORTED</span>`
+                    : `<button class="btn btn-ghost text-xs post-report" type="button">Report</button>`
+              }
+            </div>
+          </div>
+          ${p.body ? `<p class="text-[15px] whitespace-pre-wrap break-words">${esc(p.body)}</p>` : ''}
+          ${renderMedia(p)}
+        </article>`;
+    }
+
+    async function loadFeed(reset = false) {
+      if (loading || (done && !reset)) return;
+      loading = true;
+      feedMsg.textContent = reset ? '' : 'Loading more…';
+
+      try {
+        const q = new URLSearchParams({ limit: '10' });
+        if (!reset && cursor) q.set('before', cursor);
+        const res = await authFetch(`/api/v1/community/posts?${q.toString()}`);
+        if (!res.ok) throw new Error('failed');
+        const data = await res.json();
+        const posts: Post[] = data.posts || [];
+
+        if (reset) {
+          feed.innerHTML = '';
+          document.getElementById('feed-count')!.textContent = '';
+        }
+
+        if (!posts.length && reset) {
+          feed.innerHTML =
+            '<div class="card text-center text-[var(--text-2)]">No posts yet. Be the first — say something real.</div>';
+        } else {
+          feed.insertAdjacentHTML('beforeend', posts.map(postHtml).join(''));
+        }
+
+        cursor = data.next_before || null;
+        done = !cursor;
+        feedMsg.textContent = done && posts.length ? 'That is the start of the feed.' : '';
+      } catch {
+        feedMsg.textContent = 'Could not load the feed. Check your connection and try again.';
+      } finally {
+        loading = false;
+      }
+    }
+
+    // Composer
+    bodyEl.addEventListener('input', () => {
+      document.getElementById('charCount')!.textContent = `${bodyEl.value.length} / 500`;
+    });
+
+    (document.getElementById('mediaInput') as HTMLInputElement).addEventListener('change', async (e) => {
+      const input = e.target as HTMLInputElement;
+      const file = input.files?.[0];
+      if (!file) return;
+
+      const isVideo = file.type.startsWith('video/');
+      const limit = isVideo ? 3_000_000 : 400_000;
+      if (file.size > limit) {
+        composeMsg.textContent = `${isVideo ? 'Video' : 'Image'} is too large. Limit is ${Math.round(limit / 1000)} KB.`;
+        composeMsg.className = 'text-sm text-red-400';
+        input.value = '';
+        return;
+      }
+
+      composeMsg.textContent = 'Uploading…';
+      composeMsg.className = 'text-sm text-[var(--text-2)]';
+
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const res = await authFetch('/api/v1/media', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+          composeMsg.textContent = data.error || 'Upload failed.';
+          composeMsg.className = 'text-sm text-red-400';
+          return;
+        }
+        media = { url: data.url, type: data.media_type, bytes: data.bytes };
+        composeMsg.textContent = 'Attached. It will load only when someone opens the post.';
+        composeMsg.className = 'text-sm text-green-400';
+
+        const src = mediaSrc(media.url);
+        mediaPreview.classList.remove('hidden');
+        mediaPreview.innerHTML = `
+          <div class="glass-el p-2 flex items-center gap-3">
+            ${
+              media.type === 'video'
+                ? `<video src="${esc(src)}" class="w-20 h-14 rounded-lg object-cover" muted playsinline preload="metadata"></video>`
+                : `<img src="${esc(src)}" alt="Attachment preview" class="w-14 h-14 rounded-lg object-cover" />`
+            }
+            <div class="text-sm flex-1">${media.type === 'video' ? 'Short video' : 'Photo'} attached</div>
+            <button class="btn btn-ghost text-xs" type="button" id="removeMedia">Remove</button>
+          </div>`;
+        document.getElementById('removeMedia')!.addEventListener('click', () => {
+          media = null;
+          mediaPreview.innerHTML = '';
+          mediaPreview.classList.add('hidden');
+          input.value = '';
+          composeMsg.textContent = '';
+        });
+      } catch {
+        composeMsg.textContent = 'Upload failed.';
+        composeMsg.className = 'text-sm text-red-400';
+      }
+    });
+
+    postBtn.addEventListener('click', async () => {
+      const body = bodyEl.value.trim();
+      if (!body && !media) {
+        composeMsg.textContent = 'Write something or attach media first.';
+        composeMsg.className = 'text-sm text-red-400';
+        return;
+      }
+      postBtn.disabled = true;
+      postBtn.textContent = 'Posting…';
+      try {
+        const res = await authFetch('/api/v1/community/posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            body,
+            media_url: media?.url || '',
+            media_type: media?.type || '',
+            media_bytes: media?.bytes || 0,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          composeMsg.textContent = data.error || 'Could not post.';
+          composeMsg.className = 'text-sm text-red-400';
+          return;
+        }
+        bodyEl.value = '';
+        document.getElementById('charCount')!.textContent = '0 / 500';
+        media = null;
+        mediaPreview.innerHTML = '';
+        mediaPreview.classList.add('hidden');
+        (document.getElementById('mediaInput') as HTMLInputElement).value = '';
+        composeMsg.textContent = 'Posted.';
+        composeMsg.className = 'text-sm text-green-400';
+        toast('Posted');
+        cursor = null;
+        done = false;
+        await loadFeed(true);
+        maybeAskPush();
+      } catch {
+        composeMsg.textContent = 'Network error. Try again.';
+        composeMsg.className = 'text-sm text-red-400';
+      } finally {
+        postBtn.disabled = false;
+        postBtn.textContent = 'Post';
+      }
+    });
+
+    // Report flow
+    feed.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+      const article = target.closest('[data-post]') as HTMLElement | null;
+      if (!article) return;
+      const id = article.dataset.post!;
+
+      if (target.closest('.post-report')) {
+        pendingReportId = id;
+        (document.getElementById('reportReason') as HTMLTextAreaElement).value = '';
+        document.getElementById('reportMsg')!.textContent = '';
+        reportModal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        return;
+      }
+
+      if (target.closest('.post-delete')) {
+        if (!confirm('Delete your post? The record stays with moderators, but it disappears from the feed.')) return;
+        const res = await authFetch(`/api/v1/community/posts/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          article.remove();
+          toast('Post deleted');
+        } else {
+          toast('Could not delete the post', 'error');
+        }
+      }
+    });
+
+    function closeReport() {
+      reportModal.classList.add('hidden');
+      document.body.style.overflow = '';
+      pendingReportId = null;
+    }
+    document.getElementById('reportClose')!.addEventListener('click', closeReport);
+    reportModal.addEventListener('click', (e) => {
+      if (e.target === reportModal) closeReport();
+    });
+
+    document.getElementById('reportSubmit')!.addEventListener('click', async () => {
+      if (!pendingReportId) return;
+      const reason = (document.getElementById('reportReason') as HTMLTextAreaElement).value.trim();
+      const msg = document.getElementById('reportMsg')!;
+      if (!reason) {
+        msg.textContent = 'Add a short reason.';
+        msg.className = 'text-sm mb-2 text-red-400';
+        return;
+      }
+      const res = await authFetch(`/api/v1/community/posts/${pendingReportId}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        msg.textContent = data.error || 'Could not send the report.';
+        msg.className = 'text-sm mb-2 text-red-400';
+        return;
+      }
+      closeReport();
+      toast(data.auto_hidden ? 'Reported. The post is hidden pending review.' : 'Report sent to moderators.');
+      cursor = null;
+      done = false;
+      await loadFeed(true);
+    });
+
+    // Infinite scroll: community only, never on slips.
+    const sentinel = document.getElementById('sentinel')!;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((en) => en.isIntersecting)) loadFeed();
+      },
+      { rootMargin: '400px 0px' }
+    );
+    observer.observe(sentinel);
+
+    loadFeed(true);
+  </script>
+
+  <style>
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-card {
+      width: 100%;
+      max-width: 480px;
+      background: #10161d;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 20px 20px 0 0;
+      padding: 16px 20px calc(24px + env(safe-area-inset-bottom));
+      box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.5);
+    }
+    @media (min-width: 640px) {
+      .modal-overlay { align-items: center; padding: 24px; }
+      .modal-card { border-radius: 16px; border-bottom: 1px solid var(--border); }
+    }
+  </style>
 </Layout>

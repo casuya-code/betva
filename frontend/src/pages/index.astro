@@ -75,6 +75,7 @@ import Layout from '../layouts/Layout.astro';
 
   <script>
     import { API, getToken, authFetch, esc, money, toast, MARKET_LABEL } from '../lib/api';
+    import { maybeAskPush } from '../lib/push';
 
     type BetConfig = { stake_tiers_cents: number[]; payout_multiplier_bp: number };
 
@@ -201,6 +202,7 @@ import Layout from '../layouts/Layout.astro';
         toast(`Slip placed. Balance ${money(data.balance_cents)} TZS`);
         closeSlip();
         markPlaced(placedId, placedMarket);
+        maybeAskPush();
       } catch {
         slipMsg.textContent = 'Network error. Try again.';
         slipMsg.className = 'mt-2 text-center text-sm text-red-400';

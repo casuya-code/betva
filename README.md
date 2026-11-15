@@ -17,19 +17,20 @@ A fast, scalable betting and community media platform built for budget smartphon
 7. [Design System & UI](#design-system--ui)
 8. [Admin Dashboard](#admin-dashboard)
 9. [AI Results Assistant (Groq)](#ai-results-assistant-groq)
-10. [Push Notifications](#push-notifications)
-11. [Business Model & Monetization](#business-model--monetization)
-12. [Database Backup & Recovery](#database-backup--recovery)
-13. [Scalability & Availability](#scalability--availability)
-14. [Security & Anti-Hacking](#security--anti-hacking)
-15. [Architecture at a Glance](#architecture-at-a-glance)
-16. [1. Frontend](#1-frontend)
-17. [2. Backend & Real-Time Betting Engine](#2-backend--real-time-betting-engine)
-18. [3. Media Optimization](#3-media-optimization)
-19. [4. Local Payments & Network Infrastructure](#4-local-payments--network-infrastructure)
-20. [5. Cloud Deployment (Vercel + Railway)](#5-cloud-deployment-vercel--railway)
-21. [Crucial Design Tips for Low-Data Users](#crucial-design-tips-for-low-data-users)
-22. [Open Questions](#open-questions)
+10. [Community & Media](#community)
+11. [Push Notifications](#push-notifications)
+12. [Business Model & Monetization](#business-model--monetization)
+13. [Database Backup & Recovery](#database-backup--recovery)
+14. [Scalability & Availability](#scalability--availability)
+15. [Security & Anti-Hacking](#security--anti-hacking)
+16. [Architecture at a Glance](#architecture-at-a-glance)
+17. [1. Frontend](#1-frontend)
+18. [2. Backend & Real-Time Betting Engine](#2-backend--real-time-betting-engine)
+19. [3. Media Optimization](#3-media-optimization)
+20. [4. Local Payments & Network Infrastructure](#4-local-payments--network-infrastructure)
+21. [5. Cloud Deployment (Vercel + Railway)](#5-cloud-deployment-vercel--railway)
+22. [Crucial Design Tips for Low-Data Users](#crucial-design-tips-for-low-data-users)
+23. [Open Questions](#open-questions)
 
 ---
 
@@ -263,8 +264,41 @@ The split is deliberate: Home stays small and fast, so it loads quickly on 3G an
 
 ### Community
 
-- Community media feed: user uploads of images and short video.
-- All uploads pass through the media pipeline (WebP/AVIF, HLS, lazy loading) before display.
+A single feed of user posts — text, one image, or one short video. It is the only place in the product with infinite scroll, and the only place users can publish.
+
+**What a post is**
+
+- Up to **500 characters** of text, optionally with **one** image or **one** video.
+- Images: JPEG, PNG, WebP, AVIF or GIF, **≤ 400 KB**. Video: MP4 or WebM, **≤ 3 MB**.
+- Media is sniffed from the bytes server-side; a client-supplied `Content-Type` is never trusted.
+- Only media issued by `POST /api/v1/media` is accepted in a post, so a post cannot embed a remote tracker.
+- Text-only is always the cheapest option and is stated in the composer.
+
+**What users never see**
+
+- The **official name** of any user is never shown in the feed — only the nickname and optional profile picture.
+- No fabricated activity: no fake posts, no inflated counts, no "X users online now" that isn't real.
+
+**Moderation**
+
+| Action | Who | Effect |
+| --- | --- | --- |
+| **Report** | Any user, once per post | Enters the moderation queue |
+| **Auto-hide** | System, at **3 distinct reports** | Post leaves the feed pending review; this is a guardrail, not a verdict |
+| **Hide / restore** | Admin | Hides from the feed or puts it back; open reports are closed either way |
+| **Delete** | Author or admin | Soft delete: removed from the feed, record kept for disputes |
+
+- Every admin action records **reviewer, reason, and timestamp**.
+- Restoring a post resolves its open reports as `dismissed`; it does not stay stuck in the queue.
+- The author can delete their own post at any time; the row is soft-deleted so reports remain auditable.
+
+**Data cost**
+
+- Images use `loading="lazy"` and `decoding="async"`.
+- Video uses `preload="none"`, `playsinline`, and native controls. **Autoplay is off**, so a post never spends data until the user taps play.
+- The feed pages **10 posts at a time**; infinite scroll stops at the end of the feed, and the client shows "That is the start of the feed."
+
+**Storage today:** uploads are written to `MEDIA_DIR` and served from `/media/*`. Production swaps this for **Cloudflare Images / Stream** behind the same upload endpoint; the size limits, MIME sniffing, and no-autoplay rule stay the same.
 
 ### History
 
@@ -300,6 +334,23 @@ The Profile page is where the user sees their **money and account state**, clear
 - **What happens when access ends:** betting pauses, balance is safe, re-activation restores everything.
 - Link to **terms of use** and **privacy policy** (simple text, low data).
 - **Self-exclusion** and **mute controls**, as defined in the Engagement Policy.
+
+#### Self-Exclusion & Mute Controls
+
+Both live on the Profile page and both are enforced by the server, not just the UI.
+
+**Self-exclusion** (`GET` / `POST /api/v1/self-exclusion`):
+
+- The user picks **24 hours, 7 days, or 30 days**. Nothing else is accepted.
+- While active, **bet placement returns `403`** with the end time; browsing, history, and wallet stay available.
+- The period is **append-only**: there is no endpoint to shorten, replace, or cancel it. A second attempt while one is active returns `409` with the existing end time.
+- The 60-minute session reminder offers the 24-hour option in one tap.
+
+**Mute controls** (`PUT /api/v1/notifications/prefs`):
+
+- Five categories, each independently mutable: **match start, results, account, announcements, community**.
+- A muted category is **skipped at push time** (`push_error = 'muted by user'`); the inbox row is still written, so nothing is silently lost.
+- Mutes never block money-related account messages from being recorded in the inbox.
 
 ---
 
@@ -804,21 +855,44 @@ iOS is the real constraint: on iPhone, push only works once the user installs th
 - **Announcement** — general notice
 - **Community activity** — replies, mentions
 
+### Guardrails (Enforced Server-Side)
+
+These are checked in the dispatch path, so a bug in the UI cannot bypass them. Every notification row also records why a push did not go out.
+
+| Guardrail | Behaviour |
+| --- | --- |
+| **Daily cap** | `PUSH_DAILY_CAP` (default **2**) pushes per user per EAT day. Counted in `push_delivery_log`, not in inbox rows. |
+| **Quiet hours** | `QUIET_START_HOUR` (22) to `QUIET_END_HOUR` (7) EAT. Push is skipped; the inbox row still lands. |
+| **Muted category** | Skipped at push time; inbox row still written. |
+| **No subscription** | Recorded as `no subscription`; nothing retries in a loop. |
+| **Push not configured** | Recorded as `push not configured`; the product still works. |
+| **Expired subscription** | A `404` or `410` from the push service deletes that subscription row. |
+
+The inbox is authoritative. Push is a best-effort extra: a failed push never loses the message.
+
 ### Low-Data Design
 
 - Payload is **title + short body + link** — a few hundred bytes, no images.
-- **Quiet hours** so users aren't woken at night.
-- **Rate limit** per user per day, so notifications stay valuable.
-- **Grouped delivery** — one digest rather than ten separate pings.
+- The service worker shows the notification with `renotify: false` and a per-category `tag`, so rapid updates replace rather than stack.
+- Quiet hours and the daily cap are enforced server-side (see above).
 
 ### Opt-In Strategy
 
-Ask **after the user's first meaningful action**, never on page load. Explain the value in one line ("Get told when your match starts"). A denied prompt is hard to reverse.
+Ask **after the user's first meaningful action**, never on page load. The app shows its own banner ("Get told when your match starts") after the first placed bet or first published post; the browser permission prompt only fires when the user taps **Turn on**. A denied prompt is hard to reverse, so "Not now" is remembered.
 
 ### Fallbacks
 
-- **In-app notification inbox** — always available, works even if push is blocked.
+- **In-app notification inbox** — always available, works even if push is blocked. Every category lands there first.
 - **SMS for payment-critical events** — activation and withdrawal confirmations, where missing the message costs money.
+
+### Generating VAPID Keys
+
+```bash
+cd backend
+go run ./cmd/vapid     # prints VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY
+```
+
+Put both in the environment and redeploy. Rotating the key pair invalidates every existing push subscription; users must opt in again.
 
 ---
 
@@ -1216,7 +1290,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Development Status
 
-**Phase 3 complete — bet slip, wallet, ledger, settlement, corrections, and refunds are working end to end.** Phases 4–6 remain.
+**Phase 4 complete — community feed, moderation, notifications, push, and self-exclusion are working end to end.** Phases 5–6 remain.
 
 ### What exists now
 
@@ -1237,7 +1311,13 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Settlement, correction with reversal, postponed refunds | ✅ Working | `backend/internal/httpapi/settlement.go` |
 | History with final scores and visible losses | ✅ Working | `frontend/src/pages/history.astro` |
 | Admin settle / correct / refund modal | ✅ Working | `frontend/src/pages/admin/matches.astro` |
-| Community, push notifications, AI results | ⬜ Later | — |
+| Community feed, composer, media upload | ✅ Working | `frontend/src/pages/community.astro` |
+| Post reports, 3-report auto-hide, admin moderation | ✅ Working | `backend/internal/httpapi/community.go` |
+| In-app notification inbox and per-category mutes | ✅ Working | `backend/internal/httpapi/notifications.go` |
+| Web Push with VAPID, daily cap, quiet hours | ✅ Working | `frontend/public/sw.js`, `frontend/src/lib/push.ts` |
+| Self-exclusion 24h / 7d / 30d, append-only | ✅ Working | `backend/internal/httpapi/notifications.go` |
+| AI results assistant | ⬜ Later | Phase 5 |
+| Full launch hardening and restore test | ⬜ Later | Phase 6 |
 
 ### Matches CSV format
 
@@ -1300,6 +1380,29 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 - Every pending bet becomes `refunded` with `void_reason`, the stake is credited back, and a `bet_refund` ledger row is written.
 - The match is marked `postponed` or `cancelled`.
 
+### Community, notifications, and self-exclusion
+
+**Community** (migration `004`, `community.go`):
+
+- `posts` stores text and at most one media reference; `status` is `visible`, `hidden`, or `deleted` — nothing is hard-deleted.
+- Media uploads are MIME-sniffed from the first 512 bytes, size-capped per type, written with a random hex name under `MEDIA_DIR`, and served from `/media/*`.
+- A post may only reference `/media/...` URLs, blocking remote images and tracking pixels.
+- `post_reports` has a unique `(post_id, reporter_id)` index, so one user cannot inflate a report count.
+- Three **distinct** reports set the post to `hidden` automatically. Admin hide/restore/delete records `moderated_by`, `moderation_reason`, `updated_at`, and resolves open reports.
+
+**Notifications** (`notifications.go`):
+
+- Every message is first written to `notifications` (the inbox). Push is a second, best-effort step — settlement, refunds, activation, and broadcasts all use the same path.
+- `notification_prefs` holds five category mutes; `push_subscriptions` stores endpoint + keys; `push_delivery_log` records delivered pushes so the daily cap is honest.
+- Quiet hours and the cap are computed at dispatch time in `Africa/Dar_es_Salaam`.
+- Settlement writes **WIN** and **LOSS** results in the same style, and a correction writes "Corrected result" — losses are never hidden.
+
+**Self-exclusion** (`self_exclusions`):
+
+- Append-only rows with `until` and `duration_hours` constrained to `24`, `168`, or `720`.
+- Bet placement checks for an unexpired row inside the same transaction as the debit, so it cannot be raced.
+- There is no update or delete endpoint. An active period blocks starting another.
+
 ### User API
 
 | Method | Path | Purpose |
@@ -1313,6 +1416,20 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 | `POST` | `/api/v1/bets` | Place a slip: `match_id`, `market`, `stake_cents` |
 | `GET` | `/api/v1/wallet` | Balance + last 50 ledger entries |
 | `GET` | `/api/v1/history` | User bets for the last 6 months, with scores |
+| `GET` | `/api/v1/community/posts?limit=&before=` | Visible posts, newest first; `next_before` is the cursor |
+| `POST` | `/api/v1/community/posts` | Publish text and/or one media item |
+| `DELETE` | `/api/v1/community/posts/{id}` | Soft-delete your own post |
+| `POST` | `/api/v1/community/posts/{id}/report` | Report a post once; 3 distinct reports auto-hide |
+| `POST` | `/api/v1/media` | Multipart `file`; image ≤ 400 KB, video ≤ 3 MB |
+| `GET` | `/api/v1/notifications?limit=` | Inbox, newest first, plus `unread` count |
+| `POST` | `/api/v1/notifications/{id}/read` | Mark one read |
+| `POST` | `/api/v1/notifications/read-all` | Mark all read |
+| `GET` | `/api/v1/notifications/prefs` | Five category switches |
+| `PUT` | `/api/v1/notifications/prefs` | Update any subset of the switches |
+| `POST` | `/api/v1/push/subscribe` | Store browser subscription (`endpoint`, `p256dh`, `auth`) |
+| `POST` | `/api/v1/push/unsubscribe` | Remove a subscription by endpoint |
+| `GET` | `/api/v1/self-exclusion` | Active pause, if any |
+| `POST` | `/api/v1/self-exclusion` | Start a `24`, `168`, or `720` hour pause |
 
 ### Admin API
 
@@ -1330,6 +1447,10 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 | `GET` | `/api/v1/admin/users?q=&status=` | Search and filter users |
 | `PUT` | `/api/v1/admin/users/{id}/status` | Activate (with days), suspend, ban, deactivate |
 | `POST` | `/api/v1/admin/users/{id}/credit` | Manual deposit / withdrawal with a reason |
+| `GET` | `/api/v1/admin/community/posts?status=` | Moderation queue: `reported`, `visible`, `hidden`, `deleted`, or all |
+| `PUT` | `/api/v1/admin/community/posts/{id}/status` | `visible`, `hidden`, or `deleted`, with a reason |
+| `POST` | `/api/v1/admin/notifications/send` | Broadcast to `all` or `active`; writes inbox rows, then pushes |
+| `GET` | `/api/v1/admin/notifications` | Recent broadcasts grouped by minute |
 
 ### Running locally
 
@@ -1340,10 +1461,12 @@ psql -U postgres -c "CREATE DATABASE betva OWNER betva;"
 psql -U betva -d betva -f backend/migrations/001_init.sql
 psql -U betva -d betva -f backend/migrations/002_matches_admin.sql
 psql -U betva -d betva -f backend/migrations/003_wallet_settlement.sql
+psql -U betva -d betva -f backend/migrations/004_community_notifications.sql
 
 # 2. Backend
 cd backend
 cp .env.example .env        # set JWT_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD
+go run ./cmd/vapid          # paste the keys into .env as VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
 go run ./cmd/server         # http://localhost:8080
 
 # 3. Frontend
@@ -1369,8 +1492,19 @@ Admin app: `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `AD
 | `STAKE_TIERS_CENTS` | No | Comma-separated fixed stakes in cents; default `50000,100000,200000,500000` (500–5,000 TZS) |
 | `PAYOUT_MULTIPLIER_BP` | No | Basis points returned on a win; default `15000` = 1.50× |
 | `MAX_BET_PER_DAY_CENTS` | No | Optional per-user daily stake cap in cents; `0` disables it |
+| `MEDIA_DIR` | No | Where community uploads are stored; default `media` (relative to the backend working directory) |
+| `MAX_IMAGE_BYTES` | No | Image cap; default `400000` (400 KB) |
+| `MAX_VIDEO_BYTES` | No | Video cap; default `3000000` (3 MB) |
+| `VAPID_PUBLIC_KEY` | Push | Public key, also served by `GET /api/v1/config` |
+| `VAPID_PRIVATE_KEY` | Push | Secret. Rotating it invalidates every subscription |
+| `VAPID_SUBJECT` | Push | Contact URI for the push service, e.g. `mailto:admin@example.com` |
+| `PUSH_DAILY_CAP` | No | Pushes per user per EAT day; default `2` |
+| `QUIET_START_HOUR` | No | Default `22` (EAT) |
+| `QUIET_END_HOUR` | No | Default `7` (EAT) |
 
-**Next:** Phase 4 — community feed, guardrails, and notifications.
+`GET /api/v1/config` reports `push_enabled`, the public key, the cap, and the quiet-hours window, so the client never hardcodes them.
+
+**Next:** Phase 5 — AI results assistant (Groq) with admin approval, then Phase 6 — launch hardening: full restore test and penetration test.
 
 **Decisions locked in:**
 - Frontend hosting: **Vercel**

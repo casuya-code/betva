@@ -1,0 +1,218 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Betva Admin — Notifications" active="notifications">
+  <div class="space-y-5">
+    <div>
+      <h1 class="text-2xl font-bold">Notifications</h1>
+      <p class="text-sm text-[var(--text-2)]">
+        Every message lands in the in-app inbox. Push is a best-effort extra.
+      </p>
+    </div>
+
+    <div class="glass-el p-3 text-sm text-[var(--text-2)]">
+      <strong class="text-[var(--text)]">Guardrails enforced server-side:</strong>
+      max 2 pushes per user per day · quiet hours 22:00–07:00 EAT · muted categories are skipped · inbox always delivered.
+    </div>
+
+    <section class="card space-y-4">
+      <h2 class="font-semibold">Compose</h2>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <div>
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="title">Title</label>
+          <input class="input" id="title" maxlength="120" placeholder="e.g. Simba vs Yanga starts in 30 minutes" />
+        </div>
+        <div>
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="category">Category</label>
+          <select class="input" id="category">
+            <option value="match_start">Match starting soon</option>
+            <option value="results">Results published</option>
+            <option value="account">Account activated</option>
+            <option value="announcements" selected>Announcement</option>
+            <option value="community">Community activity</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="body">Message</label>
+        <textarea class="input" id="body" rows="3" maxlength="500" placeholder="Short, factual, no promises. A few hundred bytes."></textarea>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <div>
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="link">Opens (in-app path)</label>
+          <input class="input" id="link" value="/" placeholder="/ or /history" />
+        </div>
+        <div>
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="audience">Audience</label>
+          <select class="input" id="audience">
+            <option value="all">All registered users (not banned)</option>
+            <option value="active">Active paid accounts only</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="glass-el p-3">
+        <div class="text-xs text-[var(--text-3)] mb-1">Preview</div>
+        <div class="font-medium" id="previewTitle">Title appears here</div>
+        <div class="text-sm text-[var(--text-2)]" id="previewBody">Message appears here.</div>
+      </div>
+
+      <div class="flex items-center gap-3 flex-wrap">
+        <button class="btn btn-primary" id="send" type="button">Send notification</button>
+        <span class="text-xs text-[var(--text-3)]">No fabricated urgency. Factual copy only.</span>
+      </div>
+      <div id="sendMsg" class="text-sm" aria-live="polite"></div>
+    </section>
+
+    <section class="card space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold">Recent sends</h2>
+        <button class="btn btn-secondary text-sm" id="refresh" type="button">Refresh</button>
+      </div>
+      <div id="recent" class="text-sm text-[var(--text-2)]">Loading…</div>
+    </section>
+  </div>
+
+  <script>
+    import { adminFetch, requireAdmin, esc } from '../../lib/admin';
+
+    const titleEl = document.getElementById('title') as HTMLInputElement;
+    const bodyEl = document.getElementById('body') as HTMLTextAreaElement;
+
+    if (requireAdmin()) {
+      loadRecent();
+      preview();
+    }
+
+    function preview() {
+      document.getElementById('previewTitle')!.textContent = titleEl.value.trim() || 'Title appears here';
+      document.getElementById('previewBody')!.textContent = bodyEl.value.trim() || 'Message appears here.';
+    }
+    titleEl.addEventListener('input', preview);
+    bodyEl.addEventListener('input', preview);
+
+    document.getElementById('refresh')!.addEventListener('click', loadRecent);
+
+    document.getElementById('send')!.addEventListener('click', async () => {
+      const btn = document.getElementById('send') as HTMLButtonElement;
+      const msg = document.getElementById('sendMsg')!;
+      const title = titleEl.value.trim();
+      const text = bodyEl.value.trim();
+      const category = (document.getElementById('category') as HTMLSelectElement).value;
+      const audience = (document.getElementById('audience') as HTMLSelectElement).value;
+      const link = (document.getElementById('link') as HTMLInputElement).value.trim();
+
+      if (!title) {
+        msg.textContent = 'A title is required.';
+        msg.className = 'text-sm text-red-400';
+        return;
+      }
+      if (!confirm(`Send “${title}” to ${audience === 'active' ? 'active accounts' : 'all registered users'}?`)) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      try {
+        const res = await adminFetch('/api/v1/admin/notifications/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, body: text, category, audience, link }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          msg.textContent = data.error || 'Send failed.';
+          msg.className = 'text-sm text-red-400';
+          return;
+        }
+        const notes: string[] = [];
+        if (data.quiet_hours) notes.push('quiet hours now — inbox only, no push');
+        if (!data.push_enabled) notes.push('push not configured — inbox delivered');
+        msg.innerHTML = `<span class="text-green-400">Sent to ${data.recipients} users (${data.inbox_created} inbox rows, ${data.push_users} with push).</span>${
+          notes.length ? ` <span class="text-[var(--text-2)]">${esc(notes.join(' · '))}</span>` : ''
+        }`;
+        msg.className = 'text-sm';
+        titleEl.value = '';
+        bodyEl.value = '';
+        preview();
+        loadRecent();
+      } catch {
+        msg.textContent = 'Send failed.';
+        msg.className = 'text-sm text-red-400';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send notification';
+      }
+    });
+
+    async function loadRecent() {
+      const el = document.getElementById('recent')!;
+      try {
+        const res = await adminFetch('/api/v1/admin/notifications');
+        const data = await res.json();
+        const rows = data.broadcasts || [];
+        if (!rows.length) {
+          el.textContent = 'No notifications sent yet.';
+          return;
+        }
+        el.innerHTML = `
+          <div class="overflow-x-auto">
+            <table class="admin-table">
+              <thead><tr><th>When</th><th>Category</th><th>Title</th><th>Recipients</th><th>Opens</th></tr></thead>
+              <tbody>
+                ${rows
+                  .map(
+                    (n: any) => `
+                  <tr>
+                    <td class="text-xs text-[var(--text-3)] whitespace-nowrap">${esc(n.created_at)}</td>
+                    <td class="text-xs">${esc(n.category)}</td>
+                    <td>
+                      <div class="font-medium">${esc(n.title)}</div>
+                      <div class="text-xs text-[var(--text-3)] line-clamp-2">${esc(n.body)}</div>
+                    </td>
+                    <td class="counter">${n.count}</td>
+                    <td class="text-xs text-[var(--text-3)]">${esc(n.link || '—')}</td>
+                  </tr>`
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>`;
+      } catch {
+        el.textContent = 'Could not load recent sends.';
+      }
+    }
+  </script>
+
+  <style>
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .admin-table th {
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-3);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .admin-table td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .admin-table tr:last-child td { border-bottom: 0; }
+    .line-clamp-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      max-width: 420px;
+    }
+  </style>
+</AdminLayout>

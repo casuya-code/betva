@@ -3,6 +3,7 @@ package httpapi
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -181,6 +182,8 @@ func (s *Server) handleAdminUpdateUserStatus(w http.ResponseWriter, r *http.Requ
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
 			return
 		}
+		s.notifyAndPush([]string{userID}, catAccount, "Account activated",
+			fmt.Sprintf("Your access is active for the next %d days. Betting is open again.", days), "/profile")
 	} else {
 		_, err := s.Pool.Exec(ctx, `
 			UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2

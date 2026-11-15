@@ -20,6 +20,19 @@ type Config struct {
 	StakeTiers       []int64 // allowed stake amounts, in cents
 	PayoutMultiplier int     // basis points, e.g. 15000 = 1.50x returned on a win
 	MaxBetPerUserDay int64   // optional daily cap in cents; 0 = no cap
+
+	// Community media.
+	MediaDir      string
+	MaxImageBytes int64
+	MaxVideoBytes int64
+
+	// Push notifications.
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
+	VAPIDSubject    string
+	PushDailyCap    int // max pushes per user per EAT day
+	QuietStartHour  int // 22 = 22:00 EAT
+	QuietEndHour    int // 7 = 07:00 EAT
 }
 
 func Load() *Config {
@@ -50,7 +63,23 @@ func Load() *Config {
 		StakeTiers:       parseStakeTiers(getEnv("STAKE_TIERS_CENTS", "50000,100000,200000,500000")),
 		PayoutMultiplier: Atoi(getEnv("PAYOUT_MULTIPLIER_BP", "15000"), 15000),
 		MaxBetPerUserDay: int64(Atoi(getEnv("MAX_BET_PER_DAY_CENTS", "0"), 0)),
+
+		MediaDir:      getEnv("MEDIA_DIR", "media"),
+		MaxImageBytes: int64(Atoi(getEnv("MAX_IMAGE_BYTES", "400000"), 400000)),
+		MaxVideoBytes: int64(Atoi(getEnv("MAX_VIDEO_BYTES", "3000000"), 3000000)),
+
+		VAPIDPublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
+		VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
+		VAPIDSubject:    getEnv("VAPID_SUBJECT", "mailto:admin@betva.local"),
+		PushDailyCap:    Atoi(getEnv("PUSH_DAILY_CAP", "2"), 2),
+		QuietStartHour:  Atoi(getEnv("QUIET_START_HOUR", "22"), 22),
+		QuietEndHour:    Atoi(getEnv("QUIET_END_HOUR", "7"), 7),
 	}
+}
+
+// PushEnabled reports whether VAPID keys are configured.
+func (c *Config) PushEnabled() bool {
+	return c.VAPIDPublicKey != "" && c.VAPIDPrivateKey != ""
 }
 
 func parseStakeTiers(raw string) []int64 {

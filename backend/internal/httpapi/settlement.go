@@ -1,9 +1,13 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type settleRequest struct {
@@ -70,7 +74,10 @@ func (s *Server) handleAdminSettleMatch(w http.ResponseWriter, r *http.Request) 
 	defer tx.Rollback(ctx)
 
 	var settledAt *string
-	if err := tx.QueryRow(ctx, `SELECT settled_at::text FROM matches WHERE id = $1 FOR UPDATE`, matchID).Scan(&settledAt); err != nil {
+	var homeTeam, awayTeam string
+	if err := tx.QueryRow(ctx, `
+		SELECT settled_at::text, home_team, away_team FROM matches WHERE id = $1 FOR UPDATE
+	`, matchID).Scan(&settledAt, &homeTeam, &awayTeam); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "match not found"})
 		return
 	}
@@ -243,6 +250,8 @@ func (s *Server) handleAdminSettleMatch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	s.notifyMatchBettors(matchID, homeTeam, awayTeam, *body.HomeGoals, *body.AwayGoals, body.Correct)
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"match_id":       matchID,
 		"result_id":      resultID,
@@ -253,6 +262,57 @@ func (s *Server) handleAdminSettleMatch(w http.ResponseWriter, r *http.Request) 
 		"reversed":       reversed,
 		"correction":     body.Correct,
 	})
+}
+
+// notifyMatchBettors writes one results notification per affected user after a
+// settlement or correction. Push delivery is throttled separately.
+func (s *Server) notifyMatchBettors(matchID, home, away string, hg, ag int, corrected bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	rows, err := s.Pool.Query(ctx, `
+		SELECT user_id, bool_or(status = 'win'), COALESCE(SUM(payout_cents), 0)
+		FROM bets
+		WHERE match_id = $1 AND status IN ('win', 'loss')
+		GROUP BY user_id
+	`, matchID)
+	if err != nil {
+		return
+	}
+	var winUsers, lossUsers []string
+	var winPayout = map[string]int64{}
+	for rows.Next() {
+		var uid string
+		var won bool
+		var payout int64
+		if err := rows.Scan(&uid, &won, &payout); err == nil {
+			if won {
+				winUsers = append(winUsers, uid)
+				winPayout[uid] = payout
+			} else {
+				lossUsers = append(lossUsers, uid)
+			}
+		}
+	}
+	rows.Close()
+
+	prefix := "Result"
+	if corrected {
+		prefix = "Corrected result"
+	}
+	score := fmt.Sprintf("%d–%d", hg, ag)
+	for _, uid := range winUsers {
+		s.notifyAndPush([]string{uid}, catResults, prefix+": WIN",
+			fmt.Sprintf("%s vs %s — FT %s. Payout +%s TZS.", home, away, score, formatTZS(winPayout[uid])), "/history")
+	}
+	for _, uid := range lossUsers {
+		s.notifyAndPush([]string{uid}, catResults, prefix+": LOSS",
+			fmt.Sprintf("%s vs %s — FT %s. Open History to see the settled slip.", home, away, score), "/history")
+	}
+}
+
+func formatTZS(cents int64) string {
+	return strconv.FormatInt(cents/100, 10)
 }
 
 // handleAdminRefundMatch refunds every pending bet when a match is postponed
@@ -290,7 +350,10 @@ func (s *Server) handleAdminRefundMatch(w http.ResponseWriter, r *http.Request) 
 	defer tx.Rollback(ctx)
 
 	var settledAt *string
-	if err := tx.QueryRow(ctx, `SELECT settled_at::text FROM matches WHERE id = $1 FOR UPDATE`, matchID).Scan(&settledAt); err != nil {
+	var homeTeam, awayTeam string
+	if err := tx.QueryRow(ctx, `
+		SELECT settled_at::text, home_team, away_team FROM matches WHERE id = $1 FOR UPDATE
+	`, matchID).Scan(&settledAt, &homeTeam, &awayTeam); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "match not found"})
 		return
 	}
@@ -358,6 +421,20 @@ func (s *Server) handleAdminRefundMatch(w http.ResponseWriter, r *http.Request) 
 	if err := tx.Commit(ctx); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "commit failed"})
 		return
+	}
+
+	refundUsers := make([]string, 0, len(pending))
+	for _, b := range pending {
+		refundUsers = append(refundUsers, b.UserID)
+	}
+	if len(refundUsers) > 0 {
+		title := "Match postponed — stake refunded"
+		if body.Status == "cancelled" {
+			title = "Match cancelled — stake refunded"
+		}
+		s.notifyAndPush(refundUsers, catResults, title,
+			fmt.Sprintf("%s vs %s. %s. %s", homeTeam, awayTeam, body.Reason,
+				"Your stake is back in your wallet."), "/profile")
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{

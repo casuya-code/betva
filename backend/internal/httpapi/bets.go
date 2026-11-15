@@ -82,6 +82,19 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Self-exclusion is a hard block on betting, not a suggestion.
+	var excludedUntil *time.Time
+	_ = tx.QueryRow(ctx, `
+		SELECT MAX(until) FROM self_exclusions WHERE user_id = $1 AND until > NOW()
+	`, u.ID).Scan(&excludedUntil)
+	if excludedUntil != nil {
+		writeJSON(w, http.StatusForbidden, map[string]interface{}{
+			"error": "self-exclusion is active — betting is paused",
+			"until": excludedUntil.In(time.FixedZone("EAT", 3*60*60)).Format("2006-01-02 15:04"),
+		})
+		return
+	}
+
 	// Optional daily cap.
 	if s.Cfg.MaxBetPerUserDay > 0 {
 		var todayTotal int64
@@ -318,6 +331,10 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"stake_tiers_cents":    s.Cfg.StakeTiers,
 		"payout_multiplier_bp": s.Cfg.PayoutMultiplier,
 		"markets":              []string{marketFTOver05, marketHTOver05},
+		"push_enabled":         s.Cfg.PushEnabled(),
+		"vapid_public_key":     s.Cfg.VAPIDPublicKey,
+		"push_daily_cap":       s.Cfg.PushDailyCap,
+		"quiet_hours":          map[string]int{"start": s.Cfg.QuietStartHour, "end": s.Cfg.QuietEndHour},
 	})
 }
 

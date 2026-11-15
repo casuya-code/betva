@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/betva/backend/internal/config"
 	"github.com/go-chi/chi/v5"
@@ -17,6 +19,11 @@ type Server struct {
 
 func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Client) {
 	s := &Server{Cfg: cfg, Pool: pool, RDB: rdb}
+
+	if err := os.MkdirAll(cfg.MediaDir, 0o755); err != nil {
+		log.Printf("media dir: %v", err)
+	}
+	r.Handle("/media/*", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaDir))))
 
 	r.Get("/health", s.handleHealth)
 
@@ -43,6 +50,23 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			protected.Get("/wallet", s.handleWallet)
 			protected.Get("/history", s.handleHistory)
 			protected.Post("/bets", s.handlePlaceBet)
+
+			protected.Get("/community/posts", s.handleCommunityFeed)
+			protected.Post("/community/posts", s.handleCreatePost)
+			protected.Delete("/community/posts/{id}", s.handleDeleteOwnPost)
+			protected.Post("/community/posts/{id}/report", s.handleReportPost)
+			protected.Post("/media", s.handleMediaUpload)
+
+			protected.Get("/notifications", s.handleListNotifications)
+			protected.Post("/notifications/{id}/read", s.handleMarkNotificationRead)
+			protected.Post("/notifications/read-all", s.handleMarkAllNotificationsRead)
+			protected.Get("/notifications/prefs", s.handleGetNotificationPrefs)
+			protected.Put("/notifications/prefs", s.handleUpdateNotificationPrefs)
+			protected.Post("/push/subscribe", s.handleSubscribePush)
+			protected.Post("/push/unsubscribe", s.handleUnsubscribePush)
+
+			protected.Get("/self-exclusion", s.handleGetSelfExclusion)
+			protected.Post("/self-exclusion", s.handleSetSelfExclusion)
 		})
 
 		// admin
@@ -61,6 +85,11 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			adm.Get("/users", s.handleAdminListUsers)
 			adm.Put("/users/{id}/status", s.handleAdminUpdateUserStatus)
 			adm.Post("/users/{id}/credit", s.handleAdminCredit)
+
+			adm.Get("/community/posts", s.handleAdminCommunityPosts)
+			adm.Put("/community/posts/{id}/status", s.handleAdminModeratePost)
+			adm.Post("/notifications/send", s.handleAdminSendNotification)
+			adm.Get("/notifications", s.handleAdminListNotifications)
 		})
 	})
 }

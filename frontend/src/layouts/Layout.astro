@@ -46,8 +46,89 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     </nav>
     )}
 
+    <!-- Session reminder: 60 minutes, with a one-tap cool-off -->
+    <div id="breakBanner" class="nudge hidden" role="region" aria-label="Session reminder">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <div class="font-semibold">You've been here an hour</div>
+        <span class="badge badge-pending">⏱ 60 MIN</span>
+      </div>
+      <p class="text-sm text-[var(--text-2)] mb-3">Take a break? Your balance stays safe and betting pauses if you choose.</p>
+      <div class="flex gap-2">
+        <button class="btn btn-primary flex-1" id="breakTake" type="button">Take a 24h break</button>
+        <button class="btn btn-secondary" id="breakDismiss" type="button">Dismiss</button>
+      </div>
+      <div id="breakMsg" class="text-sm mt-2" aria-live="polite"></div>
+    </div>
+
     <script define:vars={{ API }}>
       window.BETVA_API = API;
+    </script>
+    <script>
+      import { registerServiceWorker } from '../lib/push';
+      registerServiceWorker();
+
+      const HOUR_MS = 60 * 60 * 1000;
+      const path = location.pathname;
+      const token = localStorage.getItem('betva_token');
+      const skip = path.startsWith('/admin') || path === '/login' || path === '/register';
+
+      if (token && !skip) {
+        const KEY = 'betva_session_start';
+        let start = Number(localStorage.getItem(KEY) || 0);
+        if (!start || Number.isNaN(start)) {
+          start = Date.now();
+          localStorage.setItem(KEY, String(start));
+        }
+
+        const banner = document.getElementById('breakBanner');
+        const check = () => {
+          if (Date.now() - start >= HOUR_MS) banner?.classList.remove('hidden');
+        };
+        const timer = setInterval(check, 60_000);
+        check();
+
+        document.getElementById('breakDismiss')?.addEventListener('click', () => {
+          banner?.classList.add('hidden');
+          start = Date.now();
+          localStorage.setItem(KEY, String(start));
+        });
+
+        document.getElementById('breakTake')?.addEventListener('click', async () => {
+          const btn = document.getElementById('breakTake') as HTMLButtonElement | null;
+          const msg = document.getElementById('breakMsg')!;
+          if (!btn) return;
+          btn.disabled = true;
+          btn.textContent = 'Pausing…';
+          try {
+            const res = await fetch(`${(window as any).BETVA_API}/api/v1/self-exclusion`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${localStorage.getItem('betva_token') || ''}`,
+              },
+              body: JSON.stringify({ hours: 24 }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+              msg.textContent = data.error || 'Could not pause betting.';
+              msg.className = 'text-sm mt-2 text-red-400';
+              btn.disabled = false;
+              btn.textContent = 'Take a 24h break';
+              return;
+            }
+            msg.textContent = `Betting paused until ${data.until}. You can still browse.`;
+            msg.className = 'text-sm mt-2 text-green-400';
+            btn.remove();
+            clearInterval(timer);
+            setTimeout(() => banner?.classList.add('hidden'), 5000);
+          } catch {
+            msg.textContent = 'Network error. Try again.';
+            msg.className = 'text-sm mt-2 text-red-400';
+            btn.disabled = false;
+            btn.textContent = 'Take a 24h break';
+          }
+        });
+      }
     </script>
   </body>
 </html>
