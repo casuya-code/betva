@@ -1,0 +1,81 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Betva — Register">
+  <div class="px-4 pt-8 max-w-md mx-auto">
+    <h1 class="text-3xl font-bold mb-2">Create account</h1>
+    <p class="text-[var(--text-2)] mb-6">Register with your phone number.</p>
+
+    <!-- KYC notice -->
+    <div class="glass p-4 mb-6 border-l-4 border-l-[var(--warning)]">
+      <p class="text-sm font-semibold mb-1">Official name notice</p>
+      <p class="text-sm text-[var(--text-2)]">
+        Enter the <strong>official name registered to this phone number</strong>.
+        We use it only to confirm you truly own this account.
+        It is <strong>visible to administrators only</strong> and never shown publicly.
+        If it does not match the registered owner, you will receive a <strong>7-day notice</strong> to correct it or appeal.
+      </p>
+    </div>
+
+    <form id="regForm" class="space-y-4">
+      <div>
+        <label class="text-sm text-[var(--text-2)] mb-1 block">Nickname</label>
+        <input class="input" name="nickname" required />
+      </div>
+      <div>
+        <label class="text-sm text-[var(--text-2)] mb-1 block">Phone number</label>
+        <input class="input" name="phone" type="tel" placeholder="0712 345 678" required />
+      </div>
+      <div>
+        <label class="text-sm text-[var(--text-2)] mb-1 block">Official name (phone owner)</label>
+        <input class="input" name="official_name" required />
+      </div>
+      <div>
+        <label class="text-sm text-[var(--text-2)] mb-1 block">Password</label>
+        <input class="input" name="password" type="password" minlength="6" required />
+      </div>
+      <label class="flex items-start gap-2 text-sm text-[var(--text-2)]">
+        <input type="checkbox" name="accepted_terms" class="mt-1" required />
+        <span>I accept the terms and confirm the official name above is registered to this phone number.</span>
+      </label>
+      <button class="btn btn-primary w-full" type="submit">Register</button>
+    </form>
+
+    <p class="text-center text-sm text-[var(--text-2)] mt-6">
+      Have an account? <a href="/login" class="text-[var(--brand)]">Login</a>
+    </p>
+    <div id="msg" class="mt-4 text-center text-sm"></div>
+  </div>
+
+  <script>
+    const API = (window as any).BETVA_API;
+    const form = document.getElementById('regForm') as HTMLFormElement;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const payload = {
+        nickname: fd.get('nickname'),
+        phone: fd.get('phone'),
+        official_name: fd.get('official_name'),
+        password: fd.get('password'),
+        accepted_terms: fd.get('accepted_terms') === 'on',
+      };
+      const res = await fetch(`${API}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      const msg = document.getElementById('msg')!;
+      if (res.ok) {
+        localStorage.setItem('betva_token', data.token);
+        msg.textContent = 'Account created. Redirecting...';
+        msg.className = 'mt-4 text-center text-sm text-green-400';
+        setTimeout(() => (window.location.href = '/'), 800);
+      } else {
+        msg.textContent = data.error || 'Registration failed';
+        msg.className = 'mt-4 text-center text-sm text-red-400';
+      }
+    });
+  </script>
+</Layout>

@@ -1,0 +1,19 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: betva
+      POSTGRES_PASSWORD: betva
+      POSTGRES_DB: betva
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+volumes:
+  pgdata:

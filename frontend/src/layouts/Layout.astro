@@ -1,0 +1,50 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  active?: string;
+}
+const { title = 'Betva', active = '' } = Astro.props;
+const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+---
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0f14" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <main class="pb-20">
+      <slot />
+    </main>
+
+    <nav class="bottom-nav">
+      <a href="/" class={`nav-item ${active === 'home' ? 'active' : ''}`}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
+        <span>Home</span>
+      </a>
+      <a href="/community" class={`nav-item ${active === 'community' ? 'active' : ''}`}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Community</span>
+      </a>
+      <a href="/history" class={`nav-item ${active === 'history' ? 'active' : ''}`}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        <span>History</span>
+      </a>
+      <a href="/profile" class={`nav-item ${active === 'profile' ? 'active' : ''}`}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+        <span>Profile</span>
+      </a>
+    </nav>
+
+    <script define:vars={{ API }}>
+      window.BETVA_API = API;
+    </script>
+  </body>
+</html>

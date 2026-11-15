@@ -1,0 +1,82 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Betva — Home" active="home">
+  <div class="px-4 pt-4 space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+      <h1 class="text-2xl font-bold">Betva</h1>
+      <a href="/profile" class="text-sm text-[var(--text-2)]">Profile</a>
+    </div>
+
+    <!-- Trust counter -->
+    <div class="glass p-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-[var(--text-2)]">Track record</span>
+        <span class="badge badge-pending" id="counter-status">Loading</span>
+      </div>
+      <div class="grid grid-cols-3 gap-3 text-center">
+        <div>
+          <div class="text-2xl font-bold counter" id="c-total">—</div>
+          <div class="text-xs text-[var(--text-3)]">Matches</div>
+        </div>
+        <div>
+          <div class="text-2xl font-bold counter text-green-400" id="c-wins">—</div>
+          <div class="text-xs text-[var(--text-3)]">Wins</div>
+        </div>
+        <div>
+          <div class="text-2xl font-bold counter" id="c-rate">—</div>
+          <div class="text-xs text-[var(--text-3)]">Win rate</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Matches -->
+    <div>
+      <h2 class="text-lg font-semibold mb-3">Today &amp; Tomorrow</h2>
+      <div id="matches" class="space-y-3">
+        <!-- skeletons -->
+        <div class="card"><div class="skeleton h-20"></div></div>
+        <div class="card"><div class="skeleton h-20"></div></div>
+        <div class="card"><div class="skeleton h-20"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = (window as any).BETVA_API;
+    async function load() {
+      try {
+        const res = await fetch(`${API}/api/v1/matches`);
+        const data = await res.json();
+        const el = document.getElementById('matches')!;
+        if (!data.matches || data.matches.length === 0) {
+          el.innerHTML = '<div class="card text-center text-[var(--text-2)]">No matches right now.</div>';
+          return;
+        }
+        el.innerHTML = data.matches.map((m: any) => `
+          <div class="card">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs text-[var(--text-3)]">${m.league || ''} · ${m.match_date}</span>
+              <span class="badge badge-${m.status === 'live' ? 'live' : m.status === 'finished' ? 'pending' : 'pending'}">
+                ${m.status === 'live' ? '<span class="dot"></span> LIVE' : m.status.toUpperCase()}
+              </span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="font-semibold">${m.home_team}</div>
+              <div class="text-[var(--text-3)] text-sm">vs</div>
+              <div class="font-semibold">${m.away_team}</div>
+            </div>
+            <div class="mt-3 flex gap-2">
+              <button class="btn btn-secondary flex-1 text-sm" onclick="placeBet('${m.id}','full_time_over_0_5')">FT Over 0.5</button>
+              <button class="btn btn-secondary flex-1 text-sm" onclick="placeBet('${m.id}','over_0_5_ht')">HT Over 0.5</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        document.getElementById('matches')!.innerHTML = '<div class="card text-center text-[var(--text-2)]">Could not load matches.</div>';
+      }
+    }
+    load();
+  </script>
+</Layout>
