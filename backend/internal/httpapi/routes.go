@@ -90,6 +90,10 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			adm.Put("/community/posts/{id}/status", s.handleAdminModeratePost)
 			adm.Post("/notifications/send", s.handleAdminSendNotification)
 			adm.Get("/notifications", s.handleAdminListNotifications)
+
+			adm.Post("/ai/suggest", s.handleAdminGenerateSuggestion)
+			adm.Get("/ai/suggestions", s.handleAdminListSuggestions)
+			adm.Put("/ai/suggestions/{id}/review", s.handleAdminReviewSuggestion)
 		})
 	})
 }

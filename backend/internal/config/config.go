@@ -33,6 +33,10 @@ type Config struct {
 	PushDailyCap    int // max pushes per user per EAT day
 	QuietStartHour  int // 22 = 22:00 EAT
 	QuietEndHour    int // 7 = 07:00 EAT
+
+	// AI results assistant (Groq, inference-only).
+	GroqAPIKey string
+	GroqModel  string
 }
 
 func Load() *Config {
@@ -74,6 +78,9 @@ func Load() *Config {
 		PushDailyCap:    Atoi(getEnv("PUSH_DAILY_CAP", "2"), 2),
 		QuietStartHour:  Atoi(getEnv("QUIET_START_HOUR", "22"), 22),
 		QuietEndHour:    Atoi(getEnv("QUIET_END_HOUR", "7"), 7),
+
+		GroqAPIKey: getEnv("GROQ_API_KEY", ""),
+		GroqModel:  getEnv("GROQ_MODEL", "llama-3.3-70b-versatile"),
 	}
 }
 

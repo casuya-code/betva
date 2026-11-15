@@ -1290,7 +1290,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Development Status
 
-**Phase 4 complete — community feed, moderation, notifications, push, and self-exclusion are working end to end.** Phases 5–6 remain.
+**Phase 5 complete — AI result suggestions (Groq, admin approval) plus launch-hardening artifacts (restore drill and pen-test checklist).** Phase 6 polish remains.
 
 ### What exists now
 
@@ -1316,7 +1316,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | In-app notification inbox and per-category mutes | ✅ Working | `backend/internal/httpapi/notifications.go` |
 | Web Push with VAPID, daily cap, quiet hours | ✅ Working | `frontend/public/sw.js`, `frontend/src/lib/push.ts` |
 | Self-exclusion 24h / 7d / 30d, append-only | ✅ Working | `backend/internal/httpapi/notifications.go` |
-| AI results assistant | ⬜ Later | Phase 5 |
+| AI results assistant | ✅ Working | Phase 5 |
 | Full launch hardening and restore test | ⬜ Later | Phase 6 |
 
 ### Matches CSV format
@@ -1504,7 +1504,7 @@ Admin app: `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `AD
 
 `GET /api/v1/config` reports `push_enabled`, the public key, the cap, and the quiet-hours window, so the client never hardcodes them.
 
-**Next:** Phase 5 — AI results assistant (Groq) with admin approval, then Phase 6 — launch hardening: full restore test and penetration test.
+**Next:** Final polish pass and launch sign-off — run the restore drill and pen-test checklist against staging, then deploy.
 
 **Decisions locked in:**
 - Frontend hosting: **Vercel**
