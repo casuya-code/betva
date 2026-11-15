@@ -155,20 +155,24 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var nickname, phone, status, officialName string
 	var balance int64
+	var accessExpiresAt *string
 	err := s.Pool.QueryRow(ctx, `
-		SELECT nickname, phone, status, official_name, balance_cents FROM users WHERE id = $1
-	`, u.ID).Scan(&nickname, &phone, &status, &officialName, &balance)
+		SELECT nickname, phone, status, official_name, balance_cents,
+		       to_char(access_expires_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI')
+		FROM users WHERE id = $1
+	`, u.ID).Scan(&nickname, &phone, &status, &officialName, &balance, &accessExpiresAt)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"id":            u.ID,
-		"nickname":      nickname,
-		"phone":         phone,
-		"status":        status,
-		"official_name": officialName,
-		"balance_cents": balance,
+		"id":                u.ID,
+		"nickname":          nickname,
+		"phone":             phone,
+		"status":            status,
+		"official_name":     officialName,
+		"balance_cents":     balance,
+		"access_expires_at": accessExpiresAt,
 	})
 }
 
@@ -179,8 +183,8 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Password     string `json:"password"`
-		ProfilePic   string `json:"profile_pic"`
+		Password   string `json:"password"`
+		ProfilePic string `json:"profile_pic"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad json"})
@@ -230,54 +234,5 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented yet"})
-}
-
-func (s *Server) handleListMatches(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	rows, err := s.Pool.Query(ctx, `
-		SELECT id, match_date, kickoff_time, league, home_team, away_team, status, confidence
-		FROM matches
-		WHERE match_date >= CURRENT_DATE AND match_date <= CURRENT_DATE + INTERVAL '1 day'
-		ORDER BY match_date, kickoff_time
-	`)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
-		return
-	}
-	defer rows.Close()
-	type m struct {
-		ID          string `json:"id"`
-		MatchDate   string `json:"match_date"`
-		KickoffTime string `json:"kickoff_time"`
-		League      string `json:"league"`
-		HomeTeam    string `json:"home_team"`
-		AwayTeam    string `json:"away_team"`
-		Status      string `json:"status"`
-		Confidence  string `json:"confidence"`
-	}
-	var out []m
-	for rows.Next() {
-		var mm m
-		if err := rows.Scan(&mm.ID, &mm.MatchDate, &mm.KickoffTime, &mm.League, &mm.HomeTeam, &mm.AwayTeam, &mm.Status, &mm.Confidence); err != nil {
-			continue
-		}
-		out = append(out, mm)
-	}
-	if out == nil {
-		out = []m{}
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"matches": out})
-}
-
-func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented yet"})
-}
-
-func (s *Server) handleAdminUpdateUserStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented yet"})
-}
-
-func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "not implemented yet"})
 }

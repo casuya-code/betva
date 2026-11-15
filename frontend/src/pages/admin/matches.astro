@@ -1,0 +1,324 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Betva Admin — Matches" active="matches">
+  <div class="space-y-5">
+    <div>
+      <h1 class="text-2xl font-bold">Matches</h1>
+      <p class="text-sm text-[var(--text-2)]">
+        Upload a CSV for a specific date. Only today and tomorrow are visible to users.
+      </p>
+    </div>
+
+    <!-- Upload -->
+    <section class="card space-y-4">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="font-semibold">Upload CSV</h2>
+          <p class="text-xs text-[var(--text-3)]">
+            Columns: kickoff, league, home_team, away_team, markets, confidence
+          </p>
+        </div>
+        <a href="/matches-template.csv" download class="btn btn-secondary text-sm">Download template</a>
+      </div>
+
+      <form id="uploadForm" class="grid gap-3 md:grid-cols-[160px_1fr_auto] items-end">
+        <div>
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="uploadDate">Match date</label>
+          <input class="input" id="uploadDate" name="date" type="date" required />
+        </div>
+        <div>
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="file">CSV file</label>
+          <input class="input" id="file" name="file" type="file" accept=".csv,text/csv" required />
+        </div>
+        <button class="btn btn-primary" type="submit" id="uploadBtn">Upload</button>
+      </form>
+
+      <label class="flex items-center gap-2 text-sm text-[var(--text-2)]">
+        <input type="checkbox" id="replace" />
+        Replace existing matches for this date (blocked if bets already exist)
+      </label>
+
+      <div id="uploadResult"></div>
+    </section>
+
+    <!-- Day view -->
+    <section class="card space-y-3">
+      <div class="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="font-semibold">Day view</h2>
+          <p class="text-xs text-[var(--text-3)]">Review fixtures, change confidence or status.</p>
+        </div>
+        <div class="flex items-end gap-2">
+          <div>
+            <label class="text-sm text-[var(--text-2)] mb-1 block" for="viewDate">Date</label>
+            <input class="input" id="viewDate" type="date" />
+          </div>
+          <button class="btn btn-secondary" id="loadDay" type="button">Load</button>
+        </div>
+      </div>
+      <div id="dayList" class="text-sm text-[var(--text-2)]">Pick a date and press Load.</div>
+    </section>
+
+    <!-- Import log -->
+    <section class="card space-y-3">
+      <h2 class="font-semibold">Import log</h2>
+      <div id="importLog" class="text-sm text-[var(--text-2)]">Loading…</div>
+    </section>
+  </div>
+
+  <script>
+    import {
+      adminFetch,
+      requireAdmin,
+      todayISO,
+      esc,
+      confidenceBadge,
+      statusBadge,
+    } from '../../lib/admin';
+
+    const uploadDate = document.getElementById('uploadDate') as HTMLInputElement;
+    const viewDate = document.getElementById('viewDate') as HTMLInputElement;
+    uploadDate.value = todayISO();
+    viewDate.value = todayISO();
+
+    if (requireAdmin()) {
+      loadImports();
+      loadDay(todayISO());
+    }
+
+    // ---- upload -------------------------------------------------------
+    const form = document.getElementById('uploadForm') as HTMLFormElement;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('uploadBtn') as HTMLButtonElement;
+      const out = document.getElementById('uploadResult')!;
+      const fd = new FormData();
+      fd.append('date', uploadDate.value);
+      fd.append('replace', (document.getElementById('replace') as HTMLInputElement).checked ? 'true' : 'false');
+      const fileInput = document.getElementById('file') as HTMLInputElement;
+      if (!fileInput.files?.length) return;
+      fd.append('file', fileInput.files[0]);
+
+      btn.disabled = true;
+      btn.textContent = 'Uploading…';
+      out.innerHTML = '';
+
+      try {
+        const res = await adminFetch('/api/v1/admin/matches/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+
+        if (res.status === 409 && data.duplicates) {
+          out.innerHTML = `
+            <div class="glass-el p-3 border-l-4" style="border-left-color:var(--warning)">
+              <div class="font-semibold mb-1">Matches already exist for this date</div>
+              <ul class="text-sm text-[var(--text-2)] list-disc pl-5">
+                ${data.duplicates.map((d: string) => `<li>${esc(d)}</li>`).join('')}
+              </ul>
+              <p class="text-xs text-[var(--text-3)] mt-2">Tick “Replace existing matches” and upload again to overwrite.</p>
+            </div>`;
+        } else if (!res.ok) {
+          out.innerHTML = `<div class="text-sm text-red-400">${esc(data.error || 'Upload failed')}</div>`;
+          if (data.row_errors?.length) out.innerHTML += rowErrorsHtml(data.row_errors);
+        } else {
+          out.innerHTML = `
+            <div class="glass-el p-3 border-l-4" style="border-left-color:var(--brand)">
+              <div class="font-semibold text-green-400">
+                Imported ${data.imported} match${data.imported === 1 ? '' : 'es'} for ${esc(data.date)}
+              </div>
+              ${data.failed ? `<div class="text-sm text-red-400 mt-1">${data.failed} row(s) rejected</div>` : ''}
+            </div>`;
+          if (data.row_errors?.length) out.innerHTML += rowErrorsHtml(data.row_errors);
+          form.reset();
+          uploadDate.value = data.date;
+          loadImports();
+          viewDate.value = data.date;
+          loadDay(data.date);
+        }
+      } catch {
+        out.innerHTML = '<div class="text-sm text-red-400">Upload failed.</div>';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Upload';
+      }
+    });
+
+    function rowErrorsHtml(errors: any[]): string {
+      return `
+        <div class="mt-3 overflow-x-auto">
+          <table class="admin-table">
+            <thead><tr><th>Line</th><th>Problem</th></tr></thead>
+            <tbody>
+              ${errors
+                .map((er: any) => `<tr><td class="counter">${er.line}</td><td class="text-red-400">${esc(er.message)}</td></tr>`)
+                .join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    // ---- day view -----------------------------------------------------
+    document.getElementById('loadDay')!.addEventListener('click', () => loadDay(viewDate.value));
+
+    async function loadDay(date: string) {
+      if (!date) return;
+      const el = document.getElementById('dayList')!;
+      el.textContent = 'Loading…';
+      try {
+        const res = await adminFetch(`/api/v1/admin/matches?date=${date}`);
+        const data = await res.json();
+        const matches = data.matches || [];
+        if (!matches.length) {
+          el.innerHTML = `<div class="text-[var(--text-3)]">No matches stored for ${esc(date)}.</div>`;
+          return;
+        }
+        el.innerHTML = `
+          <div class="overflow-x-auto">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Kickoff</th><th>League</th><th>Fixture</th><th>Markets</th>
+                  <th>Confidence</th><th>Status</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${matches
+                  .map(
+                    (m: any) => `
+                  <tr data-id="${esc(m.id)}">
+                    <td class="counter">${esc(m.kickoff)}</td>
+                    <td class="text-[var(--text-2)]">${esc(m.league || '—')}</td>
+                    <td class="font-medium">${esc(m.home_team)} <span class="text-[var(--text-3)]">vs</span> ${esc(m.away_team)}</td>
+                    <td>${(m.markets || []).map((k: string) => `<span class="badge badge-pending">${k === 'ft_over_0_5' ? 'FT O0.5' : 'HT O0.5'}</span>`).join(' ')}</td>
+                    <td>
+                      <select class="input admin-select" data-field="confidence">
+                        ${['high', 'medium', 'low']
+                          .map((c) => `<option value="${c}" ${m.confidence === c ? 'selected' : ''}>${c.toUpperCase()}</option>`)
+                          .join('')}
+                      </select>
+                    </td>
+                    <td>
+                      <select class="input admin-select" data-field="status">
+                        ${['upcoming', 'live', 'finished', 'postponed', 'cancelled']
+                          .map((s) => `<option value="${s}" ${m.status === s ? 'selected' : ''}>${s.toUpperCase()}</option>`)
+                          .join('')}
+                      </select>
+                    </td>
+                    <td><button class="btn btn-secondary text-xs admin-save" type="button">Save</button></td>
+                  </tr>`
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>`;
+      } catch {
+        el.textContent = 'Could not load matches.';
+      }
+    }
+
+    document.getElementById('dayList')!.addEventListener('click', async (e) => {
+      const btn = (e.target as HTMLElement).closest('.admin-save') as HTMLElement | null;
+      if (!btn) return;
+      const row = btn.closest('tr')!;
+      const id = row.dataset.id!;
+      const confidence = (row.querySelector('[data-field="confidence"]') as HTMLSelectElement).value;
+      const status = (row.querySelector('[data-field="status"]') as HTMLSelectElement).value;
+      btn.textContent = 'Saving…';
+      btn.setAttribute('disabled', 'true');
+      try {
+        const res = await adminFetch(`/api/v1/admin/matches/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confidence, status }),
+        });
+        if (res.ok) {
+          btn.textContent = 'Saved';
+          btn.classList.add('text-green-400');
+        } else {
+          btn.textContent = 'Failed';
+        }
+      } catch {
+        btn.textContent = 'Failed';
+      }
+      setTimeout(() => {
+        btn.textContent = 'Save';
+        btn.removeAttribute('disabled');
+        btn.classList.remove('text-green-400');
+      }, 1500);
+    });
+
+    // ---- import log ---------------------------------------------------
+    async function loadImports() {
+      const el = document.getElementById('importLog')!;
+      try {
+        const res = await adminFetch('/api/v1/admin/imports?limit=20');
+        const data = await res.json();
+        const imports = data.imports || [];
+        if (!imports.length) {
+          el.textContent = 'No imports yet.';
+          return;
+        }
+        el.innerHTML = `
+          <div class="overflow-x-auto">
+            <table class="admin-table">
+              <thead>
+                <tr><th>Date</th><th>File</th><th>Total</th><th>Imported</th><th>Failed</th><th>Replaced</th><th>When</th></tr>
+              </thead>
+              <tbody>
+                ${imports
+                  .map(
+                    (i: any) => `
+                  <tr>
+                    <td class="counter">${esc(i.match_date)}</td>
+                    <td class="text-[var(--text-2)]">${esc(i.file_name || '—')}</td>
+                    <td class="counter">${i.rows_total}</td>
+                    <td class="counter text-green-400">${i.rows_imported}</td>
+                    <td class="counter ${i.rows_failed ? 'text-red-400' : ''}">${i.rows_failed}</td>
+                    <td>${i.replaced ? '<span class="badge badge-live">YES</span>' : '<span class="badge badge-pending">NO</span>'}</td>
+                    <td class="text-[var(--text-3)] text-xs">${esc(i.created_at)}</td>
+                  </tr>`
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>`;
+      } catch {
+        el.textContent = 'Could not load import log.';
+      }
+    }
+
+    // silence unused-import warnings for badge helpers used in markup later
+    void confidenceBadge;
+    void statusBadge;
+  </script>
+
+  <style>
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .admin-table th {
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-3);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .admin-table td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .admin-table tr:last-child td { border-bottom: 0; }
+    .admin-select {
+      padding: 8px 10px;
+      font-size: 13px;
+      min-height: 40px;
+      width: auto;
+    }
+  </style>
+</AdminLayout>

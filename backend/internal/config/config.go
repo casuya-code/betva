@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -13,9 +14,23 @@ type Config struct {
 	AdminUser   string
 	AdminPass   string
 	Env         string
+	CORSOrigins []string
 }
 
 func Load() *Config {
+	origins := []string{
+		"http://localhost:4321",
+		"http://127.0.0.1:4321",
+		"http://localhost:3000",
+	}
+	if raw := os.Getenv("CORS_ORIGINS"); raw != "" {
+		origins = nil
+		for _, o := range strings.Split(raw, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				origins = append(origins, o)
+			}
+		}
+	}
 	return &Config{
 		Port:        getEnv("PORT", "8080"),
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://betva:betva@localhost:5432/betva?sslmode=disable"),
@@ -24,6 +39,7 @@ func Load() *Config {
 		AdminUser:   getEnv("ADMIN_USERNAME", ""),
 		AdminPass:   getEnv("ADMIN_PASSWORD", ""),
 		Env:         getEnv("ENV", "development"),
+		CORSOrigins: origins,
 	}
 }
 

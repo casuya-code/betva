@@ -1,0 +1,3 @@
+kickoff,league,home_team,away_team,markets,confidence
+16:00,Example League,Home Team,Away Team,ft_over_0_5|ht_over_0_5,HIGH
+18:30,Example League,Team Two,Team Three,ft_over_0_5,MEDIUM

@@ -72,7 +72,7 @@ import Layout from '../layouts/Layout.astro';
       (document.getElementById('p-status') as HTMLElement).textContent = d.status.toUpperCase();
       (document.getElementById('p-astatus') as HTMLElement).textContent = d.status;
       (document.getElementById('p-balance') as HTMLElement).textContent = (d.balance_cents / 100).toFixed(0);
-      (document.getElementById('p-expiry') as HTMLElement).textContent = '—';
+      (document.getElementById('p-expiry') as HTMLElement).textContent = d.access_expires_at || '—';
     }
     load();
 

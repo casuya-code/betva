@@ -1216,7 +1216,100 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Development Status
 
-Planning / architecture phase. No code written yet.
+**Phase 2 complete — matches admin, CSV import, and manual user activation are working end to end.** Phases 3–6 remain.
+
+### What exists now
+
+| Area | Status | Location |
+| --- | --- | --- |
+| Go API (chi router, pgx, Redis-ready) | ✅ Working | `backend/` |
+| Postgres schema and migrations | ✅ Working | `backend/migrations/` |
+| User register / login / profile | ✅ Working | `backend/internal/httpapi/auth.go` |
+| Admin login from environment variables | ✅ Working | `backend/internal/httpapi/admin.go` |
+| Matches CSV upload, validation, duplicate detection, import log | ✅ Working | `backend/internal/httpapi/matches.go` |
+| Admin day view, confidence and status editing | ✅ Working | `frontend/src/pages/admin/matches.astro` |
+| Users list, search, manual activation, suspend / ban, audit log | ✅ Working | `frontend/src/pages/admin/users.astro` |
+| Astro + Tailwind user app (PWA shell) | ✅ Working | `frontend/` |
+| Admin app (separate layout) | ✅ Working | `frontend/src/pages/admin/` |
+| Bets, wallet, ledger settlement | ⬜ Next phase | — |
+| Community, push notifications, AI results | ⬜ Later | — |
+
+### Matches CSV format
+
+The upload form supplies the date; the file supplies the fixtures. Header row required, column order does not matter.
+
+```csv
+kickoff,league,home_team,away_team,markets,confidence
+16:00,Example League,Home Team,Away Team,ft_over_0_5|ht_over_0_5,HIGH
+18:30,Example League,Team Two,Team Three,ft_over_0_5,MEDIUM
+```
+
+| Column | Required | Rules |
+| --- | --- | --- |
+| `kickoff` | Yes | `HH:MM`, 24-hour, EAT |
+| `league` | No | Free text |
+| `home_team` | Yes | Must differ from `away_team` |
+| `away_team` | Yes | Must differ from `home_team` |
+| `markets` | Yes | `ft_over_0_5` and/or `ht_over_0_5`, separated by `\|`, `,` or `;` |
+| `confidence` | No | `HIGH`, `MEDIUM`, `LOW` — defaults to `MEDIUM` |
+
+Behaviour:
+
+- **Validation first** — every bad row is rejected with its line number and a readable reason; good rows still import.
+- **Duplicate detection** — fixtures already stored for the date are reported; the upload is refused unless `replace` is checked.
+- **Replace is blocked when bets exist** — money history is never deleted by a re-upload.
+- **Import log** — every upload records admin, date, file name, totals, failures, and whether it replaced.
+- **Visibility** — users only ever see today and tomorrow; later dates are stored and appear when they enter the window.
+
+### Admin API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/v1/admin/login` | Env-var credentials → admin JWT |
+| `GET` | `/api/v1/admin/me` | Current admin identity |
+| `POST` | `/api/v1/admin/matches/upload` | Multipart: `date`, `file`, optional `replace` |
+| `GET` | `/api/v1/admin/matches?date=YYYY-MM-DD` | All matches for one date |
+| `PUT` | `/api/v1/admin/matches/{id}` | Change `confidence` / `status` |
+| `GET` | `/api/v1/admin/imports` | Recent upload log |
+| `GET` | `/api/v1/admin/users?q=&status=` | Search and filter users |
+| `PUT` | `/api/v1/admin/users/{id}/status` | Activate (with days), suspend, ban, deactivate |
+
+### Running locally
+
+```bash
+# 1. Database (PostgreSQL already installed)
+psql -U postgres -c "CREATE USER betva WITH PASSWORD 'betva';"
+psql -U postgres -c "CREATE DATABASE betva OWNER betva;"
+psql -U betva -d betva -f backend/migrations/001_init.sql
+psql -U betva -d betva -f backend/migrations/002_matches_admin.sql
+
+# 2. Backend
+cd backend
+cp .env.example .env        # set JWT_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD
+go run ./cmd/server         # http://localhost:8080
+
+# 3. Frontend
+cd frontend
+npm install
+npm run dev                 # http://localhost:4321
+```
+
+Admin app: `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
+
+### Environment variables
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | Postgres connection string |
+| `JWT_SECRET` | Yes | Long random string in production |
+| `ADMIN_USERNAME` | Yes | Never stored in the database |
+| `ADMIN_PASSWORD` | Yes | Changing it requires a redeploy |
+| `REDIS_URL` | No | Optional today; required for live feeds and rate limits |
+| `CORS_ORIGINS` | Production | Comma-separated frontend origins |
+| `PORT` | No | Defaults to `8080` |
+| `ENV` | No | `development` or `production` |
+
+**Next:** Phase 3 — bet slip, wallet, and atomic settlement.
 
 **Decisions locked in:**
 - Frontend hosting: **Vercel**

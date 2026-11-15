@@ -1,0 +1,131 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  active?: string;
+}
+const { title = 'Betva Admin', active = '' } = Astro.props;
+const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
+const links = [
+  { href: '/admin', label: 'Overview', key: 'overview' },
+  { href: '/admin/matches', label: 'Matches', key: 'matches' },
+  { href: '/admin/users', label: 'Users', key: 'users' },
+];
+---
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b0f14" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="admin-header">
+      <div class="admin-header-inner">
+        <a href="/admin" class="admin-brand">
+          <span class="admin-logo">B</span>
+          <span>Betva <span class="admin-tag">Admin</span></span>
+        </a>
+        <nav class="admin-nav">
+          {links.map((l) => (
+            <a href={l.href} class={`admin-nav-link ${active === l.key ? 'active' : ''}`}>{l.label}</a>
+          ))}
+          <button id="adminLogout" class="admin-nav-link admin-logout" type="button">Logout</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <slot />
+    </main>
+
+    <script define:vars={{ API }}>
+      window.BETVA_API = API;
+    </script>
+    <script>
+      document.getElementById('adminLogout')?.addEventListener('click', () => {
+        localStorage.removeItem('betva_admin_token');
+        window.location.href = '/admin/login';
+      });
+    </script>
+  </body>
+</html>
+
+<style>
+  .admin-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(11, 15, 20, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+  }
+  .admin-header-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .admin-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .admin-logo {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(180deg, var(--brand), var(--brand-2));
+    color: #fff;
+    font-weight: 800;
+  }
+  .admin-tag {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .admin-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .admin-nav-link {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 10px;
+    color: var(--text-2);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    background: none;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .admin-nav-link:hover { color: var(--text); background: var(--surface); }
+  .admin-nav-link.active { color: var(--brand); background: rgba(34, 197, 94, 0.1); }
+  .admin-logout { color: var(--danger); }
+  .admin-main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 20px 16px 64px;
+  }
+</style>

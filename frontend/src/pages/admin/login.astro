@@ -1,0 +1,65 @@
+---
+import Layout from '../../layouts/Layout.astro';
+---
+<Layout title="Betva — Admin Login" hideNav>
+  <div class="px-4 pt-16 max-w-md mx-auto">
+    <div class="flex items-center gap-3 mb-8">
+      <div class="w-11 h-11 rounded-xl grid place-items-center font-extrabold text-white" style="background:linear-gradient(180deg,var(--brand),var(--brand-2))">B</div>
+      <div>
+        <h1 class="text-2xl font-bold leading-tight">Admin sign in</h1>
+        <p class="text-sm text-[var(--text-2)]">Credentials come from server environment variables.</p>
+      </div>
+    </div>
+
+    <form id="form" class="glass p-5 space-y-4">
+      <div>
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="username">Username</label>
+        <input class="input" id="username" name="username" autocomplete="username" required />
+      </div>
+      <div>
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="password">Password</label>
+        <input class="input" id="password" name="password" type="password" autocomplete="current-password" required />
+      </div>
+      <button class="btn btn-primary w-full" type="submit">Sign in</button>
+      <div id="msg" class="text-center text-sm"></div>
+    </form>
+
+    <p class="text-center text-sm text-[var(--text-3)] mt-6">
+      <a href="/" class="text-[var(--brand)]">Back to app</a>
+    </p>
+  </div>
+
+  <script>
+    const API = (window as any).BETVA_API;
+    const form = document.getElementById('form') as HTMLFormElement;
+    const msg = document.getElementById('msg')!;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      msg.textContent = 'Signing in...';
+      msg.className = 'text-center text-sm text-[var(--text-2)]';
+      try {
+        const res = await fetch(`${API}/api/v1/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: fd.get('username'),
+            password: fd.get('password'),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          msg.textContent = data.error || 'Sign in failed';
+          msg.className = 'text-center text-sm text-red-400';
+          return;
+        }
+        localStorage.setItem('betva_admin_token', data.token);
+        window.location.href = '/admin';
+      } catch {
+        msg.textContent = 'Could not reach the server.';
+        msg.className = 'text-center text-sm text-red-400';
+      }
+    });
+  </script>
+</Layout>

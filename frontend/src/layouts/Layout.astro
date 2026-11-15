@@ -4,8 +4,9 @@ import '../styles/global.css';
 interface Props {
   title?: string;
   active?: string;
+  hideNav?: boolean;
 }
-const { title = 'Betva', active = '' } = Astro.props;
+const { title = 'Betva', active = '', hideNav = false } = Astro.props;
 const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 ---
 <!doctype html>
@@ -24,6 +25,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
       <slot />
     </main>
 
+    {!hideNav && (
     <nav class="bottom-nav">
       <a href="/" class={`nav-item ${active === 'home' ? 'active' : ''}`}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
@@ -42,6 +44,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
         <span>Profile</span>
       </a>
     </nav>
+    )}
 
     <script define:vars={{ API }}>
       window.BETVA_API = API;

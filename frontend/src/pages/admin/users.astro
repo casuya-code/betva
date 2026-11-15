@@ -1,0 +1,177 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Betva Admin — Users" active="users">
+  <div class="space-y-5">
+    <div>
+      <h1 class="text-2xl font-bold">Users &amp; financial status</h1>
+      <p class="text-sm text-[var(--text-2)]">
+        Confirm mobile money payments manually, then activate the account.
+      </p>
+    </div>
+
+    <section class="card space-y-3">
+      <form id="filters" class="grid gap-3 md:grid-cols-[1fr_180px_auto] items-end">
+        <div>
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="q">Search</label>
+          <input class="input" id="q" placeholder="Phone or nickname" />
+        </div>
+        <div>
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="status">Status</label>
+          <select class="input" id="status">
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="suspended">Suspended</option>
+            <option value="banned">Banned</option>
+          </select>
+        </div>
+        <button class="btn btn-secondary" type="submit">Apply</button>
+      </form>
+      <div id="count" class="text-xs text-[var(--text-3)]"></div>
+    </section>
+
+    <section class="card">
+      <div id="list" class="text-sm text-[var(--text-2)]">Loading…</div>
+    </section>
+  </div>
+
+  <script>
+    import { adminFetch, requireAdmin, esc, money, statusBadge } from '../../lib/admin';
+
+    if (requireAdmin()) load();
+
+    const form = document.getElementById('filters') as HTMLFormElement;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      load();
+    });
+
+    async function load() {
+      const q = (document.getElementById('q') as HTMLInputElement).value.trim();
+      const status = (document.getElementById('status') as HTMLSelectElement).value;
+      const el = document.getElementById('list')!;
+      el.textContent = 'Loading…';
+
+      try {
+        const res = await adminFetch(
+          `/api/v1/admin/users?limit=100&q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`
+        );
+        const data = await res.json();
+        const users = data.users || [];
+        document.getElementById('count')!.textContent = `${data.total ?? users.length} user(s)`;
+
+        if (!users.length) {
+          el.innerHTML = '<div class="text-[var(--text-3)]">No users match this filter.</div>';
+          return;
+        }
+
+        el.innerHTML = `
+          <div class="overflow-x-auto">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>User</th><th>Phone</th><th>Official name</th><th>Status</th>
+                  <th>Balance</th><th>Access until</th><th>Joined</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${users
+                  .map(
+                    (u: any) => `
+                  <tr data-id="${esc(u.id)}">
+                    <td class="font-medium">${esc(u.nickname)}</td>
+                    <td class="counter">${esc(u.phone)}</td>
+                    <td class="text-[var(--text-2)]">${esc(u.official_name)}</td>
+                    <td><span class="badge ${statusBadge(u.status)}">${esc(u.status.toUpperCase())}</span></td>
+                    <td class="counter">${money(u.balance_cents)} TZS</td>
+                    <td class="text-[var(--text-2)] text-xs">${u.access_expires_at ? esc(u.access_expires_at) : '—'}</td>
+                    <td class="text-[var(--text-3)] text-xs">${esc(u.created_at)}</td>
+                    <td>
+                      <div class="flex flex-wrap gap-1">
+                        <button class="btn btn-primary text-xs admin-act" data-action="activate" type="button">Activate 30d</button>
+                        <button class="btn btn-secondary text-xs admin-act" data-action="inactive" type="button">Deactivate</button>
+                        <button class="btn btn-secondary text-xs admin-act" data-action="suspended" type="button">Suspend</button>
+                        <button class="btn btn-danger text-xs admin-act" data-action="banned" type="button">Ban</button>
+                      </div>
+                    </td>
+                  </tr>`
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>`;
+      } catch {
+        el.textContent = 'Could not load users.';
+      }
+    }
+
+    document.getElementById('list')!.addEventListener('click', async (e) => {
+      const btn = (e.target as HTMLElement).closest('.admin-act') as HTMLButtonElement | null;
+      if (!btn) return;
+      const row = btn.closest('tr')!;
+      const id = row.dataset.id!;
+      const action = btn.dataset.action!;
+
+      let days = 30;
+      let reason = '';
+      if (action === 'activate') {
+        const input = prompt('Activate for how many days?', '30');
+        if (input === null) return;
+        days = parseInt(input, 10);
+        if (!days || days < 1) return alert('Enter a valid number of days.');
+        reason = prompt('Payment reference / note (optional)', '') || '';
+      } else if (action === 'banned' || action === 'suspended') {
+        const input = prompt(`Reason for ${action === 'banned' ? 'ban' : 'suspension'} (recorded in the audit log)`, '');
+        if (input === null) return;
+        reason = input;
+      }
+
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = '…';
+      try {
+        const res = await adminFetch(`/api/v1/admin/users/${id}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: action, days, reason }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert(data.error || 'Update failed');
+        }
+        await load();
+      } catch {
+        alert('Update failed');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = oldText;
+      }
+    });
+  </script>
+
+  <style>
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .admin-table th {
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-3);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .admin-table td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .admin-table tr:last-child td { border-bottom: 0; }
+    .admin-table .btn { padding: 6px 10px; min-height: 32px; }
+  </style>
+</AdminLayout>

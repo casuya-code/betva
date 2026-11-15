@@ -31,6 +31,9 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 		// matches (public read)
 		api.Get("/matches", s.handleListMatches)
 
+		// admin login uses env credentials, never the database
+		api.Post("/admin/login", s.handleAdminLogin)
+
 		// protected
 		api.Group(func(protected chi.Router) {
 			protected.Use(s.authMiddleware)
@@ -43,7 +46,13 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 		// admin
 		api.Route("/admin", func(adm chi.Router) {
 			adm.Use(s.adminMiddleware)
+			adm.Get("/me", s.handleAdminMe)
+
+			adm.Get("/matches", s.handleAdminListMatches)
 			adm.Post("/matches/upload", s.handleUploadMatches)
+			adm.Put("/matches/{id}", s.handleAdminUpdateMatch)
+			adm.Get("/imports", s.handleImportLog)
+
 			adm.Get("/users", s.handleAdminListUsers)
 			adm.Put("/users/{id}/status", s.handleAdminUpdateUserStatus)
 		})
