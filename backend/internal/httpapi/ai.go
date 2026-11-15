@@ -92,14 +92,15 @@ func (s *Server) handleAdminGenerateSuggestion(w http.ResponseWriter, r *http.Re
 
 	// 2. Ask Groq for strict JSON.
 	systemPrompt := `You extract football match results from page text.
-Return ONLY a JSON object with these fields:
-{"home_goals":int,"away_goals":int,"home_goals_ht":int|null,"away_goals_ht":int|null,"confidence":"high"|"medium"|"low","notes":string}
+Return ONLY a single JSON object. No markdown, no code fences, no prose.
+Schema:
+{"home_goals":integer,"away_goals":integer,"home_goals_ht":integer or null,"away_goals_ht":integer or null,"confidence":"high" or "medium" or "low","notes":string}
 Rules:
-- Goals must be non-negative integers.
-- If the half-time score is not stated, set home_goals_ht and away_goals_ht to null.
+- home_goals and away_goals are required non-negative integers (full-time score).
+- home_goals_ht / away_goals_ht are the half-time score, or null if not stated.
 - confidence reflects how clearly the source states the result.
 - notes is one short sentence, max 120 characters.
-- Do not include any other keys or any prose outside the JSON.`
+- Output the JSON object and nothing else.`
 	userPrompt := fmt.Sprintf("Page text:\n%s", excerpt)
 
 	groqBody, _ := json.Marshal(map[string]interface{}{
@@ -144,6 +145,7 @@ Rules:
 		return
 	}
 	content := strings.TrimSpace(groqEnvelope.Choices[0].Message.Content)
+	content = extractJSON(content)
 
 	// 3. Validate strict JSON.
 	var parsed groqResult
@@ -296,6 +298,10 @@ func (s *Server) handleAdminReviewSuggestion(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status must be approved or rejected"})
 		return
 	}
+	if body.Status == "rejected" && body.Reason == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a rejection requires a reason"})
+		return
+	}
 	body.Reason = strings.TrimSpace(body.Reason)
 
 	ctx := r.Context()
@@ -315,7 +321,28 @@ func (s *Server) handleAdminReviewSuggestion(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, map[string]string{"status": body.Status})
 }
 
-// cleanHTML strips tags, scripts, and collapses whitespace so the model only
+// extractJSON strips code fences and returns the outermost JSON object, so a
+// model that wraps its answer in markdown still parses.
+func extractJSON(in string) string {
+	s := strings.TrimSpace(in)
+	// Strip markdown code fences.
+	if strings.HasPrefix(s, "```") {
+		s = strings.TrimPrefix(s, "```json")
+		s = strings.TrimPrefix(s, "```")
+		if i := strings.LastIndex(s, "```"); i >= 0 {
+			s = s[:i]
+		}
+		s = strings.TrimSpace(s)
+	}
+	// Find the first '{' and the matching last '}'.
+	start := strings.Index(s, "{")
+	end := strings.LastIndex(s, "}")
+	if start >= 0 && end > start {
+		return s[start : end+1]
+	}
+	return s
+}
+
 // sees readable text. This keeps the payload small and stops the model from
 // being distracted by markup.
 func cleanHTML(in string) string {
