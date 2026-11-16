@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -75,7 +76,8 @@ func (s *Server) handleAdminGenerateSuggestion(w http.ResponseWriter, r *http.Re
 	req.Header.Set("User-Agent", "BetvaResultBot/1.0 (+https://betva)")
 	resp, err := client.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "could not fetch source: " + err.Error()})
+		log.Printf("ai source fetch failed: %v", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "could not fetch source"})
 		return
 	}
 	defer resp.Body.Close()
@@ -129,7 +131,8 @@ Rules:
 	gReq.Header.Set("Content-Type", "application/json")
 	gResp, err := (&http.Client{Timeout: 20 * time.Second}).Do(gReq)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "groq request failed: " + err.Error()})
+		log.Printf("groq request failed: %v", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "groq request failed"})
 		return
 	}
 	defer gResp.Body.Close()
