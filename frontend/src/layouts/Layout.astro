@@ -39,6 +39,12 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <title>{title}</title>
   </head>
   <body>
+    <div id="page-preloader" class="page-preloader" aria-hidden="true">
+      <div class="page-preloader-inner">
+        <img src="/favicon.svg" alt="" class="page-preloader-mark" width="48" height="48" decoding="async" />
+        <div class="page-preloader-bar"></div>
+      </div>
+    </div>
     <main class={hideNav ? '' : 'has-bottom-nav'}>
       <slot />
     </main>
@@ -81,6 +87,13 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <script>
       import { registerServiceWorker } from '../lib/push';
       import { API } from '../lib/api';
+
+      const pre = document.getElementById('page-preloader');
+      const hidePre = () => pre?.classList.add('is-hidden');
+      if (document.readyState === 'complete') hidePre();
+      else window.addEventListener('load', hidePre, { once: true });
+      setTimeout(hidePre, 2500);
+
       registerServiceWorker();
 
       const HOUR_MS = 60 * 60 * 1000;
