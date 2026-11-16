@@ -255,7 +255,7 @@ every name.
 | `JWT_SECRET` | generated for staging | 48 random hex chars; rotated 2026-11-16; rotate = every session logs out |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | rotated 2026-11-16 | New values in `backend/.env.staging.local` (untracked). Change again before public launch |
 | `ADMIN_TOTP_SECRET` / `ADMIN_RECOVERY_CODE` | generated 2026-11-16 | TOTP enforced on staging; generate new ones with `go run ./cmd/totp` |
-| `PAYMENT_NUMBER` | **not set** | Single official number shown on Profile and referenced in `/terms`; unset shows “Ask the admin” |
+| `PAYMENT_NUMBER` | `+255753339055` | Single official number shown on Profile and in `/terms`; set 2026-11-16 |
 | `CORS_ORIGINS` | Vercel alias + localhost | Exact origins only |
 | `ACCESS_FEE_CENTS` | `500000` | 5,000 TZS flat monthly rate |
 | `PAYOUT_MULTIPLIER_BP` | `15000` | 1.50× return on a win |
@@ -294,6 +294,7 @@ Run these after every deploy. All were run on 2026-11-16.
 | Inactive account | `GET /matches` returns `preview: true` and at most 3 matches; posting/react returns `403` |
 | Community reactions | Like → Love → toggle off updates counts and `my_reaction` in the feed |
 | `/terms` | Public page loads; registration links to it; `terms_version: 2` in config |
+| Official payment number | `/config` and Profile both show `+255753339055` |
 | Frontend home | Match cards render, settled markets show ✓, track record matches the API |
 | Restore drill | See [section 7](#7-restore-drill) |
 
