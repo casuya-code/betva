@@ -29,23 +29,34 @@ import Layout from '../layouts/Layout.astro';
     const form = document.getElementById('loginForm') as HTMLFormElement;
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const fd = new FormData(form);
-      const res = await fetch(`${API}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: fd.get('phone'), password: fd.get('password') }),
-      });
-      const data = await res.json();
       const msg = document.getElementById('msg')!;
-      if (res.ok) {
-        localStorage.setItem('betva_token', data.token);
-        localStorage.setItem('betva_session_start', String(Date.now()));
-        msg.textContent = 'Logged in. Redirecting...';
-        msg.className = 'mt-4 text-center text-sm text-green-400';
-        setTimeout(() => (window.location.href = '/'), 800);
-      } else {
-        msg.textContent = data.error || 'Login failed';
+      const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+      const fd = new FormData(form);
+      msg.textContent = 'Signing in...';
+      msg.className = 'mt-4 text-center text-sm text-[var(--text-2)]';
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(`${API}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: fd.get('phone'), password: fd.get('password') }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          localStorage.setItem('betva_token', data.token);
+          localStorage.setItem('betva_session_start', String(Date.now()));
+          msg.textContent = 'Logged in. Redirecting...';
+          msg.className = 'mt-4 text-center text-sm text-green-400';
+          setTimeout(() => (window.location.href = '/'), 800);
+        } else {
+          msg.textContent = data.error || 'Login failed';
+          msg.className = 'mt-4 text-center text-sm text-red-400';
+        }
+      } catch {
+        msg.textContent = 'Could not reach the server. Check your connection and try again.';
         msg.className = 'mt-4 text-center text-sm text-red-400';
+      } finally {
+        if (btn) btn.disabled = false;
       }
     });
   </script>

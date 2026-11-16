@@ -118,17 +118,23 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       if (status === 'deleted' && !confirm('Delete this post from the feed? The record stays in the database.')) return;
 
       btn.disabled = true;
-      const res = await adminFetch(`/api/v1/admin/community/posts/${id}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, reason }),
-      });
-      if (!res.ok) {
+      try {
+        const res = await adminFetch(`/api/v1/admin/community/posts/${id}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status, reason }),
+        });
+        if (!res.ok) {
+          alert('Could not update the post.');
+          btn.disabled = false;
+          return;
+        }
+        await load();
+      } catch {
+        alert('Could not update the post. Check your connection.');
+      } finally {
         btn.disabled = false;
-        alert('Could not update the post.');
-        return;
       }
-      load();
     });
   </script>
 

@@ -278,8 +278,7 @@ import BrandName from '../components/BrandName.astro';
     });
 
     (async () => {
-      await loadConfig();
-      await load();
+      await Promise.all([loadConfig(), load()]);
     })();
   </script>
 

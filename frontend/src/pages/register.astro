@@ -24,7 +24,7 @@ import Layout from '../layouts/Layout.astro';
       </div>
       <div>
         <label class="text-sm text-[var(--text-2)] mb-1 block" for="regPhone">Phone number</label>
-        <input class="input" id="regPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" type="tel" placeholder="0712 345 678" required />
+        <input class="input" id="regPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" required />
       </div>
       <div>
         <label class="text-sm text-[var(--text-2)] mb-1 block" for="regOfficial">Official name (phone owner)</label>
@@ -32,7 +32,7 @@ import Layout from '../layouts/Layout.astro';
       </div>
       <div>
         <label class="text-sm text-[var(--text-2)] mb-1 block" for="regPassword">Password</label>
-        <input class="input" id="regPassword" name="password" type="password" autocomplete="new-password" type="password" minlength="6" required />
+        <input class="input" id="regPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
       </div>
       <label class="flex items-start gap-2 text-sm text-[var(--text-2)]">
         <input type="checkbox" name="accepted_terms" class="mt-1" required />
@@ -52,6 +52,8 @@ import Layout from '../layouts/Layout.astro';
     const form = document.getElementById('regForm') as HTMLFormElement;
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const msg = document.getElementById('msg')!;
+      const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement | null;
       const fd = new FormData(form);
       const payload = {
         nickname: fd.get('nickname'),
@@ -60,22 +62,31 @@ import Layout from '../layouts/Layout.astro';
         password: fd.get('password'),
         accepted_terms: fd.get('accepted_terms') === 'on',
       };
-      const res = await fetch(`${API}/api/v1/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      const msg = document.getElementById('msg')!;
-      if (res.ok) {
-        localStorage.setItem('betva_token', data.token);
-        localStorage.setItem('betva_session_start', String(Date.now()));
-        msg.textContent = 'Account created. Redirecting...';
-        msg.className = 'mt-4 text-center text-sm text-green-400';
-        setTimeout(() => (window.location.href = '/'), 800);
-      } else {
-        msg.textContent = data.error || 'Registration failed';
+      msg.textContent = 'Creating account...';
+      msg.className = 'mt-4 text-center text-sm text-[var(--text-2)]';
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(`${API}/api/v1/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          localStorage.setItem('betva_token', data.token);
+          localStorage.setItem('betva_session_start', String(Date.now()));
+          msg.textContent = 'Account created. Redirecting...';
+          msg.className = 'mt-4 text-center text-sm text-green-400';
+          setTimeout(() => (window.location.href = '/'), 800);
+        } else {
+          msg.textContent = data.error || 'Registration failed';
+          msg.className = 'mt-4 text-center text-sm text-red-400';
+        }
+      } catch {
+        msg.textContent = 'Could not reach the server. Check your connection and try again.';
         msg.className = 'mt-4 text-center text-sm text-red-400';
+      } finally {
+        if (btn) btn.disabled = false;
       }
     });
   </script>

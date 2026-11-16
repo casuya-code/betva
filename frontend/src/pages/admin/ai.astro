@@ -77,12 +77,22 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     async function loadMatches() {
       const date = matchDate.value;
       if (!date) return;
-      const res = await adminFetch(`/api/v1/admin/matches?date=${encodeURIComponent(date)}`);
-      const data = await res.json();
-      const matches = data.matches || [];
-      matchSelect.innerHTML = matches.length
-        ? matches.map((m: any) => `<option value="${esc(m.id)}">${esc(m.home_team)} vs ${esc(m.away_team)} - ${esc(m.kickoff)}</option>`).join('')
-        : '<option value="">No matches on this date</option>';
+      try {
+        const res = await adminFetch(`/api/v1/admin/matches?date=${encodeURIComponent(date)}`);
+        if (!res.ok) throw new Error('failed');
+        const data = await res.json().catch(() => ({}));
+        const matches = data.matches || [];
+        matchSelect.innerHTML = matches.length
+          ? matches
+              .map(
+                (m: any) =>
+                  `<option value="${esc(m.id)}">${esc(m.home_team)} vs ${esc(m.away_team)} - ${esc(m.kickoff)}</option>`
+              )
+              .join('')
+          : '<option value="">No matches on this date</option>';
+      } catch {
+        matchSelect.innerHTML = '<option value="">Could not load matches</option>';
+      }
     }
 
     async function generate() {
@@ -103,15 +113,15 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ match_id: matchId, source_url: url }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           genMsg.textContent = data.error || 'Could not generate a suggestion.';
           genMsg.className = 'text-sm text-red-400';
           return;
         }
-        genMsg.innerHTML = `<span class="text-green-400">Suggestion ${esc(data.id.slice(0, 8))}: ${esc(data.suggested_home)}-${esc(data.suggested_away)} (HT ${data.suggested_home_ht ?? '?'}-${data.suggested_away_ht ?? '?'}) - confidence ${esc(data.confidence)}.</span>`;
+        genMsg.innerHTML = `<span class="text-green-400">Suggestion ${esc(String(data.id || '').slice(0, 8))}: ${esc(data.suggested_home)}-${esc(data.suggested_away)} (HT ${data.suggested_home_ht ?? '?'}-${data.suggested_away_ht ?? '?'}) - confidence ${esc(data.confidence)}.</span>`;
         genMsg.className = 'text-sm';
-        loadList();
+        void loadList();
       } catch {
         genMsg.textContent = 'Network error.';
         genMsg.className = 'text-sm text-red-400';
@@ -126,7 +136,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       el.textContent = 'Loading-';
       try {
         const res = await adminFetch(`/api/v1/admin/ai/suggestions?status=${encodeURIComponent(status)}`);
-        const data = await res.json();
+        if (!res.ok) throw new Error('failed');
+        const data = await res.json().catch(() => ({}));
         const items = data.suggestions || [];
         if (!items.length) {
           el.innerHTML = '<div class="text-[var(--text-3)]">No suggestions in this filter.</div>';
@@ -180,20 +191,26 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const reason = action === 'rejected' ? (prompt('Reason for rejection (required):') || '') : '';
       if (action === 'rejected' && !reason.trim()) return;
       btn.disabled = true;
-      const res = await adminFetch(`/api/v1/admin/ai/suggestions/${id}/review`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: action, reason }),
-      });
-      if (!res.ok) {
+      try {
+        const res = await adminFetch(`/api/v1/admin/ai/suggestions/${id}/review`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: action, reason }),
+        });
+        if (!res.ok) {
+          alert('Could not review this suggestion.');
+          btn.disabled = false;
+          return;
+        }
+        await loadList();
+      } catch {
+        alert('Could not review this suggestion. Check your connection.');
+      } finally {
         btn.disabled = false;
-        alert('Could not review this suggestion.');
-        return;
       }
-      loadList();
     });
 
-    loadMatches();
-    loadList();
+    void loadMatches();
+    void loadList();
   </script>
 </AdminLayout>

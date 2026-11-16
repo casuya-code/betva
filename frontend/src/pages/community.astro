@@ -306,11 +306,15 @@ import Layout from '../layouts/Layout.astro';
 
       if (target.closest('.post-delete')) {
         if (!confirm('Delete your post? The record stays with moderators, but it disappears from the feed.')) return;
-        const res = await authFetch(`/api/v1/community/posts/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          article.remove();
-          toast('Post deleted');
-        } else {
+        try {
+          const res = await authFetch(`/api/v1/community/posts/${id}`, { method: 'DELETE' });
+          if (res.ok) {
+            article.remove();
+            toast('Post deleted');
+          } else {
+            toast('Could not delete the post', 'error');
+          }
+        } catch {
           toast('Could not delete the post', 'error');
         }
       }
@@ -335,22 +339,27 @@ import Layout from '../layouts/Layout.astro';
         msg.className = 'text-sm mb-2 text-red-400';
         return;
       }
-      const res = await authFetch(`/api/v1/community/posts/${pendingReportId}/report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        msg.textContent = data.error || 'Could not send the report.';
+      try {
+        const res = await authFetch(`/api/v1/community/posts/${pendingReportId}/report`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          msg.textContent = data.error || 'Could not send the report.';
+          msg.className = 'text-sm mb-2 text-red-400';
+          return;
+        }
+        closeReport();
+        toast(data.auto_hidden ? 'Reported. The post is hidden pending review.' : 'Report sent to moderators.');
+        cursor = null;
+        done = false;
+        await loadFeed(true);
+      } catch {
+        msg.textContent = 'Could not send the report. Check your connection.';
         msg.className = 'text-sm mb-2 text-red-400';
-        return;
       }
-      closeReport();
-      toast(data.auto_hidden ? 'Reported. The post is hidden pending review.' : 'Report sent to moderators.');
-      cursor = null;
-      done = false;
-      await loadFeed(true);
     });
 
     // Infinite scroll: community only, never on slips.

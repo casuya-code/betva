@@ -252,9 +252,14 @@ import TrackRecord from '../components/TrackRecord.astro';
         li.addEventListener('click', async () => {
           const id = (li as HTMLElement).dataset.notif!;
           const link = (li as HTMLElement).dataset.link!;
-          await authFetch(`/api/v1/notifications/${id}/read`, { method: 'POST' });
-          if (link) window.location.href = link;
-          else {
+          try {
+            await authFetch(`/api/v1/notifications/${id}/read`, { method: 'POST' });
+          } catch {
+            /* keep the inbox usable even if the read mark fails */
+          }
+          if (link) {
+            window.location.href = link;
+          } else {
             (li as HTMLElement).classList.add('opacity-60');
             (li.querySelector('.badge') as HTMLElement | null)?.remove();
           }
@@ -263,8 +268,12 @@ import TrackRecord from '../components/TrackRecord.astro';
     }
 
     document.getElementById('markAll')!.addEventListener('click', async () => {
-      await authFetch('/api/v1/notifications/read-all', { method: 'POST' });
-      loadInbox();
+      try {
+        await authFetch('/api/v1/notifications/read-all', { method: 'POST' });
+        await loadInbox();
+      } catch {
+        toast('Could not mark notifications as read', 'error');
+      }
     });
 
     type Prefs = {
@@ -301,14 +310,19 @@ import TrackRecord from '../components/TrackRecord.astro';
           const target = e.target as HTMLInputElement;
           const key = target.dataset.key!;
           const next = target.checked;
-          const res2 = await authFetch('/api/v1/notifications/prefs', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ [key]: next }),
-          });
-          if (res2.ok) {
-            toast(next ? 'Notifications on for this type' : 'Muted this notification type');
-          } else {
+          try {
+            const res2 = await authFetch('/api/v1/notifications/prefs', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ [key]: next }),
+            });
+            if (res2.ok) {
+              toast(next ? 'Notifications on for this type' : 'Muted this notification type');
+            } else {
+              target.checked = !next;
+              toast('Could not save the preference', 'error');
+            }
+          } catch {
             target.checked = !next;
             toast('Could not save the preference', 'error');
           }
@@ -375,21 +389,27 @@ import TrackRecord from '../components/TrackRecord.astro';
 
         const msg = document.getElementById('exclusionMsg')!;
         btn.disabled = true;
-        const res = await authFetch('/api/v1/self-exclusion', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hours }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          msg.textContent = data.error || 'Could not pause betting.';
+        try {
+          const res = await authFetch('/api/v1/self-exclusion', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hours }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            msg.textContent = data.error || 'Could not pause betting.';
+            msg.className = 'text-sm text-red-400';
+            return;
+          }
+          msg.textContent = `Betting paused until ${data.until}.`;
+          msg.className = 'text-sm text-green-400';
+          await loadExclusion();
+        } catch {
+          msg.textContent = 'Could not pause betting. Check your connection.';
           msg.className = 'text-sm text-red-400';
+        } finally {
           btn.disabled = false;
-          return;
         }
-        msg.textContent = `Betting paused until ${data.until}.`;
-        msg.className = 'text-sm text-green-400';
-        loadExclusion();
       });
     });
 
@@ -413,17 +433,22 @@ import TrackRecord from '../components/TrackRecord.astro';
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const pw = (new FormData(form).get('password') || '').toString();
-      if (!pw) return;
-      const res = await authFetch('/api/v1/me', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
-      });
-      const data = await res.json();
       const msg = document.getElementById('msg')!;
-      msg.textContent = res.ok ? 'Saved.' : data.error || 'Failed';
-      msg.className = res.ok ? 'text-center text-sm text-green-400' : 'text-center text-sm text-red-400';
-      if (res.ok) form.reset();
+      if (!pw) return;
+      try {
+        const res = await authFetch('/api/v1/me', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw }),
+        });
+        const data = await res.json().catch(() => ({}));
+        msg.textContent = res.ok ? 'Saved.' : data.error || 'Failed';
+        msg.className = res.ok ? 'text-center text-sm text-green-400' : 'text-center text-sm text-red-400';
+        if (res.ok) form.reset();
+      } catch {
+        msg.textContent = 'Could not save changes. Check your connection.';
+        msg.className = 'text-center text-sm text-red-400';
+      }
     });
 
     document.getElementById('logoutBtn')!.addEventListener('click', () => {
