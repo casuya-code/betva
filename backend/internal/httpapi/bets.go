@@ -326,6 +326,8 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleConfig exposes the betting rules the client needs to render a slip.
+// Only user-facing values live here: the admin's DAU target and running-cost
+// figures stay behind the admin analytics endpoint.
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"stake_tiers_cents":    s.Cfg.StakeTiers,
@@ -335,6 +337,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"vapid_public_key":     s.Cfg.VAPIDPublicKey,
 		"push_daily_cap":       s.Cfg.PushDailyCap,
 		"quiet_hours":          map[string]int{"start": s.Cfg.QuietStartHour, "end": s.Cfg.QuietEndHour},
+		"access_fee_cents":     s.Cfg.AccessFeeCents,
 	})
 }
 

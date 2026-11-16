@@ -664,6 +664,14 @@ The record of **daily active users (DAU)** used for the monthly access-fee decis
   - `ACCESS_FEE_DAU_TARGET` — the DAU number at which the admin introduces (or re-decides) the monthly contribution.
   - `MONTHLY_OPERATING_COST_CENTS` — the platform's total monthly running cost in cents.
   - When DAU reaches the target, the planner suggests `monthly cost ÷ users (target or current DAU, whichever is larger)`, **rounded up to whole 500 TZS steps**. The suggested figure is decision support only — **the final amount is always the admin's decision**, and it remains a contribution to running costs, never a prediction fee.
+  - **Admin-only by design:** the DAU target, running cost, and suggested figure never leave the admin analytics endpoint. Shortfalls against the target are covered by the admin from other sources — users are never shown targets, costs, or planning data.
+
+#### The Flat Rate Users See
+
+- `ACCESS_FEE_CENTS` — the flat monthly rate users actually pay, in cents.
+- It is served by the **public** `GET /api/v1/config` (`access_fee_cents`) and shown on the user **Profile** ("Monthly access rate — per month · contribution to running costs").
+- If it is `0` (not set), the Profile shows *"Ask the admin"* instead of an invented number.
+- When the planner suggests a new rate, the admin updates `ACCESS_FEE_CENTS` and redeploys — one variable, one source of truth.
 
 ### Suggested Additions (Gaps Worth Filling)
 

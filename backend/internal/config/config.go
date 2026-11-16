@@ -40,9 +40,13 @@ type Config struct {
 
 	// Access-fee planner (admin analytics). The admin sets the DAU target and
 	// the monthly running cost here; the analytics endpoint turns them into a
-	// suggested per-user monthly contribution.
+	// suggested per-user monthly contribution. These never reach users.
 	FeeTargetDAU     int   // ACCESS_FEE_DAU_TARGET, 0 = not configured
 	MonthlyCostCents int64 // MONTHLY_OPERATING_COST_CENTS, 0 = not configured
+
+	// AccessFeeCents is the flat rate users actually pay per month for access.
+	// This IS user-visible (Profile / config endpoint).
+	AccessFeeCents int64 // ACCESS_FEE_CENTS, 0 = not set
 }
 
 func Load() *Config {
@@ -90,6 +94,7 @@ func Load() *Config {
 
 		FeeTargetDAU:     Atoi(getEnv("ACCESS_FEE_DAU_TARGET", "0"), 0),
 		MonthlyCostCents: int64(Atoi(getEnv("MONTHLY_OPERATING_COST_CENTS", "0"), 0)),
+		AccessFeeCents:   int64(Atoi(getEnv("ACCESS_FEE_CENTS", "0"), 0)),
 	}
 }
 

@@ -144,6 +144,7 @@ func (s *Server) handleAdminAnalytics(w http.ResponseWriter, r *http.Request) {
 
 	// Access-fee planner: the admin sets the target and the monthly running
 	// cost via environment variables; this endpoint only computes the math.
+	// Admin-only: none of these figures are exposed in the public config.
 	target := s.Cfg.FeeTargetDAU
 	cost := s.Cfg.MonthlyCostCents
 	suggested := int64(0)
@@ -161,6 +162,8 @@ func (s *Server) handleAdminAnalytics(w http.ResponseWriter, r *http.Request) {
 		"suggested_fee_cents": suggested,
 		"reached":             target > 0 && dauToday >= target,
 		"configured":          target > 0 && cost > 0,
+		// What users currently pay, for comparison when deciding the new rate.
+		"current_fee_cents": s.Cfg.AccessFeeCents,
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
