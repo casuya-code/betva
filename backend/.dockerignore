@@ -1,0 +1,8 @@
+.env
+.env.*
+betva.exe
+betva.exe~
+media/
+scripts/
+vendor/
+*.log

@@ -20,6 +20,7 @@ A fast, scalable betting and community media platform built for budget smartphon
 | --- | --- |
 | `README.md` | Product spec, architecture, API reference, environment variables, development status |
 | `docs/PEN_TEST_CHECKLIST.md` | Pre-launch security gate, run against staging |
+| `docs/DEPLOYMENT.md` | Staging topology, deploy/rollback steps, environment variables, verification |
 | `docs/RESTORE_RUNBOOK.md` | Backup/restore procedure and the drill record |
 | `frontend/README.md` | Frontend setup, scripts, and project structure |
 | `frontend/AGENTS.md` | Working conventions for agents and contributors in the frontend |
@@ -673,12 +674,13 @@ The wordmark is a logo, not body text: it never inherits surrounding text colour
 
 | Asset | Path | Use |
 | --- | --- | --- |
-| Eagle-B favicon | `frontend/public/favicon.svg` | `<link rel="icon">`, `apple-touch-icon`, PWA manifest |
+| Eagle-B favicon | `frontend/public/favicon.svg` | `<link rel="icon">`, PWA manifest |
 | Horizontal logo | `frontend/public/logo-dark.svg` | Headers and auth screens on the dark surface |
-| Manifest | `frontend/public/manifest.webmanifest` | `name`, `theme_color` `#0b0f14`, SVG icon (`sizes: any`) |
-| Legacy icon | `frontend/public/favicon.ico` | Still the old generated icon — regenerate before launch ⬜ |
+| Manifest | `frontend/public/manifest.webmanifest` | `name`, `theme_color` `#0b0f14`, SVG + 192/512 PNG icons |
+| ICO fallback | `frontend/public/favicon.ico` | 32px PNG-compressed ICO generated from the eagle-B artwork ✅ |
+| PNG icons | `frontend/public/favicon-32.png`, `apple-touch-icon.png` (180), `icon-192.png`, `icon-512.png` | Browser fallback, iOS home screen, Android install |
 
-**Known gaps:** the `.ico` fallback and the PNG touch icons have not been regenerated from the final eagle-B artwork, and there is no maskable PNG icon for Android launchers. Both are launch polish, not blockers for local use. 🟡
+**Regenerating icons:** `cd frontend && npm run icons` rasterizes `favicon.svg` with `sharp` and rewrites all PNGs plus the `.ico`. The 512px PNG is also declared `maskable` for Android launchers. ✅
 
 ### What This Achieves
 
@@ -1132,13 +1134,13 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
 
 ### Backup Layers
 
-> **Status: ⬜ not configured in production.** Nothing below is running yet. The restore procedure and drill script exist and have been exercised locally; the hosting layers are launch work.
+> **Status: 🟡 staging data exists, backup layers are not configured.** The API and Postgres are deployed on Railway and a restore drill has passed against staging. Automated Railway backups, off-site copies, and media backup are still launch work.
 
-1. **Railway managed Postgres backups** — automated daily, point-in-time recovery where available. ⬜
+1. **Railway managed Postgres backups** — must be enabled and confirmed on the staging/production Postgres service. ⬜
 2. **Off-site copies to Cloudflare R2** — a second copy outside Railway, so a Railway account compromise or outage cannot take the data with it. Encrypted at rest, lifecycle-retained for the 6-month archive window. ⬜
 3. **Redis persistence** — RDB snapshots + AOF. Redis is connected at startup but **currently unused** by the application, so it holds no data worth backing up. ⬜
 4. **Code & config in Git** — the database schema is versioned (`001`–`006`), so a fresh database can be rebuilt from scratch. ✅
-5. **Media in R2/S3** — not in use; uploads live on local disk (`MEDIA_DIR`). ⬜
+5. **Media storage** — uploads live on the Railway volume `media` mounted at `/data`. It is **not** included in a Postgres dump and has no off-site copy yet. R2/S3 remains the target. 🟡
 
 ### Manual Backup Creation ⬜
 
@@ -1170,9 +1172,9 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 ### Restore Discipline
 
 - **Documented runbook** — step-by-step restore procedure, stored outside the production environment. ✅ `docs/RESTORE_RUNBOOK.md`
-- **Restore drill** — actually restore a backup into a staging database and verify row counts, wallet totals, and the last 7 days of bets. A backup that has never been restored is a wish. ✅ local, ⬜ staging.
+- **Restore drill** — actually restore a backup into a staging database and verify row counts, wallet totals, and the last 7 days of bets. A backup that has never been restored is a wish. ✅ local, ✅ staging.
   - Automated: `backend/scripts/restore_test.ps1` dumps the live database into a throwaway database, compares row counts for `users`, `bets`, `ledger`, `matches`, and `notifications`, checks the ledger sum, and confirms the restored schema is complete. It exits non-zero on any mismatch, and **fails closed** if the throwaway database was never created — a drill can never report success without a real restore. The role needs `CREATEDB` (`ALTER ROLE betva CREATEDB;`); the staging and production `postgres` roles already have it.
-- **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate. ⬜ staging run pending.
+- **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate. ✅ staging run passed 2026-11-16; repeat after enabling managed backups.
 - **Targets:** RTO ≤ 1 hour for critical data, RPO ≤ 1 minute for wallets.
 - **No single point of failure:** backups are verified by a different person than the one who configured them.
 
@@ -1181,7 +1183,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 | Date | Environment | Result | Evidence |
 | --- | --- | --- | --- |
 | 2026-11-16 | Local Postgres 18, throwaway database | **Pass** | 5 users, 6 bets, 17 ledger rows, ledger sum 4,750,000 cents, 18 tables, schema check complete. Failing path also verified: with `CREATEDB` removed, the script exits `1` instead of reporting success. |
-| Before launch | Staging (Railway) | **Pending** | Run against a restored staging copy and record counts and ledger sum here. |
+| 2026-11-16 | Staging (Railway, restored into a throwaway DB) | **Pass** | 1 user, 1 match, 1 bet, 3 ledger rows, ledger sum 225,000 cents, 6 migrations, 19 tables. Public TCP proxy deleted immediately afterwards. See `docs/DEPLOYMENT.md`. |
 
 ### Retention
 
@@ -1396,7 +1398,7 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 
 ## 5. Cloud Deployment (Vercel + Railway)
 
-> **Status: not deployed.** Everything below is the approved hosting plan. Today the app runs locally: Go API on `:8080`, Astro dev server on `:4321`, Postgres on `localhost`.
+> **Status: ✅ staging is live.** Frontend: <https://betva-two.vercel.app>. API: <https://api-production-a377a156.up.railway.app>. Railway hosts the Go API and Postgres in `europe-west4`; Vercel hosts the Astro build. Cloudflare edge/media is still ⬜. Full topology, deploy commands, environment variables, and rollback steps: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 > Vercel hosts the frontend. Railway hosts the backend and its data stores. Cloudflare handles media and edge delivery in East Africa.
 
@@ -1494,12 +1496,12 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 ### Design & Brand
 
 - [x] ~~**Brand colour**~~ — resolved: Google blue `#4285F4` → `#1A73E8`; the wordmark uses the five Google colours.
-- [x] ~~**Logo & app icon**~~ — resolved: eagle-cutout "B" emblem used as favicon/logo, plus a horizontal wordmark. Legacy `.ico` and PNG touch icons still need regenerating. 🟡
+- [x] ~~**Logo & app icon**~~ — resolved: eagle-cutout "B" emblem used as favicon/logo, plus a horizontal wordmark. PNG icons and `.ico` are generated from the same SVG via `npm run icons`. ✅
 - [x] ~~**Light mode depth**~~ — resolved: **dark-only for v1**. A light theme is deferred.
 
 ### Reliability & Security
 
-- [x] ~~**Backup owner**~~ — resolved: the restore drill is a **hard launch blocker**, owned by the operator. Runbook: `docs/RESTORE_RUNBOOK.md`; a copy must also be stored off-site before launch. ⬜
+- [x] ~~**Backup owner**~~ — resolved: the restore drill is a **hard launch blocker**, owned by the operator. Runbook: `docs/RESTORE_RUNBOOK.md`; staging drill passed 2026-11-16. A copy must also be stored off-site before launch. 🟡
 - [ ] **Admin 2FA** — which provider (TOTP / WebAuthn) and is it mandatory before launch?
 - [ ] **Penetration test** — budget and vendor for the pre-launch test?
 - [ ] **Incident contact** — who is on call, and how are users notified?
@@ -1523,7 +1525,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Development Status
 
-**Phases 1–5 are complete and verified locally. Phase 6 (launch) is in progress: documentation, security checklist, and restore runbook are in place; staging deployment, the staging restore drill, the penetration test, and real-device latency measurement remain.**
+**Phases 1–5 are complete and verified locally. Phase 6 (launch) is in progress: documentation, security checklist, restore runbook, staging deployment, and the staging restore drill are done. The penetration test, Cloudflare edge/media, managed backups, and real-device latency measurement remain.**
 
 ### What exists now
 
@@ -1558,8 +1560,12 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Restore drill script (fail-closed) | ✅ Working | `backend/scripts/restore_test.ps1` |
 | Restore runbook | ✅ Written | `docs/RESTORE_RUNBOOK.md` |
 | Penetration-test checklist | ✅ Written | `docs/PEN_TEST_CHECKLIST.md` |
-| Staging deployment and restore drill | ⬜ Later | Phase 6 |
+| Backend container image + migration runner | ✅ Working | `backend/Dockerfile`, `backend/cmd/migrate`, `backend/migrations/embed.go` |
+| Staging deployment (API + Postgres + frontend) | ✅ Live | <https://betva-two.vercel.app>, `docs/DEPLOYMENT.md` |
+| Staging restore drill | ✅ Passed 2026-11-16 | 225,000-cent ledger sum verified in a throwaway DB |
+| PNG/ICO app icons from the eagle-B mark | ✅ Working | `frontend/scripts/generate-icons.mjs` |
 | Penetration test and real-device latency measurement | ⬜ Later | Phase 6 |
+| Cloudflare edge, R2 media, managed off-site backups | ⬜ Later | Phase 6 |
 | Public landing page, KYC queue, admin profile, results archive page | ⬜ Later | Post-launch |
 
 ### Matches CSV format
@@ -1821,7 +1827,7 @@ Rules the audit enforces: **no horizontal overflow at 320 px**, every control at
 
 > **Astro scoping trap.** Styles declared in a page's `<style>` block are scoped with a `data-astro-*` attribute. Any markup injected through `innerHTML` does not carry that attribute, so scoped selectors never match it. Classes used by dynamically rendered markup (`.stake-chip`, `.admin-select`, `.admin-table-mid`, `.line-clamp-2`) live in `global.css` for that reason.
 
-**Next:** launch sign-off — deploy staging (Railway + Vercel + Cloudflare), run the restore drill and `docs/PEN_TEST_CHECKLIST.md` against staging, measure real East-Africa latency on a mid-range Android over 3G, regenerate the `.ico`/PNG icons, then go live.
+**Next:** launch sign-off — run `docs/PEN_TEST_CHECKLIST.md` against staging, put Cloudflare in front of Vercel and media, enable Railway managed backups plus an off-site copy, measure real East-Africa latency on a mid-range Android over 3G, then go live.
 
 **Decisions locked in:**
 - Frontend hosting: **Vercel**

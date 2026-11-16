@@ -35,6 +35,7 @@ Both layouts expose it as `window.BETVA_API`; `src/lib/api.ts` and `src/lib/admi
 | `npm run dev` | Astro dev server with HMR |
 | `npm run build` | Static production build into `dist/` |
 | `npm run preview` | Serve the production build locally |
+| `npm run icons` | Regenerate PNG icons and `favicon.ico` from `public/favicon.svg` |
 | `npm run check` | `astro check` (strict typecheck) **and** a production build |
 
 `npm run check` is the gate before committing frontend changes.
@@ -63,13 +64,17 @@ src/
   styles/
     global.css           Design tokens, badges, frames, nav, shared component classes
 public/
-  favicon.svg            Eagle-B mark (also the PWA icon)
+  favicon.svg            Eagle-B mark (source for all raster icons)
   logo-dark.svg          Horizontal logo
-  favicon.ico            Legacy icon — regenerate before launch
+  favicon.ico            Generated 32px ICO
+  favicon-32.png         Browser fallback icon
+  apple-touch-icon.png   iOS home-screen icon (180px)
+  icon-192.png / icon-512.png  Android install icons (512 also maskable)
   manifest.webmanifest   PWA manifest
   sw.js                  Web Push + notification click handling
   matches-template.csv   CSV template for the admin Matches upload
 scripts/
+  generate-icons.mjs     Rasterizes favicon.svg into PNGs + ICO
   responsive-audit.html  Layout/a11y measurement harness (kept out of public/)
 ```
 
@@ -104,6 +109,8 @@ The audit reports horizontal overflow, elements past the viewport, tap targets u
 
 ## Notes
 
+- Staging is deployed: frontend on Vercel (`betva-two.vercel.app`), API on Railway. Deploy and rollback steps live in [`docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md).
+- `PUBLIC_API_URL` is baked in at build time, so changing the API origin requires a new Vercel deployment.
 - Auth is a bearer JWT in `localStorage`; there is no server-side logout denylist.
 - The admin app is a separate shell but shares the same API and design tokens.
 - The service worker handles push only — there is no offline page cache yet.

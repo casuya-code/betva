@@ -2,7 +2,9 @@
 
 Hard launch gate: every box must be ticked and dated by the tester before go-live. Run against a staging copy of production, never against live money.
 
-Scope: Go API (`/api/v1`), Astro frontend, Postgres, local media storage, Web Push, and the admin app. The tester is not the developer.
+**Staging target:** frontend <https://betva-two.vercel.app>, API <https://api-production-a377a156.up.railway.app>. Topology and credentials handling: [`DEPLOYMENT.md`](DEPLOYMENT.md). Staging admin credentials are the development ones and **must be rotated before the test**.
+
+Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`/data`), Web Push, and the admin app. The tester is not the developer.
 
 ## Authentication & authorization
 

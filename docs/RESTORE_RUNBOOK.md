@@ -2,7 +2,7 @@
 
 **Purpose:** recover Betva after data loss, corruption, or a bad migration — and prove the recovery works before launch.
 
-**Owner:** the operator. **Gate:** a full restore drill against staging is a hard launch blocker, alongside the penetration test.
+**Owner:** the operator. **Gate:** a full restore drill against staging is a hard launch blocker, alongside the penetration test. The staging drill passed on 2026-11-16 (see the drill log).
 
 ---
 
@@ -48,7 +48,7 @@
 
 The automated drill is `backend/scripts/restore_test.ps1`. It dumps the live database, restores into a throwaway database, and compares the money-critical tables. It **fails closed**: if the throwaway database cannot be created, the counts are empty, or any value differs, it prints `RESTORE DRILL FAILED` and exits `1`.
 
-> **Known limitation:** the script currently hardcodes `C:\Program Files\PostgreSQL\18\bin`, the local `betva` role, and the `betva` database. Before the staging run, parameterise `$pgBin`, `PGUSER`, and the source database name, or run the equivalent commands by hand.
+> **Known limitation:** the script hardcodes `C:\Program Files\PostgreSQL\18\bin`, the local `betva` role, and the `betva` database. The 2026-11-16 staging drill was run as the equivalent `pg_dump`/`pg_restore` commands by hand against Railway. Parameterise `$pgBin`, `PGUSER`, and the source database name before the next drill.
 
 ### 3.1 Automated
 
@@ -142,14 +142,17 @@ A drill that has never failed is not evidence. Verify the failing path once (rem
 | Date | Environment | Result | Users | Bets | Ledger rows | Ledger sum (cents) | Tables | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-16 | Local Postgres 18, throwaway DB | **Pass** | 5 | 6 | 17 | 4,750,000 | 18 | Failing path also verified: without `CREATEDB` the script exits `1` and prints `RESTORE DRILL FAILED`. |
-| Before launch | Staging (Railway) | **Pending** | — | — | — | — | — | Hard launch blocker. Run against a restored staging copy. |
+| 2026-11-16 | Staging (Railway Postgres 18 → throwaway DB) | **Pass** | 1 | 1 | 3 | 225,000 | 19 | `pg_dump -Fc` over a temporary TCP proxy, `pg_restore --exit-on-error` into `betva_restore_test`, counts and ledger sum matched, temp DB dropped, proxy deleted. |
+
+Staging drill details and the current topology are in [`DEPLOYMENT.md`](DEPLOYMENT.md#6-restore-drill).
 
 ---
 
-## 6. Known gaps before the staging drill
+## 6. Known gaps after the staging drill
 
-- [ ] `restore_test.ps1` is local-only (hardcoded binary path, role, and database). Parameterise it.
+- [ ] `restore_test.ps1` is local-only (hardcoded binary path, role, and database). Parameterise it so the staging drill is one command.
 - [ ] No automated daily backups or PITR configured (Railway managed backups are ⬜).
 - [ ] No off-site copy in Cloudflare R2 (⬜).
-- [ ] Media files are on local disk and are **not** covered by the Postgres dump (⬜). Back up `MEDIA_DIR` separately or move media to R2.
+- [ ] Media files live on the Railway volume `media` (`/data`) and are **not** covered by the Postgres dump (🟡). Back up the volume separately or move media to R2.
 - [ ] No second person has independently verified a restore (⬜).
+- [ ] The staging drill used test-sized data. Repeat on production-sized data after managed backups are enabled.
