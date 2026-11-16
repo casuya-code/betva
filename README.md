@@ -1107,7 +1107,7 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
 
 ### How It Fits the Build
 
-- **One flat monthly rate, visible to users.** `ACCESS_FEE_CENTS` is served by `GET /api/v1/config` and shown on Profile as "Monthly access rate — per month · contribution to running costs". If unset, Profile says "Ask the admin" rather than inventing a number. ✅
+- **One flat monthly rate, visible to users.** `ACCESS_FEE_CENTS` is served by `GET /api/v1/config` and shown on Profile as "Monthly access rate — per month · contribution to running costs". The activation panel and `/terms` state plainly that the payment covers **maintenance and internet service so Betva stays available always**, never a guarantee of results. If unset, Profile says "Ask the admin" rather than inventing a number. ✅
 - **Manual activation:** after payment is confirmed, the admin marks the user **active** for a number of days. This is the early-stage flow. ✅
 - **Planning figures stay admin-only:** the DAU target, monthly running cost, and suggested fee live only in the admin Analytics centre. Users never see targets, costs, or shortfalls. ✅
 - **Small and transparent:** the fee covers running costs, so it should be modest and clearly stated. ✅
