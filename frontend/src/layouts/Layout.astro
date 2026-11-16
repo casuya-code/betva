@@ -35,7 +35,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <title>{title}</title>
   </head>
   <body>
-    <main>
+    <main class={hideNav ? '' : 'has-bottom-nav'}>
       <slot />
     </main>
 

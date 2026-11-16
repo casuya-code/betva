@@ -262,7 +262,7 @@ So the escalation is deliberate and graded:
 
 ## Navigation & Pages
 
-After login, the user lands on **Home**. There is **no top navigation bar**; each page carries its own header, and a persistent **bottom navigation** holds the four destinations. From 1024px the bottom bar becomes a centred floating pill. Auth pages (`/login`, `/register`) hide the nav. The admin area uses a separate shell with its own sidebar.
+After login, the user lands on **Home**. There is **no top navigation bar**; each page carries its own header, and a persistent **bottom navigation** holds the four destinations. The bar spans the full device width at every breakpoint, with the four items sharing it evenly. Auth pages (`/login`, `/register`) hide the nav. The admin area uses a separate shell with its own sidebar.
 
 **Bottom navigation order (implemented):**
 
@@ -600,7 +600,7 @@ Every user route renders inside one shared frame, so gutters and content width l
 | `.page-frame` | full width, 16px gutter | 24px gutter, 720px cap | 32px gutter, 720px cap |
 | `.page-frame-wide` (Home, History, Community) | as above | as above | **1120px cap, two columns** |
 | `.page-frame-narrow` (login, register) | 440px cap, centred | same | same |
-| `.bottom-nav` | full-width bar, 64px | same | **centred floating pill, 560×60, 16px from bottom** |
+| `.bottom-nav` | full-width bar, 64px | same | full-width bar, 60px; items in a row |
 | Bet slip | bottom sheet, full width | centred dialog (≥640px) | centred dialog |
 
 - **Two-column split** (`.page-split`): mobile keeps a single column in DOM order — trust record / personal record / composer first, then the list. From 1024px the aside becomes a **sticky right rail** (360px, 24px gap) and the list takes the remaining 672px. Home's rail also carries a desktop-only "How Betva works" card; Community's carries a desktop-only "House rules" card, with the composer pinned at the top of the same rail so posting is always one tap away.

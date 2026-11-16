@@ -37,8 +37,8 @@ import BrandName from '../components/BrandName.astro';
       <!-- Matches -->
       <div class="page-split-main">
         <div class="flex items-baseline justify-between gap-2 mb-3">
-          <h2 class="text-lg font-semibold">Matches</h2>
-          <span class="text-xs text-[var(--text-3)]">Bets close at kickoff</span>
+          <h2 class="text-lg font-semibold shrink-0">Matches</h2>
+          <span class="text-xs text-[var(--text-3)] text-right min-w-0">Bets close at kickoff</span>
         </div>
         <div class="day-tabs" id="day-tabs" role="tablist" aria-label="Match day">
           <button type="button" class="day-tab active" id="tab-today" role="tab" aria-selected="true" aria-controls="matches" data-day="today">
@@ -347,12 +347,24 @@ import BrandName from '../components/BrandName.astro';
         const data = await res.json().catch(() => ({}));
         allMatches = data.matches || [];
 
-        // Trust the server's EAT dates: the two distinct days it returns are
-        // today and tomorrow. Fall back to the device-computed EAT date.
+        // The API only publishes the two days Home cares about. Keep the
+        // device-computed EAT dates as the tab labels; when only one day has
+        // matches, place it on the correct tab instead of showing it twice.
         const dates = [...new Set(allMatches.map((m: any) => String(m.match_date)))].sort();
-        if (dates.length) {
+        const eatToday = eatDateKey(0);
+        const eatTomorrow = eatDateKey(1);
+        if (dates.length >= 2) {
           dayKeys.today = dates[0];
-          dayKeys.tomorrow = dates[1] || dates[0];
+          dayKeys.tomorrow = dates[1];
+        } else if (dates.length === 1) {
+          const only = dates[0];
+          dayKeys.today = eatToday;
+          dayKeys.tomorrow = eatTomorrow;
+          if (only === eatTomorrow) {
+            dayKeys.tomorrow = only;
+          } else {
+            dayKeys.today = only;
+          }
         }
 
         for (const day of ['today', 'tomorrow'] as const) {
