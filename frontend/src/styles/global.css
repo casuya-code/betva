@@ -225,6 +225,12 @@ label:has(> input[type="radio"]) {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+/* Skeleton shapes: a number-sized block for counters, a line for list rows.
+   Both are replaced by real content as soon as the API responds, so the
+   layout never shifts. */
+.sk-num { display: inline-block; width: 2ch; height: 1em; vertical-align: -0.08em; }
+.sk-line { height: 12px; margin: var(--s2) 0; }
+.sk-line:last-child { width: 60%; }
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }
 }
@@ -402,6 +408,10 @@ label:has(> input[type="radio"]) {
 .admin-table-wrap .admin-table,
 .overflow-x-auto > .admin-table {
   min-width: 720px;
+}
+/* Wider variant for tables with odds and several action columns. */
+.overflow-x-auto > .admin-table.admin-table-wide {
+  min-width: 940px;
 }
 
 /* Inline text links that act as controls still need a 44px hit area. */
@@ -584,6 +594,53 @@ a:focus-visible,
 /* oled mode */
 .oled body { background: #000; }
 .oled body::before { display: none; }
+
+/* ---------------------------------------------------------------------
+   Admin console — aligned action grids + cheaper surfaces.
+
+   Every action group is an equal-column grid: a button takes exactly one
+   nth of the row, chosen automatically from the space available. Whether a
+   group holds 2, 3 or 4 controls, every button lands on the same baseline
+   and the same width at every viewport size — no ragged flex wrapping.
+   Declared globally because these buttons are injected via innerHTML.
+   --------------------------------------------------------------------- */
+.admin-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--s2);
+  width: 100%;
+}
+.admin-actions > .btn {
+  width: 100%;
+  padding-inline: var(--s2);
+}
+
+/* Filter chip rows use the same equal-column rule, capped so the chips do
+   not stretch across a wide console card. */
+.admin-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--s2);
+  width: 100%;
+  max-width: 640px;
+}
+.admin-filters > .btn {
+  width: 100%;
+  padding-inline: var(--s2);
+}
+
+/* The console stacks many cards and wide tables in a single view. A
+   backdrop blur repaints the whole surface on every scroll, which is
+   expensive on the low-cost devices this product targets, so admin
+   surfaces use an opaque layered background instead. The user app keeps
+   the glass look. */
+.admin-main .card,
+.admin-main .glass,
+.admin-main .glass-el {
+  background: #10161d;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 
 /* Page preloader */
 .page-preloader {

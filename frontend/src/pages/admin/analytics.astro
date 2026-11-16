@@ -11,9 +11,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     </div>
 
     <div class="glass-el p-3 text-sm text-[var(--text-2)]">
-      <strong class="text-[var(--text)]">How it works:</strong>
-      every signed-in user is counted once per day, on their first request of that EAT day.
-      The record is append-only and is never edited, so it can back financial decisions.
+      <strong class="text-[var(--text)]">Counting:</strong> each signed-in user once per EAT day. Append-only, never edited.
     </div>
 
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -68,11 +66,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     <section class="card space-y-3">
       <h2 class="font-semibold">Access-fee planner</h2>
       <p class="text-sm text-[var(--text-2)]">
-        When DAU reaches the target, this suggests the monthly contribution per user that covers the
-        running costs: <em>monthly cost ÷ users, rounded up to whole 500 TZS steps</em>.
-        The final amount is always the admin's decision — set the two inputs with
-        <code class="text-xs">ACCESS_FEE_DAU_TARGET</code> and
-        <code class="text-xs">MONTHLY_OPERATING_COST_CENTS</code> environment variables.
+        At the DAU target, suggests cost ÷ users rounded up to 500 TZS. The final amount is yours — set
+        <code class="text-xs">ACCESS_FEE_DAU_TARGET</code> and <code class="text-xs">MONTHLY_OPERATING_COST_CENTS</code> on the server.
       </p>
       <div id="fee" class="text-sm text-[var(--text-2)]">Loading…</div>
     </section>

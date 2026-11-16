@@ -83,7 +83,7 @@ import Layout from '../layouts/Layout.astro';
           msg.className = 'mt-4 text-center text-sm text-red-400';
         }
       } catch {
-        msg.textContent = 'Could not reach the server. Check your connection and try again.';
+        msg.textContent = 'Could not reach the server.';
         msg.className = 'mt-4 text-center text-sm text-red-400';
       } finally {
         if (btn) btn.disabled = false;

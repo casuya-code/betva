@@ -6,7 +6,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     <div>
       <h1 class="text-2xl font-bold">Matches</h1>
       <p class="text-sm text-[var(--text-2)]">
-        Upload a CSV for a specific date. Only today and tomorrow are visible to users.
+        Upload a CSV for a date. Users see today and tomorrow only.
       </p>
     </div>
 
@@ -16,7 +16,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <div>
           <h2 class="font-semibold">Upload CSV</h2>
           <p class="text-xs text-[var(--text-3)]">
-            Columns: kickoff, league, home_team, away_team, markets, confidence
+            Columns: date, kickoff, league, home_team, away_team, markets, ft_odds, ht_odds, confidence
           </p>
         </div>
         <a href="/matches-template.csv" download class="btn btn-secondary text-sm">Download template</a>
@@ -24,8 +24,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
       <form id="uploadForm" class="grid gap-3 md:grid-cols-[160px_1fr_auto] items-end">
         <div>
-          <label class="text-sm text-[var(--text-2)] mb-1 block" for="uploadDate">Match date</label>
-          <input class="input" id="uploadDate" name="date" type="date" required />
+          <label class="text-sm text-[var(--text-2)] mb-1 block" for="uploadDate">Fallback date</label>
+          <input class="input" id="uploadDate" name="date" type="date" />
         </div>
         <div>
           <label class="text-sm text-[var(--text-2)] mb-1 block" for="file">CSV file</label>
@@ -34,9 +34,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <button class="btn btn-primary" type="submit" id="uploadBtn">Upload</button>
       </form>
 
+      <p class="text-xs text-[var(--text-3)]">Each row's CSV date is used. The fallback date fills rows with no date.</p>
+
       <label class="flex items-center gap-2 text-sm text-[var(--text-2)]">
         <input type="checkbox" id="replace" />
-        Replace existing matches for this date (blocked if bets already exist)
+        Replace existing matches for these dates (blocked if bets already exist)
       </label>
 
       <div id="uploadResult"></div>
@@ -58,6 +60,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         </div>
       </div>
       <div id="dayList" class="text-sm text-[var(--text-2)]">Pick a date and press Load.</div>
+      <div id="dayMsg" class="text-sm" aria-live="polite"></div>
     </section>
 
     <!-- Import log -->
@@ -74,6 +77,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       todayISO,
       esc,
       money,
+      oddsBadge,
       confidenceBadge,
       statusBadge,
     } from '../../lib/admin';
@@ -113,7 +117,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         if (res.status === 409 && data.duplicates) {
           out.innerHTML = `
             <div class="glass-el p-3 border-l-4" style="border-left-color:var(--warning)">
-              <div class="font-semibold mb-1">Matches already exist for this date</div>
+              <div class="font-semibold mb-1">Matches already exist for these dates</div>
               <ul class="text-sm text-[var(--text-2)] list-disc pl-5">
                 ${data.duplicates.map((d: string) => `<li>${esc(d)}</li>`).join('')}
               </ul>
@@ -123,19 +127,22 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           out.innerHTML = `<div class="text-sm text-red-400">${esc(data.error || 'Upload failed')}</div>`;
           if (data.row_errors?.length) out.innerHTML += rowErrorsHtml(data.row_errors);
         } else {
+          const days: string[] = data.dates || (data.date ? [data.date] : []);
           out.innerHTML = `
             <div class="glass-el p-3 border-l-4" style="border-left-color:var(--brand)">
               <div class="font-semibold text-green-400">
-                Imported ${data.imported} match${data.imported === 1 ? '' : 'es'} for ${esc(data.date)}
+                Imported ${data.imported} match${data.imported === 1 ? '' : 'es'} on ${days.map((d) => esc(d)).join(', ')}
               </div>
               ${data.failed ? `<div class="text-sm text-red-400 mt-1">${data.failed} row(s) rejected</div>` : ''}
             </div>`;
           if (data.row_errors?.length) out.innerHTML += rowErrorsHtml(data.row_errors);
           form.reset();
-          uploadDate.value = data.date;
           loadImports();
-          viewDate.value = data.date;
-          loadDay(data.date);
+          if (days.length) {
+            uploadDate.value = days[0];
+            viewDate.value = days[0];
+            loadDay(days[0]);
+          }
         }
       } catch {
         out.innerHTML = '<div class="text-sm text-red-400">Upload failed.</div>';
@@ -176,22 +183,29 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         }
         el.innerHTML = `
           <div class="overflow-x-auto">
-            <table class="admin-table admin-table-mid">
+            <table class="admin-table admin-table-mid admin-table-wide">
               <thead>
                 <tr>
-                  <th>Kickoff</th><th>League</th><th>Fixture</th><th>Markets</th>
-                  <th>Confidence</th><th>Status</th><th></th><th></th>
+                  <th>Kickoff</th><th>League</th><th>Fixture</th><th>Markets</th><th>Odds</th>
+                  <th>Confidence</th><th>Status</th><th></th><th></th><th></th>
                 </tr>
               </thead>
               <tbody>
                 ${matches
                   .map(
-                    (m: any) => `
+                    (m: any) => {
+                      const future = new Date(`${m.match_date}T${m.kickoff}:00+03:00`).getTime() > Date.now();
+                      const canDelete = !m.settled && (m.status === 'upcoming' || m.status === 'postponed') && future;
+                      const odds = (m.markets || []).map((k: string) =>
+                        `${k === 'ft_over_0_5' ? 'FT' : 'HT'} ${oddsBadge(m.market_odds?.[k])}`
+                      ).join(' · ');
+                      return `
                   <tr data-id="${esc(m.id)}">
                     <td class="counter">${esc(m.kickoff)}</td>
                     <td class="text-[var(--text-2)]">${esc(m.league || '—')}</td>
                     <td class="font-medium">${esc(m.home_team)} <span class="text-[var(--text-3)]">vs</span> ${esc(m.away_team)}</td>
                     <td>${(m.markets || []).map((k: string) => `<span class="badge badge-pending">${k === 'ft_over_0_5' ? 'FT O0.5' : 'HT O0.5'}</span>`).join(' ')}</td>
+                    <td class="counter text-xs">${odds || '—'}</td>
                     <td>
                       <select class="input admin-select" data-field="confidence">
                         ${['high', 'medium', 'low']
@@ -212,7 +226,14 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                         ${m.settled ? 'Correct' : 'Settle'}
                       </button>
                     </td>
-                  </tr>`
+                    <td>
+                      <button class="btn btn-danger text-xs admin-delete" type="button"
+                        ${canDelete ? '' : 'disabled'}
+                        title="${canDelete ? 'Delete this wrongly uploaded match' : 'Only before kickoff, while upcoming and unsettled'}"
+                        aria-label="Delete match">Delete</button>
+                    </td>
+                  </tr>`;
+                    }
                   )
                   .join('')}
               </tbody>
@@ -253,6 +274,46 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         btn.removeAttribute('disabled');
         btn.classList.remove('text-green-400');
       }, 1500);
+    });
+
+    // ---- delete a wrongly uploaded match ------------------------------
+    document.getElementById('dayList')!.addEventListener('click', async (e) => {
+      const btn = (e.target as HTMLElement).closest('.admin-delete') as HTMLButtonElement | null;
+      if (!btn || btn.disabled) return;
+      const row = btn.closest('tr')!;
+      const id = row.dataset.id!;
+      const label = row.children[2]?.textContent?.trim() || 'this match';
+      if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+      const reason = prompt('Reason (optional)') || '';
+      const msg = document.getElementById('dayMsg')!;
+      msg.textContent = '';
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        const res = await adminFetch(`/api/v1/admin/matches/${id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          msg.textContent = data.error || 'Delete failed.';
+          msg.className = 'text-sm text-red-400';
+          return;
+        }
+        msg.textContent = 'Match deleted.';
+        msg.className = 'text-sm text-green-400';
+        loadDay(viewDate.value);
+        loadImports();
+      } catch {
+        msg.textContent = 'Delete failed. Check your connection.';
+        msg.className = 'text-sm text-red-400';
+      } finally {
+        if (btn.isConnected) {
+          btn.disabled = false;
+          btn.textContent = 'Delete';
+        }
+      }
     });
 
     // ---- settlement ---------------------------------------------------
@@ -314,7 +375,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           <div class="overflow-x-auto max-h-56 overflow-y-auto rounded-lg border border-[var(--border)]">
             <table class="admin-table">
               <thead>
-                <tr><th>User</th><th>Market</th><th>Stake</th><th>Status</th></tr>
+                <tr><th>User</th><th>Market</th><th>Odds</th><th>Stake</th><th>Status</th></tr>
               </thead>
               <tbody>
                 ${(exposure.bets || [])
@@ -323,6 +384,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                   <tr>
                     <td>${esc(b.nickname || b.phone)}</td>
                     <td>${b.market === 'ft_over_0_5' ? 'FT O0.5' : 'HT O0.5'}</td>
+                    <td class="counter">${oddsBadge(b.odds_bp)}</td>
                     <td class="counter">${money(b.stake_cents)}</td>
                     <td><span class="badge ${statusBadge(b.status)}">${esc(b.status.toUpperCase())}</span></td>
                   </tr>`
@@ -392,8 +454,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
           <div id="settleMsg" class="text-sm" aria-live="polite"></div>
 
-          <div class="flex gap-2 flex-wrap">
-            <button class="btn btn-primary flex-1" type="submit" id="settleSubmit">
+          <div class="admin-actions">
+            <button class="btn btn-primary" type="submit" id="settleSubmit">
               ${match.settled ? 'Save correction' : 'Settle match'}
             </button>
             ${

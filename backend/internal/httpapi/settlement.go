@@ -457,13 +457,13 @@ func (s *Server) handleAdminMatchBets(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.Pool.Query(ctx, `
 		SELECT b.id, u.nickname, u.phone, b.market, b.stake_cents, b.status,
-		       b.payout_cents,
+		       b.payout_cents, COALESCE(b.payout_multiplier_bp, $2),
 		       to_char(b.placed_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI')
 		FROM bets b
 		JOIN users u ON u.id = b.user_id
 		WHERE b.match_id = $1
 		ORDER BY b.placed_at
-	`, matchID)
+	`, matchID, s.Cfg.PayoutMultiplier)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
 		return
@@ -478,6 +478,7 @@ func (s *Server) handleAdminMatchBets(w http.ResponseWriter, r *http.Request) {
 		StakeCents  int64  `json:"stake_cents"`
 		Status      string `json:"status"`
 		PayoutCents int64  `json:"payout_cents"`
+		OddsBP      int64  `json:"odds_bp"`
 		PlacedAt    string `json:"placed_at"`
 	}
 	out := []row{}
@@ -485,7 +486,7 @@ func (s *Server) handleAdminMatchBets(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var b row
 		if err := rows.Scan(&b.ID, &b.Nickname, &b.Phone, &b.Market, &b.StakeCents,
-			&b.Status, &b.PayoutCents, &b.PlacedAt); err != nil {
+			&b.Status, &b.PayoutCents, &b.OddsBP, &b.PlacedAt); err != nil {
 			continue
 		}
 		totalStake += b.StakeCents

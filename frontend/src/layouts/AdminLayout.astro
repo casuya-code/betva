@@ -22,7 +22,7 @@ const links = [
 <html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Betva administration: matches, users, community moderation, and notifications." />
     <meta name="theme-color" content="#0b0f14" />
     <meta name="betva-api" content={API} />
@@ -35,12 +35,8 @@ const links = [
     <title>{title}</title>
   </head>
   <body>
-    <div id="page-preloader" class="page-preloader" aria-hidden="true">
-      <div class="page-preloader-inner">
-        <img src="/favicon.svg" alt="" class="page-preloader-mark" width="48" height="48" decoding="async" />
-        <div class="page-preloader-bar"></div>
-      </div>
-    </div>
+    <!-- No render-blocking preloader here: the console is a trusted, fast
+         shell and its data streams into skeleton placeholders instead. -->
     <header class="admin-header">
       <div class="admin-header-inner">
         <a href="/admin" class="admin-brand">
@@ -61,15 +57,6 @@ const links = [
     </main>
 
     <script>
-      const pre = document.getElementById('page-preloader');
-      const hidePre = () => pre?.classList.add('is-hidden');
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', hidePre, { once: true });
-      } else {
-        hidePre();
-      }
-      setTimeout(hidePre, 1200);
-
       document.getElementById('adminLogout')?.addEventListener('click', () => {
         localStorage.removeItem('betva_admin_token');
         window.location.href = '/admin/login';
@@ -83,9 +70,8 @@ const links = [
     position: sticky;
     top: 0;
     z-index: 40;
-    background: rgba(11, 15, 20, 0.88);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    /* Opaque background avoids a full-width blur repaint on every scroll. */
+    background: #0b0f14;
     border-bottom: 1px solid var(--border);
   }
   .admin-header-inner {

@@ -131,6 +131,21 @@ export const MARKET_LABEL: Record<string, string> = {
   ht_over_0_5: 'Half Time Over 0.5',
 };
 
+// Compact labels keep market buttons + odds inside a 320px screen.
+export const MARKET_SHORT: Record<string, string> = {
+  ft_over_0_5: 'FT O0.5',
+  ht_over_0_5: 'HT O0.5',
+};
+
+// Odds travel as basis points (15000 = 1.50x), the same unit the API uses.
+export function oddsText(bp: number | null | undefined): string {
+  return ((bp || 0) / 10000).toFixed(2);
+}
+
+export function payoutFor(stakeCents: number, bp: number): number {
+  return Math.floor((stakeCents * bp) / 10000);
+}
+
 // Status text always ships with a mark, never colour alone.
 export const BET_STATUS: Record<string, { cls: string; label: string }> = {
   pending: { cls: 'badge-pending', label: '⏳ PENDING' },

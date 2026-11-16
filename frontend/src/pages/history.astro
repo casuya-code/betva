@@ -5,7 +5,7 @@ import Layout from '../layouts/Layout.astro';
   <div class="page-frame page-frame-wide">
     <header class="mb-4">
       <h1 class="text-2xl font-bold">History</h1>
-      <p class="text-sm text-[var(--text-2)]">Slips placed by <strong>your account</strong> in the last 6 months. Wins and losses both stay here. The Betva track record on Home is the combined count across all users.</p>
+      <p class="text-sm text-[var(--text-2)]">Your slips from the last 6 months. Wins and losses both stay here.</p>
     </header>
 
     <div class="page-split">
@@ -38,7 +38,7 @@ import Layout from '../layouts/Layout.astro';
 
         <section class="card hidden lg:block space-y-2 text-sm text-[var(--text-2)]" aria-labelledby="about-record">
           <h2 class="font-semibold text-[var(--text)]" id="about-record">About this record</h2>
-          <p>Six months of bets, newest first. A correction is added as a new reversing entry — the original result and payout stay visible.</p>
+          <p>Six months, newest first. Corrections add a reversing entry; the original stays visible.</p>
           <a href="/" class="btn btn-secondary w-full">Back to matches</a>
         </section>
       </aside>
@@ -58,7 +58,7 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <script>
-    import { authFetch, esc, money, MARKET_LABEL, betStatus, toast } from '../lib/api';
+    import { authFetch, esc, money, MARKET_LABEL, oddsText, betStatus, toast } from '../lib/api';
 
     type Bet = {
       id: string;
@@ -80,6 +80,7 @@ import Layout from '../layouts/Layout.astro';
       match_status: string;
       confidence: string;
       void_reason: string | null;
+      odds_bp: number;
     };
 
     function score(b: Bet): string {
@@ -130,9 +131,10 @@ import Layout from '../layouts/Layout.astro';
                 <div class="font-semibold leading-tight break-words text-right">${esc(b.away_team)}</div>
               </div>
 
-              <div class="mt-2 flex items-center justify-between gap-2 text-sm">
+              <div class="mt-2 flex items-center gap-2 flex-wrap text-sm">
                 <span class="badge badge-pending">${esc(MARKET_LABEL[b.market] || b.market)}</span>
-                <span class="text-xs text-[var(--text-3)]">Placed ${esc(b.placed_at)}</span>
+                <span class="text-xs text-[var(--text-3)]">@${oddsText(b.odds_bp)}×</span>
+                <span class="text-xs text-[var(--text-3)] ml-auto">Placed ${esc(b.placed_at)}</span>
               </div>
 
               <div class="mt-3 pt-3 border-t border-[var(--border)] flex items-end justify-between">
@@ -176,7 +178,7 @@ import Layout from '../layouts/Layout.astro';
         render(bets);
       } catch {
         document.getElementById('list')!.innerHTML =
-          '<div class="card text-center text-[var(--text-2)]">Could not load your history. Check your connection and try again.</div>';
+          '<div class="card text-center text-[var(--text-2)]">Could not load your history. Check your connection.</div>';
         toast('Could not load history', 'error');
       }
     }

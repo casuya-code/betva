@@ -252,7 +252,9 @@ func (s *Server) handleAdminListSuggestions(w http.ResponseWriter, r *http.Reque
 		       COALESCE(rs.confidence, ''), rs.status, COALESCE(rs.reviewed_by, ''),
 		       COALESCE(to_char(rs.reviewed_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI'), ''),
 		       COALESCE(rs.review_reason, ''), rs.model,
-		       to_char(rs.created_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI')
+		       to_char(rs.created_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI'),
+		       (SELECT COALESCE(array_agg(mm.market ORDER BY mm.market), '{}') FROM match_markets mm WHERE mm.match_id = m.id),
+		       (SELECT COALESCE(array_agg(COALESCE(mm.odds_bp, 0) ORDER BY mm.market), '{}') FROM match_markets mm WHERE mm.match_id = m.id)
 		FROM result_suggestions rs
 		JOIN matches m ON m.id = rs.match_id
 		WHERE ($1 = '' OR rs.match_id::text = $1)
@@ -282,15 +284,25 @@ func (s *Server) handleAdminListSuggestions(w http.ResponseWriter, r *http.Reque
 		ReviewedBy   string `json:"reviewed_by"`
 		ReviewedAt   string `json:"reviewed_at"`
 		ReviewReason string `json:"review_reason"`
-		Model        string `json:"model"`
-		CreatedAt    string `json:"created_at"`
+		Model        string         `json:"model"`
+		CreatedAt    string         `json:"created_at"`
+		MarketOdds   map[string]int `json:"market_odds"`
 	}
 	out := []row{}
 	for rows.Next() {
 		var r row
+		var markets []string
+		var odds []int
 		if err := rows.Scan(&r.ID, &r.MatchID, &r.HomeTeam, &r.AwayTeam, &r.MatchDate,
 			&r.SourceURL, &r.Home, &r.Away, &r.HomeHT, &r.AwayHT, &r.Confidence, &r.Status,
-			&r.ReviewedBy, &r.ReviewedAt, &r.ReviewReason, &r.Model, &r.CreatedAt); err == nil {
+			&r.ReviewedBy, &r.ReviewedAt, &r.ReviewReason, &r.Model, &r.CreatedAt,
+			&markets, &odds); err == nil {
+			r.MarketOdds = map[string]int{}
+			for i, mk := range markets {
+				if i < len(odds) {
+					r.MarketOdds[mk] = odds[i]
+				}
+			}
 			out = append(out, r)
 		}
 	}

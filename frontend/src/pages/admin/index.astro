@@ -11,22 +11,22 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
       <div class="card">
         <div class="text-xs text-[var(--text-3)]">Today</div>
-        <div class="text-2xl font-bold counter" id="stat-today">—</div>
+        <div class="text-2xl font-bold counter" id="stat-today"><span class="skeleton sk-num"></span></div>
         <div class="text-xs text-[var(--text-3)]">matches published</div>
       </div>
       <div class="card">
         <div class="text-xs text-[var(--text-3)]">Tomorrow</div>
-        <div class="text-2xl font-bold counter" id="stat-tomorrow">—</div>
+        <div class="text-2xl font-bold counter" id="stat-tomorrow"><span class="skeleton sk-num"></span></div>
         <div class="text-xs text-[var(--text-3)]">matches queued</div>
       </div>
       <div class="card">
         <div class="text-xs text-[var(--text-3)]">Users</div>
-        <div class="text-2xl font-bold counter" id="stat-users">—</div>
+        <div class="text-2xl font-bold counter" id="stat-users"><span class="skeleton sk-num"></span></div>
         <div class="text-xs text-[var(--text-3)]">total registered</div>
       </div>
       <div class="card">
         <div class="text-xs text-[var(--text-3)]">Active</div>
-        <div class="text-2xl font-bold counter text-green-400" id="stat-active">—</div>
+        <div class="text-2xl font-bold counter text-green-400" id="stat-active"><span class="skeleton sk-num"></span></div>
         <div class="text-xs text-[var(--text-3)]">paid accounts</div>
       </div>
     </div>
@@ -34,23 +34,23 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     <div class="grid md:grid-cols-2 gap-3">
       <a href="/admin/matches" class="card block hover:border-[var(--brand)] transition-colors">
         <h2 class="font-semibold mb-1">Matches</h2>
-        <p class="text-sm text-[var(--text-2)]">Upload a CSV for a date, review the day's fixtures, adjust confidence.</p>
+        <p class="text-sm text-[var(--text-2)]">Upload fixtures, set confidence.</p>
       </a>
       <a href="/admin/users" class="card block hover:border-[var(--brand)] transition-colors">
         <h2 class="font-semibold mb-1">Users &amp; financial status</h2>
-        <p class="text-sm text-[var(--text-2)]">Search users, confirm mobile money payments, activate or suspend accounts.</p>
+        <p class="text-sm text-[var(--text-2)]">Confirm payments, activate or suspend accounts.</p>
       </a>
       <a href="/admin/community" class="card block hover:border-[var(--brand)] transition-colors">
         <h2 class="font-semibold mb-1">Community moderation</h2>
-        <p class="text-sm text-[var(--text-2)]">Review reported posts, hide or restore content, keep the record of who acted.</p>
+        <p class="text-sm text-[var(--text-2)]">Review reports, hide or restore posts.</p>
       </a>
       <a href="/admin/notifications" class="card block hover:border-[var(--brand)] transition-colors">
         <h2 class="font-semibold mb-1">Notifications</h2>
-        <p class="text-sm text-[var(--text-2)]">Send a short announcement. Caps, quiet hours and mutes apply automatically.</p>
+        <p class="text-sm text-[var(--text-2)]">Send announcements. Caps and quiet hours apply.</p>
       </a>
       <a href="/admin/ai" class="card block hover:border-[var(--brand)] transition-colors">
         <h2 class="font-semibold mb-1">AI result suggestions</h2>
-        <p class="text-sm text-[var(--text-2)]">Groq proposes a score from a result page. Review and approve before settling — the AI never settles.</p>
+        <p class="text-sm text-[var(--text-2)]">Review AI score suggestions. The AI never settles.</p>
       </a>
     </div>
 
@@ -59,7 +59,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <h2 class="font-semibold">Recent imports</h2>
         <a href="/admin/matches" class="tap-link text-sm text-[var(--brand)]">Open matches</a>
       </div>
-      <div id="imports" class="text-sm text-[var(--text-2)]">Loading…</div>
+      <div id="imports" class="text-sm text-[var(--text-2)]">
+        <div class="skeleton sk-line"></div><div class="skeleton sk-line"></div><div class="skeleton sk-line"></div>
+      </div>
     </div>
   </div>
 
@@ -73,24 +75,25 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const tomorrow = new Date(new Date(today).getTime() + 86400000).toISOString().slice(0, 10);
 
       try {
-        const [todayRes, tomorrowRes, usersRes, importsRes] = await Promise.all([
+        // One round-trip for every stat. The "active users" count used to be
+        // fetched after the first four finished, adding a second network
+        // round-trip to every overview load — on a slow link that doubled the
+        // time before the page was populated.
+        const [todayRes, tomorrowRes, usersRes, activeRes, importsRes] = await Promise.all([
           adminFetch(`/api/v1/admin/matches?date=${today}`),
           adminFetch(`/api/v1/admin/matches?date=${tomorrow}`),
           adminFetch('/api/v1/admin/users?limit=1'),
+          adminFetch('/api/v1/admin/users?status=active&limit=1'),
           adminFetch('/api/v1/admin/imports?limit=5'),
         ]);
 
-        const todayData = await todayRes.json().catch(() => ({}));
-        const tomorrowData = await tomorrowRes.json().catch(() => ({}));
-        const usersData = await usersRes.json().catch(() => ({}));
-        const importsData = await importsRes.json().catch(() => ({}));
+        const [todayData, tomorrowData, usersData, activeData, importsData] = await Promise.all(
+          [todayRes, tomorrowRes, usersRes, activeRes, importsRes].map((r) => r.json().catch(() => ({})))
+        );
 
         setText('stat-today', String(todayData.matches?.length ?? 0));
         setText('stat-tomorrow', String(tomorrowData.matches?.length ?? 0));
         setText('stat-users', String(usersData.total ?? 0));
-
-        const activeRes = await adminFetch('/api/v1/admin/users?status=active&limit=1');
-        const activeData = await activeRes.json().catch(() => ({}));
         setText('stat-active', String(activeData.total ?? 0));
 
         const el = document.getElementById('imports')!;

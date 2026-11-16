@@ -88,7 +88,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                     <td class="text-[var(--text-2)] text-xs">${u.access_expires_at ? esc(u.access_expires_at) : '—'}</td>
                     <td class="text-[var(--text-3)] text-xs">${esc(u.created_at)}</td>
                     <td>
-                      <div class="flex flex-wrap gap-1">
+                      <div class="admin-actions">
                         <button class="btn btn-primary text-xs admin-act" data-action="activate" type="button">Activate 30d</button>
                         <button class="btn btn-secondary text-xs admin-act" data-action="inactive" type="button">Deactivate</button>
                         <button class="btn btn-secondary text-xs admin-act" data-action="suspended" type="button">Suspend</button>

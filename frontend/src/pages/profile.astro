@@ -56,7 +56,7 @@ import TrackRecord from '../components/TrackRecord.astro';
     <div class="glass p-4 space-y-3">
       <h2 class="font-semibold">Notification settings</h2>
       <p class="text-xs text-[var(--text-3)]">
-        Push is capped at 2 per day and stays silent 22:00–07:00 EAT. The inbox below always works, even if push is blocked.
+        Max 2 pushes/day, silent 22:00–07:00 EAT. The inbox always works.
       </p>
 
       <div class="glass-el p-3 flex items-center justify-between gap-3">
@@ -78,7 +78,7 @@ import TrackRecord from '../components/TrackRecord.astro';
         <span class="badge badge-pending" id="exclusionBadge">NOT ACTIVE</span>
       </div>
       <p class="text-sm text-[var(--text-2)]">
-        Lock betting for a set period. Your account stays active, you can still browse, and the pause cannot be shortened.
+        Pauses betting, not browsing. Cannot be shortened.
       </p>
       <div id="exclusionStatus" class="text-sm text-[var(--text-2)]"></div>
       <div class="grid grid-cols-3 gap-2">
@@ -92,9 +92,8 @@ import TrackRecord from '../components/TrackRecord.astro';
     <div class="glass p-4">
       <h2 class="font-semibold mb-3">Activate your account</h2>
       <p class="text-sm text-[var(--text-2)] mb-3">
-        Pay the monthly rate to the <strong>single official number below</strong>, then ask the admin to activate your account.
-        There is only one payment number. Never send money to another user, agent, or number — the admin cannot be responsible for money sent anywhere else.
-        <strong>Your payment covers maintenance and internet service so Betva stays available always.</strong>
+        Pay the official number below, then ask the admin to activate you. Only one payment number exists — never pay anyone else; the admin cannot be responsible for money sent elsewhere.
+        <strong>Your payment covers maintenance and internet service.</strong>
       </p>
       <div class="glass-el p-3 text-center">
         <div class="text-xs text-[var(--text-3)]">Monthly access rate</div>
@@ -347,7 +346,7 @@ import TrackRecord from '../components/TrackRecord.astro';
       } else {
         badge.textContent = 'NOT ACTIVE';
         badge.className = 'badge badge-pending';
-        status.textContent = 'No pause is active. Choose a period if you want to stop betting for a while.';
+        status.textContent = 'No pause is active.';
         buttons.forEach((b) => (b.disabled = false));
       }
     }

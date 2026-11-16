@@ -139,6 +139,17 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The odds on this market win over the global multiplier. Snapshotting
+	// it on the bet keeps settlement stable if the CSV is later corrected.
+	var oddsBP *int
+	_ = tx.QueryRow(ctx, `
+		SELECT odds_bp FROM match_markets WHERE match_id = $1 AND market = $2
+	`, req.MatchID, req.Market).Scan(&oddsBP)
+	multiplier := int64(s.Cfg.PayoutMultiplier)
+	if oddsBP != nil && *oddsBP > 0 {
+		multiplier = int64(*oddsBP)
+	}
+
 	var already bool
 	_ = tx.QueryRow(ctx, `
 		SELECT EXISTS (SELECT 1 FROM bets WHERE user_id = $1 AND match_id = $2 AND market = $3)
@@ -171,7 +182,7 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 		                  confidence_at_placement, payout_multiplier_bp)
 		VALUES ($1, $2, $3, $4, 'pending', $5, $6)
 		RETURNING id
-	`, u.ID, req.MatchID, req.Market, req.StakeCents, confidence, s.Cfg.PayoutMultiplier).Scan(&betID)
+	`, u.ID, req.MatchID, req.Market, req.StakeCents, confidence, multiplier).Scan(&betID)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "bet could not be placed"})
 		return
@@ -198,7 +209,8 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 			"stake_cents":   req.StakeCents,
 			"status":        "pending",
 			"confidence":    confidence,
-			"payout_if_win": s.Cfg.PayoutFor(req.StakeCents),
+			"payout_if_win": req.StakeCents * multiplier / 10000,
+			"odds_bp":       multiplier,
 		},
 		"balance_cents": newBalance,
 	})
@@ -273,14 +285,14 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(m.league, ''), m.home_team, m.away_team,
 		       m.home_goals, m.away_goals, m.home_goals_ht, m.away_goals_ht,
 		       m.status, COALESCE(b.confidence_at_placement, m.confidence),
-		       b.void_reason
+		       b.void_reason, COALESCE(b.payout_multiplier_bp, $2)
 		FROM bets b
 		JOIN matches m ON m.id = b.match_id
 		WHERE b.user_id = $1
 		  AND b.placed_at >= NOW() - INTERVAL '6 months'
 		ORDER BY b.placed_at DESC
 		LIMIT 200
-	`, u.ID)
+	`, u.ID, s.Cfg.PayoutMultiplier)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
 		return
@@ -307,6 +319,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		MatchStatus string  `json:"match_status"`
 		Confidence  string  `json:"confidence"`
 		VoidReason  *string `json:"void_reason"`
+		OddsBP      int64   `json:"odds_bp"`
 	}
 
 	out := []betRow{}
@@ -316,7 +329,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 			&b.PlacedAt, &b.MatchID, &b.MatchDate, &b.Kickoff, &b.League,
 			&b.HomeTeam, &b.AwayTeam, &b.HomeGoals, &b.AwayGoals,
 			&b.HomeGoalsHT, &b.AwayGoalsHT, &b.MatchStatus, &b.Confidence,
-			&b.VoidReason); err != nil {
+			&b.VoidReason, &b.OddsBP); err != nil {
 			continue
 		}
 		out = append(out, b)

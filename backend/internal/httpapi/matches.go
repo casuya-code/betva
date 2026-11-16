@@ -2,11 +2,15 @@ package httpapi
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,15 +18,18 @@ import (
 // ---- CSV contract -------------------------------------------------------
 //
 // Columns (header row required, order-independent):
+//   date        YYYY-MM-DD — authoritative per row; one file may hold many days
 //   kickoff     HH:MM (24h, EAT)
 //   league      free text (optional)
 //   home_team   required
 //   away_team   required
 //   markets     ft_over_0_5 and/or ht_over_0_5, separated by | or ,
+//   ft_odds     decimal odds for the FT market, e.g. 1.50 (optional)
+//   ht_odds     decimal odds for the HT market, e.g. 2.10 (optional)
 //   confidence  HIGH | MEDIUM | LOW (optional, default MEDIUM)
 //
-// The upload date comes from the form field `date` (YYYY-MM-DD), so the same
-// file shape can be reused for any day.
+// A row without a date falls back to the form field `date` (YYYY-MM-DD).
+// A market without odds falls back to PAYOUT_MULTIPLIER_BP.
 
 var (
 	kickoffRe = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
@@ -37,13 +44,15 @@ const (
 )
 
 type parsedMatch struct {
-	Line       int      `json:"line"`
-	Kickoff    string   `json:"kickoff"`
-	League     string   `json:"league"`
-	HomeTeam   string   `json:"home_team"`
-	AwayTeam   string   `json:"away_team"`
-	Markets    []string `json:"markets"`
-	Confidence string   `json:"confidence"`
+	Line       int            `json:"line"`
+	Date       string         `json:"date"`
+	Kickoff    string         `json:"kickoff"`
+	League     string         `json:"league"`
+	HomeTeam   string         `json:"home_team"`
+	AwayTeam   string         `json:"away_team"`
+	Markets    []string       `json:"markets"`
+	OddsBP     map[string]int `json:"odds_bp"`
+	Confidence string         `json:"confidence"`
 }
 
 type rowError struct {
@@ -74,6 +83,24 @@ func normalizeConfidence(v string) string {
 		return "medium"
 	}
 	return ""
+}
+
+// parseOddsBP converts a decimal odds cell ("1.50") into basis points
+// (15000), the same unit used by bets.payout_multiplier_bp. Empty means the
+// market carries no uploaded odds and the global multiplier applies.
+func parseOddsBP(raw string) (bp int, present bool, err error) {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return 0, false, nil
+	}
+	f, parseErr := strconv.ParseFloat(v, 64)
+	if parseErr != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, true, fmt.Errorf("must be a decimal number such as 1.50")
+	}
+	if f <= 1 || f > 1000 {
+		return 0, true, fmt.Errorf("must be greater than 1.00 and at most 1000")
+	}
+	return int(math.Round(f * 10000)), true, nil
 }
 
 // parseMatchesCSV validates every row and returns the good rows plus a
@@ -108,6 +135,14 @@ func parseMatchesCSV(r io.Reader) ([]parsedMatch, []rowError, error) {
 		}
 		return strings.TrimSpace(rec[i])
 	}
+	getAny := func(rec []string, names ...string) string {
+		for _, name := range names {
+			if v := get(rec, name); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
 
 	var good []parsedMatch
 	var errs []rowError
@@ -138,6 +173,19 @@ func parseMatchesCSV(r io.Reader) ([]parsedMatch, []rowError, error) {
 			League:   get(rec, "league"),
 			HomeTeam: get(rec, "home_team"),
 			AwayTeam: get(rec, "away_team"),
+			OddsBP:   map[string]int{},
+		}
+
+		m.Date = getAny(rec, "date", "match_date")
+		if m.Date != "" {
+			if !dateRe.MatchString(m.Date) {
+				errs = append(errs, rowError{Line: line, Message: "date must be YYYY-MM-DD"})
+				continue
+			}
+			if _, err := time.Parse("2006-01-02", m.Date); err != nil {
+				errs = append(errs, rowError{Line: line, Message: "invalid date"})
+				continue
+			}
 		}
 
 		if !kickoffRe.MatchString(m.Kickoff) {
@@ -184,6 +232,28 @@ func parseMatchesCSV(r io.Reader) ([]parsedMatch, []rowError, error) {
 			m.Markets = append(m.Markets, marketHTOver05)
 		}
 
+		badOdds := ""
+		for _, mk := range m.Markets {
+			cell := ""
+			if mk == marketFTOver05 {
+				cell = getAny(rec, "ft_odds", "odds_ft", "ft_over_0_5_odds")
+			} else {
+				cell = getAny(rec, "ht_odds", "odds_ht", "ht_over_0_5_odds")
+			}
+			bp, present, oddsErr := parseOddsBP(cell)
+			if oddsErr != nil {
+				badOdds = mk + " odds: " + oddsErr.Error()
+				break
+			}
+			if present {
+				m.OddsBP[mk] = bp
+			}
+		}
+		if badOdds != "" {
+			errs = append(errs, rowError{Line: line, Message: badOdds})
+			continue
+		}
+
 		conf := normalizeConfidence(get(rec, "confidence"))
 		if conf == "" {
 			errs = append(errs, rowError{Line: line, Message: "confidence must be HIGH, MEDIUM or LOW"})
@@ -191,7 +261,7 @@ func parseMatchesCSV(r io.Reader) ([]parsedMatch, []rowError, error) {
 		}
 		m.Confidence = conf
 
-		key := strings.ToLower(m.HomeTeam) + "\x00" + strings.ToLower(m.AwayTeam)
+		key := m.Date + "\x00" + strings.ToLower(m.HomeTeam) + "\x00" + strings.ToLower(m.AwayTeam)
 		if prev, dup := seen[key]; dup {
 			errs = append(errs, rowError{
 				Line:    line,
@@ -208,9 +278,9 @@ func parseMatchesCSV(r io.Reader) ([]parsedMatch, []rowError, error) {
 
 // handleUploadMatches accepts multipart form data:
 //
-//	date     YYYY-MM-DD (required)
-//	replace  "true" to overwrite an existing date
-//	file     the CSV
+//	date     YYYY-MM-DD fallback for rows with no CSV date (optional)
+//	replace  "true" to overwrite the affected dates
+//	file     the CSV; each row's own date decides where it is stored
 func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxCSVBytes+4096)
 	if err := r.ParseMultipartForm(maxCSVBytes); err != nil {
@@ -218,15 +288,16 @@ func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dateStr := strings.TrimSpace(r.FormValue("date"))
-	if !dateRe.MatchString(dateStr) {
+	fallbackDate := strings.TrimSpace(r.FormValue("date"))
+	if fallbackDate != "" && !dateRe.MatchString(fallbackDate) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "date must be YYYY-MM-DD"})
 		return
 	}
-	matchDate, err := time.Parse("2006-01-02", dateStr)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
-		return
+	if fallbackDate != "" {
+		if _, err := time.Parse("2006-01-02", fallbackDate); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+			return
+		}
 	}
 	replace := strings.EqualFold(r.FormValue("replace"), "true")
 
@@ -250,35 +321,69 @@ func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A CSV date wins; the form date only fills rows that have none.
+	dated := make([]parsedMatch, 0, len(good))
+	for _, m := range good {
+		if m.Date == "" {
+			if fallbackDate == "" {
+				rowErrs = append(rowErrs, rowError{Line: m.Line, Message: "date is required in the CSV when no fallback date is set"})
+				continue
+			}
+			m.Date = fallbackDate
+		}
+		dated = append(dated, m)
+	}
+	good = dated
+	if len(good) == 0 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]interface{}{
+			"error":      "no rows with a usable date",
+			"row_errors": rowErrs,
+		})
+		return
+	}
+
+	dates := []string{}
+	dateSeen := map[string]bool{}
+	for _, m := range good {
+		if !dateSeen[m.Date] {
+			dateSeen[m.Date] = true
+			dates = append(dates, m.Date)
+		}
+	}
+	sort.Strings(dates)
+
 	ctx := r.Context()
 
-	// Duplicate detection against what is already stored for this date.
-	existing := map[string]bool{}
-	rows, err := s.Pool.Query(ctx, `
-		SELECT lower(home_team), lower(away_team) FROM matches WHERE match_date = $1
-	`, matchDate)
-	if err == nil {
-		for rows.Next() {
-			var h, a string
-			if err := rows.Scan(&h, &a); err == nil {
-				existing[h+"\x00"+a] = true
+	// Duplicate detection is per date, including dates inside the same file.
+	existing := map[string]map[string]bool{}
+	for _, d := range dates {
+		existing[d] = map[string]bool{}
+		rows, err := s.Pool.Query(ctx, `
+			SELECT lower(home_team), lower(away_team) FROM matches WHERE match_date = $1
+		`, d)
+		if err == nil {
+			for rows.Next() {
+				var h, a string
+				if err := rows.Scan(&h, &a); err == nil {
+					existing[d][h+"\x00"+a] = true
+				}
 			}
+			rows.Close()
 		}
-		rows.Close()
 	}
 
 	var conflicts []string
 	for _, m := range good {
 		key := strings.ToLower(m.HomeTeam) + "\x00" + strings.ToLower(m.AwayTeam)
-		if existing[key] {
-			conflicts = append(conflicts, m.HomeTeam+" vs "+m.AwayTeam)
+		if existing[m.Date][key] {
+			conflicts = append(conflicts, m.Date+": "+m.HomeTeam+" vs "+m.AwayTeam)
 		}
 	}
 	if len(conflicts) > 0 && !replace {
 		writeJSON(w, http.StatusConflict, map[string]interface{}{
-			"error":      "matches already exist for this date",
+			"error":      "matches already exist for these dates",
 			"duplicates": conflicts,
-			"hint":       "re-send with replace=true to overwrite the date",
+			"hint":       "re-send with replace=true to overwrite the affected dates",
 		})
 		return
 	}
@@ -291,23 +396,28 @@ func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(ctx)
 
 	if replace {
-		// Refuse to wipe a date that already has bets: that would destroy
-		// money history. Bets must be settled or voided first.
-		var betCount int
-		_ = tx.QueryRow(ctx, `
-			SELECT COUNT(*) FROM bets b
-			JOIN matches m ON m.id = b.match_id
-			WHERE m.match_date = $1
-		`, matchDate).Scan(&betCount)
-		if betCount > 0 {
-			writeJSON(w, http.StatusConflict, map[string]interface{}{
-				"error": fmt.Sprintf("cannot replace: %d bet(s) already placed on this date", betCount),
-			})
-			return
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM matches WHERE match_date = $1`, matchDate); err != nil {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot replace existing matches"})
-			return
+		// Never wipe money history. Refuse a date that already has bets or
+		// archived results; betting/refund must be resolved first.
+		for _, d := range dates {
+			var betCount, resultCount int
+			_ = tx.QueryRow(ctx, `
+				SELECT COUNT(*) FROM bets b JOIN matches m ON m.id = b.match_id
+				WHERE m.match_date = $1
+			`, d).Scan(&betCount)
+			_ = tx.QueryRow(ctx, `
+				SELECT COUNT(*) FROM results_archive r JOIN matches m ON m.id = r.match_id
+				WHERE m.match_date = $1
+			`, d).Scan(&resultCount)
+			if betCount > 0 || resultCount > 0 {
+				writeJSON(w, http.StatusConflict, map[string]interface{}{
+					"error": fmt.Sprintf("cannot replace %s: %d bet(s) and %d archived result(s) already exist", d, betCount, resultCount),
+				})
+				return
+			}
+			if _, err := tx.Exec(ctx, `DELETE FROM matches WHERE match_date = $1`, d); err != nil {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot replace existing matches for " + d})
+				return
+			}
 		}
 	}
 
@@ -318,16 +428,20 @@ func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 			INSERT INTO matches (match_date, kickoff_time, league, home_team, away_team, status, confidence)
 			VALUES ($1, $2, $3, $4, $5, 'upcoming', $6)
 			RETURNING id
-		`, matchDate, m.Kickoff+":00", m.League, m.HomeTeam, m.AwayTeam, m.Confidence).Scan(&matchID)
+		`, m.Date, m.Kickoff+":00", m.League, m.HomeTeam, m.AwayTeam, m.Confidence).Scan(&matchID)
 		if err != nil {
 			rowErrs = append(rowErrs, rowError{Line: m.Line, Message: "insert failed: " + err.Error()})
 			continue
 		}
 		for _, mk := range m.Markets {
+			var odds interface{}
+			if bp, ok := m.OddsBP[mk]; ok && bp > 0 {
+				odds = bp
+			}
 			if _, err := tx.Exec(ctx, `
-				INSERT INTO match_markets (match_id, market) VALUES ($1, $2)
-				ON CONFLICT DO NOTHING
-			`, matchID, mk); err != nil {
+				INSERT INTO match_markets (match_id, market, odds_bp) VALUES ($1, $2, $3)
+				ON CONFLICT (match_id, market) DO UPDATE SET odds_bp = EXCLUDED.odds_bp
+			`, matchID, mk, odds); err != nil {
 				rowErrs = append(rowErrs, rowError{Line: m.Line, Message: "market insert failed"})
 			}
 		}
@@ -347,13 +461,36 @@ func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 		fileName = hdr.Filename
 	}
 
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO import_log
-			(admin_name, match_date, file_name, rows_total, rows_imported, rows_failed, replaced)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, adminName(r), matchDate, fileName, len(good)+len(rowErrs), imported, len(rowErrs), replace); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "log write failed"})
-		return
+	// One import-log row per date in the file (counts[3] = total, ok, failed).
+	counts := map[string][3]int{}
+	for _, m := range good {
+		c := counts[m.Date]
+		c[0]++
+		c[1]++
+		counts[m.Date] = c
+	}
+	if len(rowErrs) > 0 {
+		d := fallbackDate
+		if d == "" && len(dates) > 0 {
+			d = dates[0]
+		}
+		if d != "" {
+			c := counts[d]
+			c[0] += len(rowErrs)
+			c[2] += len(rowErrs)
+			counts[d] = c
+		}
+	}
+	for _, d := range dates {
+		c := counts[d]
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO import_log
+				(admin_name, match_date, file_name, rows_total, rows_imported, rows_failed, replaced)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, adminName(r), d, fileName, c[0], c[1], c[2], replace); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "log write failed"})
+			return
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -361,9 +498,14 @@ func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := http.StatusCreated
-	writeJSON(w, status, map[string]interface{}{
-		"date":       dateStr,
+	firstDate := ""
+	if len(dates) > 0 {
+		firstDate = dates[0]
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"date":       firstDate,
+		"dates":      dates,
+		"days":       len(dates),
 		"imported":   imported,
 		"failed":     len(rowErrs),
 		"replaced":   replace,
@@ -389,7 +531,8 @@ func (s *Server) handleListMatches(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.Pool.Query(ctx, `
 		SELECT m.id, to_char(m.match_date, 'YYYY-MM-DD'), to_char(m.kickoff_time, 'HH24:MI'), COALESCE(m.league, ''),
 		       m.home_team, m.away_team, m.status, m.confidence,
-		       COALESCE(array_agg(mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}'),
+		       COALESCE(array_agg(mm.market ORDER BY mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}'),
+		       COALESCE(array_agg(COALESCE(mm.odds_bp, 0) ORDER BY mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}'),
 		       (m.status = 'upcoming'
 		         AND (m.match_date + m.kickoff_time) > (NOW() AT TIME ZONE 'Africa/Dar_es_Salaam')),
 		       (m.settled_at IS NOT NULL),
@@ -417,22 +560,30 @@ func (s *Server) handleListMatches(w http.ResponseWriter, r *http.Request) {
 		AwayTeam    string   `json:"away_team"`
 		Status      string   `json:"status"`
 		Confidence  string   `json:"confidence"`
-		Markets     []string `json:"markets"`
-		IsOpen      bool     `json:"is_open"`
-		Settled     bool     `json:"settled"`
-		HomeGoals   *int     `json:"home_goals"`
-		AwayGoals   *int     `json:"away_goals"`
-		HomeGoalsHT *int     `json:"home_goals_ht"`
-		AwayGoalsHT *int     `json:"away_goals_ht"`
+		Markets     []string       `json:"markets"`
+		MarketOdds  map[string]int `json:"market_odds"`
+		IsOpen      bool           `json:"is_open"`
+		Settled     bool           `json:"settled"`
+		HomeGoals   *int           `json:"home_goals"`
+		AwayGoals   *int           `json:"away_goals"`
+		HomeGoalsHT *int           `json:"home_goals_ht"`
+		AwayGoalsHT *int           `json:"away_goals_ht"`
 	}
 
 	out := []matchRow{}
 	for rows.Next() {
 		var m matchRow
+		var odds []int
 		if err := rows.Scan(&m.ID, &m.MatchDate, &m.Kickoff, &m.League, &m.HomeTeam,
-			&m.AwayTeam, &m.Status, &m.Confidence, &m.Markets, &m.IsOpen,
+			&m.AwayTeam, &m.Status, &m.Confidence, &m.Markets, &odds, &m.IsOpen,
 			&m.Settled, &m.HomeGoals, &m.AwayGoals, &m.HomeGoalsHT, &m.AwayGoalsHT); err != nil {
 			continue
+		}
+		m.MarketOdds = map[string]int{}
+		for i, mk := range m.Markets {
+			if i < len(odds) {
+				m.MarketOdds[mk] = odds[i]
+			}
 		}
 		out = append(out, m)
 	}
@@ -452,7 +603,8 @@ func (s *Server) handleAdminListMatches(w http.ResponseWriter, r *http.Request) 
 	rows, err := s.Pool.Query(ctx, `
 		SELECT m.id, to_char(m.match_date, 'YYYY-MM-DD'), to_char(m.kickoff_time, 'HH24:MI'), COALESCE(m.league, ''),
 		       m.home_team, m.away_team, m.status, m.confidence,
-		       COALESCE(array_agg(mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}'),
+		       COALESCE(array_agg(mm.market ORDER BY mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}'),
+		       COALESCE(array_agg(COALESCE(mm.odds_bp, 0) ORDER BY mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}'),
 		       (m.settled_at IS NOT NULL),
 		       COALESCE(m.home_goals, -1), COALESCE(m.away_goals, -1),
 		       COALESCE(m.home_goals_ht, -1), COALESCE(m.away_goals_ht, -1)
@@ -477,21 +629,29 @@ func (s *Server) handleAdminListMatches(w http.ResponseWriter, r *http.Request) 
 		AwayTeam    string   `json:"away_team"`
 		Status      string   `json:"status"`
 		Confidence  string   `json:"confidence"`
-		Markets     []string `json:"markets"`
-		Settled     bool     `json:"settled"`
-		HomeGoals   int      `json:"home_goals"`
-		AwayGoals   int      `json:"away_goals"`
-		HomeGoalsHT int      `json:"home_goals_ht"`
-		AwayGoalsHT int      `json:"away_goals_ht"`
+		Markets     []string       `json:"markets"`
+		MarketOdds  map[string]int `json:"market_odds"`
+		Settled     bool           `json:"settled"`
+		HomeGoals   int            `json:"home_goals"`
+		AwayGoals   int            `json:"away_goals"`
+		HomeGoalsHT int            `json:"home_goals_ht"`
+		AwayGoalsHT int            `json:"away_goals_ht"`
 	}
 
 	out := []matchRow{}
 	for rows.Next() {
 		var m matchRow
+		var odds []int
 		if err := rows.Scan(&m.ID, &m.MatchDate, &m.Kickoff, &m.League, &m.HomeTeam,
-			&m.AwayTeam, &m.Status, &m.Confidence, &m.Markets,
+			&m.AwayTeam, &m.Status, &m.Confidence, &m.Markets, &odds,
 			&m.Settled, &m.HomeGoals, &m.AwayGoals, &m.HomeGoalsHT, &m.AwayGoalsHT); err != nil {
 			continue
+		}
+		m.MarketOdds = map[string]int{}
+		for i, mk := range m.Markets {
+			if i < len(odds) {
+				m.MarketOdds[mk] = odds[i]
+			}
 		}
 		out = append(out, m)
 	}
@@ -553,6 +713,100 @@ func (s *Server) handleAdminUpdateMatch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// handleAdminDeleteMatch removes a wrongly uploaded match. It is allowed only
+// before kickoff while the match is neither settled nor finished. Money
+// history is never deleted: any bet or archived result blocks the delete.
+// Body (optional): {"reason":"..."}
+func (s *Server) handleAdminDeleteMatch(w http.ResponseWriter, r *http.Request) {
+	id := chiURLParam(r, "id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing match id"})
+		return
+	}
+
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	if r.Body != nil {
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+	reason := strings.TrimSpace(body.Reason)
+	if len(reason) > 500 {
+		reason = reason[:500]
+	}
+
+	ctx := r.Context()
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
+		return
+	}
+	defer tx.Rollback(ctx)
+
+	var matchDate, home, away, kickoff, status string
+	var settledAt *time.Time
+	var beforeKickoff bool
+	err = tx.QueryRow(ctx, `
+		SELECT to_char(match_date, 'YYYY-MM-DD'), home_team, away_team, to_char(kickoff_time, 'HH24:MI'),
+		       status, settled_at,
+		       (match_date + kickoff_time) > (NOW() AT TIME ZONE 'Africa/Dar_es_Salaam')
+		FROM matches WHERE id = $1 FOR UPDATE
+	`, id).Scan(&matchDate, &home, &away, &kickoff, &status, &settledAt, &beforeKickoff)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "match not found"})
+		return
+	}
+	if settledAt != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "match is already settled — use a correction instead"})
+		return
+	}
+	switch status {
+	case "finished", "live", "cancelled":
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "match has started or finished — it can no longer be deleted"})
+		return
+	}
+	if !beforeKickoff {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "kickoff has passed — settle or refund this match instead"})
+		return
+	}
+
+	var betCount, resultCount int
+	_ = tx.QueryRow(ctx, `SELECT COUNT(*) FROM bets WHERE match_id = $1`, id).Scan(&betCount)
+	_ = tx.QueryRow(ctx, `SELECT COUNT(*) FROM results_archive WHERE match_id = $1`, id).Scan(&resultCount)
+	if betCount > 0 || resultCount > 0 {
+		writeJSON(w, http.StatusConflict, map[string]interface{}{
+			"error": fmt.Sprintf("cannot delete: %d bet(s) and %d archived result(s) exist — refund them first", betCount, resultCount),
+		})
+		return
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM matches WHERE id = $1`, id); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "match could not be deleted"})
+		return
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO match_delete_log
+			(match_id, match_date, kickoff_time, home_team, away_team, reason, reviewer)
+		VALUES ($1, $2, $3::time, $4, $5, $6, $7)
+	`, id, matchDate, kickoff, home, away, reason, adminName(r)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "audit write failed"})
+		return
+	}
+	if err := tx.Commit(ctx); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "commit failed"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":     "deleted",
+		"id":         id,
+		"match_date": matchDate,
+		"home_team":  home,
+		"away_team":  away,
+	})
 }
 
 // handleImportLog returns recent uploads for the admin Matches centre.

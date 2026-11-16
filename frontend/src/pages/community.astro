@@ -6,7 +6,7 @@ import Layout from '../layouts/Layout.astro';
     <header class="flex items-end justify-between gap-2 mb-4">
       <div class="min-w-0">
         <h1 class="text-2xl font-bold">Community</h1>
-        <p class="text-sm text-[var(--text-2)]">Real posts from real users. No fake activity, ever.</p>
+        <p class="text-sm text-[var(--text-2)]">Real posts, real users.</p>
       </div>
       <span class="text-xs text-[var(--text-3)] shrink-0" id="feed-count"></span>
     </header>
@@ -24,7 +24,7 @@ import Layout from '../layouts/Layout.astro';
             placeholder="Talk about a match, a slip, or the league…"></textarea>
           <div class="flex items-center justify-between gap-2 text-xs text-[var(--text-3)]">
             <span id="charCount">0 / 500</span>
-            <span class="text-right">Text only is cheapest on data.</span>
+            <span class="text-right">Text only saves data.</span>
           </div>
 
           <div id="mediaPreview" class="hidden"></div>
@@ -43,10 +43,10 @@ import Layout from '../layouts/Layout.astro';
         <section class="card hidden lg:block space-y-3" aria-labelledby="community-rules">
           <h2 class="font-semibold" id="community-rules">House rules</h2>
           <ul class="space-y-2 text-sm text-[var(--text-2)]">
-            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">1.</span><span>Real posts only — no fake proof, no copied slips, no invented wins.</span></li>
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">1.</span><span>Real posts only — no fake proof.</span></li>
             <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">2.</span><span>Keep it civil: no abuse, scam links, or misleading claims.</span></li>
             <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">3.</span><span>Three independent reports hide a post until a moderator reviews it.</span></li>
-            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">4.</span><span>Media never autoplays — it loads only when someone opens the post.</span></li>
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">4.</span><span>No autoplay — media loads when opened.</span></li>
           </ul>
           <div class="pt-3 border-t border-[var(--border)]">
             <a href="/profile" class="btn btn-ghost w-full text-sm">Mute or manage notifications</a>
@@ -56,7 +56,7 @@ import Layout from '../layouts/Layout.astro';
 
       <div class="page-split-main">
         <div id="readOnlyNote" class="card hidden mb-3 text-sm text-[var(--text-2)]" role="status">
-          You can read posts and react while your account is inactive. Only activated accounts can publish posts or upload media. Ask the admin to activate you after paying the single official number.
+          Read and react while inactive. Only active accounts can post. Pay the official number, then ask the admin to activate you.
         </div>
         <div id="feed" class="space-y-3">
           <div class="card"><div class="skeleton h-28"></div></div>
@@ -76,7 +76,7 @@ import Layout from '../layouts/Layout.astro';
         <h2 id="reportTitle" class="text-lg font-bold">Report post</h2>
         <button type="button" class="btn btn-secondary text-sm" id="reportClose" aria-label="Close">✕</button>
       </div>
-      <p class="text-sm text-[var(--text-2)] mb-3">Reports are reviewed by a moderator. Three independent reports hide a post until review.</p>
+      <p class="text-sm text-[var(--text-2)] mb-3">Three reports hide a post until a moderator reviews it.</p>
       <div class="space-y-2 mb-3">
         <label class="text-sm text-[var(--text-2)] block" for="reportReason">What is wrong?</label>
         <textarea id="reportReason" class="input" rows="2" maxlength="280" placeholder="e.g. abuse, scam link, misleading claim"></textarea>
@@ -228,7 +228,7 @@ import Layout from '../layouts/Layout.astro';
         done = !cursor;
         feedMsg.textContent = done && posts.length ? 'That is the start of the feed.' : '';
       } catch {
-        feedMsg.textContent = 'Could not load the feed. Check your connection and try again.';
+        feedMsg.textContent = 'Could not load the feed. Check your connection.';
       } finally {
         loading = false;
       }
@@ -267,7 +267,7 @@ import Layout from '../layouts/Layout.astro';
           return;
         }
         media = { url: data.url, type: data.media_type, bytes: data.bytes };
-        composeMsg.textContent = 'Attached. It will load only when someone opens the post.';
+        composeMsg.textContent = 'Attached. Loads when opened.';
         composeMsg.className = 'text-sm text-green-400';
 
         const src = mediaSrc(media.url);

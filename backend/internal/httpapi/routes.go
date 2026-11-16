@@ -113,6 +113,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			adm.Get("/matches", s.handleAdminListMatches)
 			adm.Post("/matches/upload", s.handleUploadMatches)
 			adm.Put("/matches/{id}", s.handleAdminUpdateMatch)
+			adm.Delete("/matches/{id}", s.handleAdminDeleteMatch)
 			adm.Get("/matches/{id}/bets", s.handleAdminMatchBets)
 			adm.Post("/matches/{id}/settle", s.handleAdminSettleMatch)
 			adm.Post("/matches/{id}/refund", s.handleAdminRefundMatch)

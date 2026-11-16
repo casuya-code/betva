@@ -291,7 +291,7 @@ Only two markets are offered. Keeping it to two is deliberate: fewer decisions, 
 | **Full Time Over 0.5 Goals** | At least one goal in the entire match | Final whistle |
 | **Over 0.5 Half Time** | At least one goal in the first half | Half-time whistle |
 
-- Each market is a simple **Yes / Over 0.5** pick — no odds arithmetic for the user.
+- Each market is a simple **Yes / Over 0.5** pick. Decimal odds are shown on the match, in the slip, and in History — no arithmetic for the user.
 - A match can offer one or both markets; the admin sets this per match.
 - Stakes are small and fixed tiers, not free-form amounts, to keep the slip lightweight.
 
@@ -1600,29 +1600,35 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ### Matches CSV format
 
-The upload form supplies the date; the file supplies the fixtures. Header row required, column order does not matter.
+Each row carries its own `date` — the CSV date is authoritative, so one file can hold several days. The form date is only a fallback for rows without one. Header row required, column order does not matter.
 
 ```csv
-kickoff,league,home_team,away_team,markets,confidence
-16:00,Example League,Home Team,Away Team,ft_over_0_5|ht_over_0_5,HIGH
-18:30,Example League,Team Two,Team Three,ft_over_0_5,MEDIUM
+date,kickoff,league,home_team,away_team,markets,ft_odds,ht_odds,confidence
+2026-11-16,16:00,Example League,Home Team,Away Team,ft_over_0_5|ht_over_0_5,1.50,2.10,HIGH
+2026-11-17,18:30,Example League,Team Two,Team Three,ft_over_0_5,1.80,,MEDIUM
 ```
 
 | Column | Required | Rules |
 | --- | --- | --- |
+| `date` | No* | `YYYY-MM-DD`; authoritative per row. *Required when the form has no fallback date |
 | `kickoff` | Yes | `HH:MM`, 24-hour, EAT |
 | `league` | No | Free text |
 | `home_team` | Yes | Must differ from `away_team` |
 | `away_team` | Yes | Must differ from `home_team` |
 | `markets` | Yes | `ft_over_0_5` and/or `ht_over_0_5`, separated by `\|`, `,` or `;` |
+| `ft_odds` | No | Decimal FT odds, e.g. `1.50`; stored as basis points (`15000`) |
+| `ht_odds` | No | Decimal HT odds, e.g. `2.10`; stored as basis points (`21000`) |
 | `confidence` | No | `HIGH`, `MEDIUM`, `LOW` — defaults to `MEDIUM` |
+
+A market with no odds falls back to `PAYOUT_MULTIPLIER_BP`. Odds are snapshotted on the bet at placement.
 
 Behaviour:
 
 - **Validation first** — every bad row is rejected with its line number and a readable reason; good rows still import.
-- **Duplicate detection** — fixtures already stored for the date are reported; the upload is refused unless `replace` is checked.
-- **Replace is blocked when bets exist** — money history is never deleted by a re-upload.
-- **Import log** — every upload records admin, date, file name, totals, failures, and whether it replaced.
+- **Duplicate detection** — fixtures already stored for each row's date are reported; the upload is refused unless `replace` is checked.
+- **Replace is blocked when bets or archived results exist** — money history is never deleted by a re-upload.
+- **Delete** — `DELETE /api/v1/admin/matches/{id}` removes a wrongly uploaded match only before kickoff while upcoming/unsettled, and only when it has no bets or archived results. The reason and reviewer are written to `match_delete_log`.
+- **Import log** — one row per date records admin, file name, totals, failures, and whether it replaced.
 - **Visibility** — users only ever see today and tomorrow; later dates are stored and appear when they enter the window.
 
 ### Wallet, bets, and settlement
@@ -1634,7 +1640,7 @@ Money is stored in **cents** (`balance_cents`, `stake_cents`, `payout_cents`); t
 1. Lock the user row (`SELECT … FOR UPDATE`) so two taps cannot overspend.
 2. Check the account is `active` and `access_expires_at` has not passed.
 3. Check the optional daily cap (`MAX_BET_PER_DAY_CENTS`, `0` = off).
-4. Check the match is `upcoming` and kickoff has not passed, and the market is offered.
+4. Check the match is `upcoming` and kickoff has not passed, and the market is offered. Snapshot that market's odds (or the global multiplier).
 5. Reject a second slip on the same user + match + market (`idx_bets_one_per_market`).
 6. Debit the stake, insert the bet, insert a `bet_placed` ledger row, commit.
 
@@ -1644,7 +1650,7 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 
 **Settlement** (`ft_over_0_5` wins when full-time goals ≥ 1; `ht_over_0_5` wins when half-time goals ≥ 1):
 
-- Payout = `stake × PAYOUT_MULTIPLIER_BP / 10000`, credited with a `bet_won` ledger row. The stake was already debited, so this is the full return.
+- Payout = `stake × bet.payout_multiplier_bp / 10000` (the snapshot: that market's odds when present, else `PAYOUT_MULTIPLIER_BP`), credited with a `bet_won` ledger row. The stake was already debited, so this is the full return.
 - Half-time score is required when any bet exists on the HT market.
 - The result is written to `results_archive` and the match is marked `finished` / `settled_at`.
 
@@ -1704,10 +1710,10 @@ All routes are under `/api/v1`. User routes require `Authorization: Bearer <user
 | `POST` | `/api/v1/auth/logout` | Stateless: returns `logged out`; the client discards the token |
 | `GET` | `/api/v1/me` | Current profile |
 | `PUT` | `/api/v1/me` | Update password and/or `profile_pic` (no nickname change) |
-| `GET` | `/api/v1/matches` | Today + tomorrow, with `is_open`, markets, and `preview: true` when an inactive account gets only three |
+| `GET` | `/api/v1/matches` | Today + tomorrow, with `is_open`, `market_odds`, and `preview: true` when an inactive account gets only three |
 | `POST` | `/api/v1/bets` | Place a slip: `match_id`, `market`, `stake_cents` |
 | `GET` | `/api/v1/wallet` | Balance + last 50 ledger entries |
-| `GET` | `/api/v1/history` | User bets for the last 6 months, with scores |
+| `GET` | `/api/v1/history` | User bets for the last 6 months, with scores and `odds_bp` |
 | `GET` | `/api/v1/community/posts?limit=&before=` | Visible posts, newest first; `next_before` is the cursor |
 | `POST` | `/api/v1/community/posts` | Publish text and/or one media item (active accounts only) |
 | `POST` | `/api/v1/community/posts/{id}/react` | `like`, `love`, or `haha`; tapping the current one removes it (active accounts only) |
@@ -1730,9 +1736,10 @@ All routes are under `/api/v1`. User routes require `Authorization: Bearer <user
 | --- | --- | --- |
 | `POST` | `/api/v1/admin/login` | Env-var credentials → admin JWT |
 | `GET` | `/api/v1/admin/me` | Current admin identity |
-| `POST` | `/api/v1/admin/matches/upload` | Multipart: `date`, `file`, optional `replace` |
-| `GET` | `/api/v1/admin/matches?date=YYYY-MM-DD` | All matches for one date, with `settled` and scores |
+| `POST` | `/api/v1/admin/matches/upload` | Multipart: `file`, optional `date` fallback and `replace`; CSV rows carry `date` and odds |
+| `GET` | `/api/v1/admin/matches?date=YYYY-MM-DD` | All matches for one date, with `market_odds`, `settled` and scores |
 | `PUT` | `/api/v1/admin/matches/{id}` | Change `confidence` / `status` |
+| `DELETE` | `/api/v1/admin/matches/{id}` | Delete a wrong upload before kickoff; optional `reason`; blocked if settled, started, or holding bets/results |
 | `GET` | `/api/v1/admin/matches/{id}/bets` | Exposure for one match |
 | `POST` | `/api/v1/admin/matches/{id}/settle` | Record result and settle pending bets; `correct=true` reverses first |
 | `POST` | `/api/v1/admin/matches/{id}/refund` | Refund pending bets; `status` is `postponed` or `cancelled` |

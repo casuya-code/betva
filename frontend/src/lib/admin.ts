@@ -63,6 +63,15 @@ export function money(cents: number): string {
   return (cents / 100).toLocaleString('en-TZ');
 }
 
+// Odds travel as basis points (15000 = 1.50x), the same unit the API uses.
+export function oddsText(bp: number | null | undefined): string {
+  return ((bp || 0) / 10000).toFixed(2);
+}
+
+export function oddsBadge(bp: number | null | undefined): string {
+  return bp && bp > 0 ? `${oddsText(bp)}×` : '—';
+}
+
 export function todayISO(): string {
   const now = new Date();
   // EAT is UTC+3
