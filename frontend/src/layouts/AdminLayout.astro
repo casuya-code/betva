@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import BrandName from '../components/BrandName.astro';
 
 interface Props {
   title?: string;
@@ -31,7 +32,7 @@ const links = [
       <div class="admin-header-inner">
         <a href="/admin" class="admin-brand">
           <span class="admin-logo">B</span>
-          <span>Betva <span class="admin-tag">Admin</span></span>
+          <span><BrandName /> <span class="admin-tag">Admin</span></span>
         </a>
         <nav class="admin-nav">
           {links.map((l) => (
@@ -94,7 +95,7 @@ const links = [
     border-radius: 9px;
     display: grid;
     place-items: center;
-    background: linear-gradient(180deg, var(--brand), var(--brand-2));
+    background: #4285F4;
     color: #fff;
     font-weight: 800;
   }
