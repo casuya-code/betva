@@ -17,6 +17,37 @@
   --danger-strong: #dc2626; /* white text on this passes 4.5:1 */
   --warning: #f59e0b;
   --info: #3b82f6;
+
+  /* ---------------------------------------------------------------
+     Mathematical scale — every size in the UI derives from these.
+     Spacing: 4px base grid (n × 4). Heights land on 44/48/56.
+     Radii: 8 / 12 / 16 / 20 on the same grid, never arbitrary.
+     Type: 1.25 modular ratio rounded to the grid (11 13 16 20 24 30).
+     ---------------------------------------------------------------- */
+  --s1: 4px;  /* hairline gaps, icon-to-text */
+  --s2: 8px;  /* intra-component rhythm */
+  --s3: 12px; /* component padding, stack rhythm */
+  --s4: 16px; /* card padding, page gutter */
+  --s5: 20px; /* button horizontal padding */
+  --s6: 24px; /* section spacing */
+  --s8: 32px; /* large block spacing */
+  --s12: 48px;
+
+  --r-sm: 8px;   /* chips, small cells */
+  --r-md: 12px;  /* buttons, inputs, badges-wrap */
+  --r-lg: 16px;  /* cards, sheets */
+  --r-xl: 20px;  /* bottom sheets */
+  --r-pill: 999px; /* status badges, tabs */
+
+  --t-xs: 11px;  /* meta, table headers */
+  --t-sm: 13px;  /* secondary text */
+  --t-md: 16px;  /* body, inputs (16px stops iOS zoom) */
+  --t-lg: 20px;  /* card titles */
+  --t-xl: 24px;  /* page titles */
+  --t-2xl: 30px; /* hero counters */
+
+  --tap: 44px;   /* minimum touch target (WCAG 2.5.5) */
+  --control: 48px; /* standard form control height */
 }
 
 html, body {
@@ -64,22 +95,27 @@ body::before {
   border-radius: 12px;
 }
 
-/* buttons */
+/* buttons — every variant shares one metric frame: 44px height, 20px
+   horizontal padding, 12px radius, 8px internal gap. Height is set, not
+   padded, so multi-line labels still centre exactly. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 12px 20px;
-  border-radius: 12px;
+  gap: var(--s2);
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0 var(--s5);
+  border-radius: var(--r-md);
   font-weight: 600;
   font-size: 15px;
+  line-height: 1;
+  text-align: center;
   border: none;
   cursor: pointer;
   transition: transform 150ms cubic-bezier(0.4,0,0.2,1), box-shadow 150ms cubic-bezier(0.4,0,0.2,1), opacity 150ms;
   user-select: none;
+  white-space: nowrap;
 }
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -101,15 +137,18 @@ body::before {
 .btn-danger:hover { filter: brightness(1.1); }
 .card { transition: border-color 150ms; }
 
-/* inputs */
+/* inputs — 48px control height on the 4-grid, 16px font (no iOS zoom),
+   16px radius matched to the button frame. */
 .input {
   width: 100%;
-  padding: 16px;
-  border-radius: 12px;
+  min-height: var(--control);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
-  font-size: 16px;
+  font-size: var(--t-md);
+  font-family: inherit;
   outline: none;
   transition: border-color 150ms, box-shadow 150ms;
 }
@@ -135,14 +174,15 @@ label:has(> input[type="radio"]) {
   cursor: pointer;
 }
 
-/* status badges */
+/* status badges — 24px pill on the 4-grid (4px padding, 12px font). */
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
+  gap: var(--s1);
+  padding: var(--s1) var(--s3);
+  border-radius: var(--r-pill);
+  font-size: var(--t-xs);
+  line-height: 1;
   font-weight: 600;
   border: 1px solid;
   white-space: nowrap;
@@ -254,7 +294,8 @@ label:has(> input[type="radio"]) {
 .stack > * + * { margin-top: 12px; }
 .gap-4 { gap: 16px; }
 
-/* admin tables (shared by community and notifications pages) */
+/* admin tables (shared by community and notifications pages) — cell rhythm
+   sits on the 4-grid: 12px vertical, 12px horizontal, 14px text. */
 .admin-table {
   width: 100%;
   border-collapse: separate;
@@ -263,7 +304,7 @@ label:has(> input[type="radio"]) {
 }
 .admin-table th,
 .admin-table td {
-  padding: 10px 12px;
+  padding: var(--s3) var(--s3);
   vertical-align: top;
 }
 .admin-table thead th {
@@ -282,7 +323,7 @@ label:has(> input[type="radio"]) {
 }
 .admin-table tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
 .admin-table tbody tr:last-child td { border-bottom: 0; }
-.admin-table .admin-reason { padding: 8px 10px; font-size: 12px; min-height: 36px; }
+.admin-table .admin-reason { padding: var(--s2) var(--s3); font-size: 12px; min-height: 36px; }
 /* Fixed height keeps every action button in a row visually aligned. */
 .admin-table .btn {
   height: 44px;
@@ -355,9 +396,9 @@ a:focus-visible,
 
 /* Compact select used inside admin tables. */
 .admin-select {
-  padding: 8px 10px;
+  padding: var(--s2) var(--s3);
   font-size: 13px;
-  min-height: 44px;
+  min-height: var(--tap);
   width: auto;
 }
 
@@ -370,6 +411,21 @@ a:focus-visible,
   max-width: 420px;
 }
 
+/* ---------------------------------------------------------------------
+   Page frame — shared gutters so every route aligns on the same grid.
+   16px gutter on phones, 24px from 640px, content centred per page.
+   --------------------------------------------------------------------- */
+.page-frame {
+  width: 100%;
+  padding: var(--s4) var(--s4) calc(var(--s6) + 72px + env(safe-area-inset-bottom));
+}
+@media (min-width: 640px) {
+  .page-frame { padding-inline: var(--s6); }
+}
+
+/* Section rhythm: one rule for vertical spacing between blocks. */
+.section-gap > * + * { margin-top: var(--s6); }
+
 /* guardrail banners */
 .nudge {
   position: fixed;
@@ -381,8 +437,8 @@ a:focus-visible,
   margin: 0 auto;
   background: #10161d;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px 16px;
+  border-radius: var(--r-lg);
+  padding: var(--s4);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
 .nudge.hidden { display: none; }
