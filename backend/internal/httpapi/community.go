@@ -45,14 +45,30 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 		       to_char(p.created_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI'),
 		       p.created_at, p.user_id, u.nickname, COALESCE(u.profile_pic, ''),
 		       (p.user_id = $1),
-		       EXISTS (SELECT 1 FROM post_reports pr WHERE pr.post_id = p.id AND pr.reporter_id = $1),
-		       (SELECT COUNT(*) FROM post_reports pr WHERE pr.post_id = p.id),
-		       (SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = p.id AND pr.reaction = 'like'),
-		       (SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = p.id AND pr.reaction = 'love'),
-		       (SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = p.id AND pr.reaction = 'haha'),
-		       COALESCE((SELECT pr.reaction FROM post_reactions pr WHERE pr.post_id = p.id AND pr.user_id = $1), '')
+		       COALESCE(ur.reported, false),
+		       COALESCE(rc.report_count, 0),
+		       COALESCE(rx.likes, 0), COALESCE(rx.loves, 0), COALESCE(rx.hahas, 0),
+		       COALESCE(my.reaction, '')
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
+		LEFT JOIN LATERAL (
+			SELECT COUNT(*)::int AS report_count FROM post_reports pr WHERE pr.post_id = p.id
+		) rc ON true
+		LEFT JOIN LATERAL (
+			SELECT
+				COUNT(*) FILTER (WHERE reaction = 'like')::int AS likes,
+				COUNT(*) FILTER (WHERE reaction = 'love')::int AS loves,
+				COUNT(*) FILTER (WHERE reaction = 'haha')::int AS hahas
+			FROM post_reactions pr WHERE pr.post_id = p.id
+		) rx ON true
+		LEFT JOIN LATERAL (
+			SELECT EXISTS(
+				SELECT 1 FROM post_reports pr WHERE pr.post_id = p.id AND pr.reporter_id = $1
+			) AS reported
+		) ur ON true
+		LEFT JOIN LATERAL (
+			SELECT reaction FROM post_reactions pr WHERE pr.post_id = p.id AND pr.user_id = $1 LIMIT 1
+		) my ON true
 		WHERE p.status = 'visible'
 		  AND ($2::timestamptz IS NULL OR p.created_at < $2)
 		ORDER BY p.created_at DESC
@@ -453,12 +469,16 @@ func (s *Server) handleAdminCommunityPosts(w http.ResponseWriter, r *http.Reques
 		SELECT p.id, p.body, COALESCE(p.media_url, ''), COALESCE(p.media_type, ''), p.status,
 		       COALESCE(p.moderation_reason, ''), p.user_id, u.nickname, u.phone,
 		       to_char(p.created_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI'),
-		       (SELECT COUNT(*) FROM post_reports pr WHERE pr.post_id = p.id),
-		       (SELECT COUNT(*) FROM post_reports pr WHERE pr.post_id = p.id AND pr.resolved_at IS NULL)
+		       COALESCE(rc.report_count, 0),
+		       COALESCE(rc.open_reports, 0)
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
-		WHERE ($1 = '' OR p.status = $1 OR ($1 = 'reported' AND EXISTS (
-			SELECT 1 FROM post_reports pr WHERE pr.post_id = p.id AND pr.resolved_at IS NULL)))
+		LEFT JOIN LATERAL (
+			SELECT COUNT(*)::int AS report_count,
+			       COUNT(*) FILTER (WHERE resolved_at IS NULL)::int AS open_reports
+			FROM post_reports pr WHERE pr.post_id = p.id
+		) rc ON true
+		WHERE ($1 = '' OR p.status = $1 OR ($1 = 'reported' AND COALESCE(rc.open_reports, 0) > 0))
 		ORDER BY p.created_at DESC
 		LIMIT $2
 	`, status, limit)

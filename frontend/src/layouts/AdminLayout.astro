@@ -64,9 +64,12 @@ const links = [
     <script>
       const pre = document.getElementById('page-preloader');
       const hidePre = () => pre?.classList.add('is-hidden');
-      if (document.readyState === 'complete') hidePre();
-      else window.addEventListener('load', hidePre, { once: true });
-      setTimeout(hidePre, 2500);
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', hidePre, { once: true });
+      } else {
+        hidePre();
+      }
+      setTimeout(hidePre, 1200);
 
       document.getElementById('adminLogout')?.addEventListener('click', () => {
         localStorage.removeItem('betva_admin_token');
