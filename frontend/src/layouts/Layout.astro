@@ -33,6 +33,9 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href={API} crossorigin />
+    <link rel="dns-prefetch" href={API} />
+    <link rel="preload" as="fetch" href={`${API}/api/v1/config`} crossorigin />
     <title>{title}</title>
   </head>
   <body>

@@ -86,5 +86,10 @@
     })();
   }
 
-  document.querySelectorAll<HTMLElement>('[data-track-record]').forEach(mountTrackRecord);
+  const mount = () => document.querySelectorAll<HTMLElement>('[data-track-record]').forEach(mountTrackRecord);
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(mount, { timeout: 1500 });
+  } else {
+    setTimeout(mount, 0);
+  }
 </script>

@@ -30,13 +30,16 @@ const links = [
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="preconnect" href={API} crossorigin />
+    <link rel="dns-prefetch" href={API} />
+    <link rel="preload" as="fetch" href={`${API}/api/v1/config`} crossorigin />
     <title>{title}</title>
   </head>
   <body>
     <header class="admin-header">
       <div class="admin-header-inner">
         <a href="/admin" class="admin-brand">
-          <img src="/favicon.svg" alt="" class="admin-logo" width="30" height="30" />
+          <img src="/favicon.svg" alt="" class="admin-logo" width="30" height="30" decoding="async" />
           <span><BrandName /> <span class="admin-tag">Admin</span></span>
         </a>
         <nav class="admin-nav">

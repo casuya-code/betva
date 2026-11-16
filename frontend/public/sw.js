@@ -1,8 +1,51 @@
-/* Betva service worker: Web Push and notification clicks.
-   Payload is title + short body + link, a few hundred bytes. No images. */
+/* Betva service worker: Web Push, notification clicks, and a small
+   runtime cache for same-origin static assets (JS/CSS/images/fonts).
+   HTML is never cached, so deploys always reach users. */
+const CACHE_NAME = 'betva-static-v1';
+const ASSET_RE = /\.(?:js|css|svg|png|jpe?g|webp|avif|ico|woff2?|webmanifest)$/i;
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)));
+      await self.clients.claim();
+    })()
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  let url;
+  try {
+    url = new URL(req.url);
+  } catch {
+    return;
+  }
+  if (url.origin !== self.location.origin) return;
+  if (!ASSET_RE.test(url.pathname)) return;
+
+  event.respondWith(
+    (async () => {
+      const cached = await caches.match(req);
+      if (cached) return cached;
+      try {
+        const res = await fetch(req);
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      } catch {
+        return cached || Response.error();
+      }
+    })()
+  );
+});
 
 self.addEventListener('push', (event) => {
   let data = {};

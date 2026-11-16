@@ -77,7 +77,7 @@ import Layout from '../layouts/Layout.astro';
           localStorage.setItem('betva_session_start', String(Date.now()));
           msg.textContent = 'Account created. Redirecting...';
           msg.className = 'mt-4 text-center text-sm text-green-400';
-          setTimeout(() => (window.location.href = '/'), 800);
+          window.location.href = '/';
         } else {
           msg.textContent = data.error || 'Registration failed';
           msg.className = 'mt-4 text-center text-sm text-red-400';

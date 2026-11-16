@@ -171,7 +171,7 @@ import Layout from '../layouts/Layout.astro';
     function postHtml(p: Post): string {
       const initial = esc((p.nickname || '?').slice(0, 1).toUpperCase());
       const avatar = p.profile_pic
-        ? `<img src="${esc(p.profile_pic)}" alt="" class="w-10 h-10 rounded-full object-cover" />`
+        ? `<img src="${esc(p.profile_pic)}" alt="" class="w-10 h-10 rounded-full object-cover" loading="lazy" decoding="async" />`
         : `<div class="w-10 h-10 rounded-full bg-[var(--brand)] text-white grid place-items-center font-semibold">${initial}</div>`;
 
       return `

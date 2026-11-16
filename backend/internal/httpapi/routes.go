@@ -14,9 +14,10 @@ import (
 )
 
 type Server struct {
-	Cfg  *config.Config
-	Pool *pgxpool.Pool
-	RDB  *redis.Client
+	Cfg   *config.Config
+	Pool  *pgxpool.Pool
+	RDB   *redis.Client
+	Media *mediaStore
 
 	// Rate limiters. In-memory and per-process; see ratelimit.go.
 	loginIP       *RateLimiter
@@ -30,6 +31,7 @@ type Server struct {
 	// Daily-active-user tracking: per-day in-memory seen set, backed by the
 	// append-only activity_days table.
 	actMu   sync.Mutex
+	actDay  string
 	actSeen map[string]bool
 }
 
@@ -38,6 +40,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 		Cfg:           cfg,
 		Pool:          pool,
 		RDB:           rdb,
+		Media:         newMediaStore(cfg),
 		loginIP:       NewRateLimiter(60, 5*time.Minute),
 		loginPhone:    NewRateLimiter(10, 15*time.Minute),
 		registerIP:    NewRateLimiter(30, time.Hour),

@@ -318,6 +318,8 @@ label:has(> input[type="radio"]) {
   border-radius: var(--r-lg);
   box-shadow: 0 4px 24px rgba(0,0,0,0.3);
   padding: var(--s4);
+  /* Reduce layout/paint work for off-screen cards. */
+  contain: layout paint;
 }
 
 /* counter */

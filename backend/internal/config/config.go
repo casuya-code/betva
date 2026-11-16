@@ -35,6 +35,14 @@ type Config struct {
 	MaxImageBytes int64
 	MaxVideoBytes int64
 
+	// Optional Cloudflare R2 storage for media. When all are set, uploads go
+	// to R2 and the returned URL points at R2; otherwise MEDIA_DIR on disk.
+	R2AccountID       string
+	R2AccessKeyID     string
+	R2SecretAccessKey string
+	R2MediaBucket     string
+	R2MediaPublicBase string
+
 	// Push notifications.
 	VAPIDPublicKey  string
 	VAPIDPrivateKey string
@@ -94,6 +102,12 @@ func Load() *Config {
 		MediaDir:      getEnv("MEDIA_DIR", "media"),
 		MaxImageBytes: int64(Atoi(getEnv("MAX_IMAGE_BYTES", "400000"), 400000)),
 		MaxVideoBytes: int64(Atoi(getEnv("MAX_VIDEO_BYTES", "3000000"), 3000000)),
+
+		R2AccountID:       getEnv("R2_ACCOUNT_ID", ""),
+		R2AccessKeyID:     os.Getenv("R2_ACCESS_KEY_ID"),
+		R2SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY"),
+		R2MediaBucket:     os.Getenv("R2_MEDIA_BUCKET"),
+		R2MediaPublicBase: getEnv("R2_MEDIA_PUBLIC_URL", ""),
 
 		VAPIDPublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
 		VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),

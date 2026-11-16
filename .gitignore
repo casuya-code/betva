@@ -11,6 +11,9 @@ backend/vendor/
 frontend/node_modules/
 frontend/dist/
 frontend/.astro/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 # General
 .DS_Store

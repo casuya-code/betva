@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -346,22 +344,34 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is too large"})
 		return
 	}
-	file, header, err := r.FormFile("file")
+	file, _, err := r.FormFile("file")
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is required"})
 		return
 	}
 	defer file.Close()
 
-	// Sniff from the bytes, never trust the client's Content-Type.
-	head := make([]byte, 512)
-	n, err := io.ReadFull(file, head)
-	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+	// Read the whole upload into memory (max 3 MB) so we can sniff, size-check,
+	// and stream it to either disk or R2 without juggling partial readers.
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "could not read file"})
 		return
 	}
-	head = head[:n]
-	mime := http.DetectContentType(head)
+	if len(data) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is required"})
+		return
+	}
+	if int64(len(data)) > maxBytes {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is too large"})
+		return
+	}
+
+	// Sniff from the bytes, never trust the client's Content-Type.
+	mime := http.DetectContentType(data)
+	if len(data) < 512 {
+		// DetectContentType handles short slices; keep data as-is.
+	}
 
 	ext, mediaType := "", ""
 	switch mime {
@@ -388,17 +398,12 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	if mediaType == "video" {
 		limit = s.Cfg.MaxVideoBytes
 	}
-	if header.Size > limit {
+	if int64(len(data)) > limit {
 		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
 			"error":      "file is too large",
 			"max_bytes":  limit,
 			"media_type": mediaType,
 		})
-		return
-	}
-
-	if err := os.MkdirAll(s.Cfg.MediaDir, 0o755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "media storage unavailable"})
 		return
 	}
 
@@ -408,25 +413,17 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := hex.EncodeToString(raw) + ext
-	dst, err := os.Create(filepath.Join(s.Cfg.MediaDir, name))
+
+	url, err := s.Media.store(r.Context(), name, data, mime)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "media storage unavailable"})
 		return
 	}
-	defer dst.Close()
-
-	// Replay the sniffed bytes, then stream the rest, all bounded by limit.
-	written, err := io.Copy(dst, io.MultiReader(strings.NewReader(string(head)), io.LimitReader(file, limit+1)))
-	if err != nil || written > limit {
-		_ = os.Remove(filepath.Join(s.Cfg.MediaDir, name))
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is too large"})
-		return
-	}
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"url":        "/media/" + name,
+		"url":        url,
 		"media_type": mediaType,
-		"bytes":      written,
+		"bytes":      len(data),
 		"by":         u.ID,
 	})
 }

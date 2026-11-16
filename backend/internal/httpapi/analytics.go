@@ -19,16 +19,15 @@ func (s *Server) trackActivity(userID string) {
 		return
 	}
 	key := time.Now().In(eatZone).Format("2006-01-02") + ":" + userID
+	day := key[:10]
 
 	s.actMu.Lock()
-	if s.actSeen == nil {
+	if s.actDay != day {
+		s.actDay = day
 		s.actSeen = make(map[string]bool)
 	}
-	// The map only ever holds keys for today; flush older days lazily.
-	for k := range s.actSeen {
-		if k[:10] != key[:10] {
-			delete(s.actSeen, k)
-		}
+	if s.actSeen == nil {
+		s.actSeen = make(map[string]bool)
 	}
 	if s.actSeen[key] {
 		s.actMu.Unlock()

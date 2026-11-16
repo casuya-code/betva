@@ -194,7 +194,7 @@ Railway API — Config-as-Code is deprecated.
 | `BACKUP_R2_REGION` | `auto` |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | R2 credentials (stored locally in `backend/.env.r2.local`, untracked) |
 
-API credentials and R2 credentials are on the `backup` service only; `api` has neither.
+API backup credentials and R2 backup credentials are on the `backup` service only. The `api` service needs separate R2 **media** credentials only when community uploads are stored in R2 (see below).
 
 ### Operating the job
 
@@ -260,14 +260,18 @@ every name.
 | `CORS_ORIGINS` | Vercel alias + localhost | Exact origins only |
 | `ACCESS_FEE_CENTS` | `500000` | 5,000 TZS flat monthly rate |
 | `PAYOUT_MULTIPLIER_BP` | `15000` | 1.50× return on a win |
-| `MEDIA_DIR` | `/data/media` | Railway volume |
+| `MEDIA_DIR` | `/data/media` | Railway volume (local fallback and legacy uploads) |
+| `R2_ACCOUNT_ID` | `de02bd0e1be4fc699d9003ad1eae5e2f` | Set to store new media in R2 |
+| `R2_MEDIA_BUCKET` | `media` | Bucket for community uploads (public access enabled) |
+| `R2_MEDIA_PUBLIC_URL` | `https://pub-38c751940ed148e4acbf1a55f886fca1.r2.dev` | Public bucket/domain URL |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | S3 API token for the media bucket | **Required for R2 uploads**; create in R2 → Manage R2 API Tokens (Object Read & Write). Not the Cloudflare bearer token. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | from the operator's local `.env` | Push enabled |
 | `PUSH_DAILY_CAP` | `2` | Enforced server-side |
 | `QUIET_START_HOUR` / `QUIET_END_HOUR` | `22` / `7` | EAT |
 | `GROQ_API_KEY` | set 2026-11-16 | AI suggestions enabled; never logged or returned to clients |
 | `ACCESS_FEE_DAU_TARGET` / `MONTHLY_OPERATING_COST_CENTS` | **not set** | Fee planner shows unconfigured |
 
-`REDIS_URL` is not set; the connection failure is non-fatal.
+`REDIS_URL` is not set; the connection failure is non-fatal. When the R2 media variables are all set, uploads go to R2 and posts store the public URL; `/media/*` on the API still serves legacy local files.
 
 ### Vercel (`betva`)
 
@@ -344,8 +348,9 @@ The public TCP proxy used for the drill was deleted immediately afterwards.
 
 Launch blockers or follow-ups, in order:
 
-1. **Cloudflare is not configured.** No WAF, no edge cache in Dar es Salaam/Mombasa, no
-   R2 media. The Vercel alias and Railway API are public directly.
+1. **Cloudflare is not fully configured.** No WAF, no edge cache in Dar es Salaam/Mombasa
+   (needs a custom domain), and the Vercel alias/Railway API are public directly. R2
+   **media uploads** are now supported in code when `R2_*` media env vars are set on `api`.
 2. **RPO is up to 24 hours.** Daily off-site dumps are live (section 4), but Railway
    managed volume backups and point-in-time recovery are Pro-only and this workspace is
    Hobby. Near-zero RPO for wallets needs Pro PITR or a WAL-shipping setup. Media on the
