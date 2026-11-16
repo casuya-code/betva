@@ -127,6 +127,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         reason = input;
       }
 
+      // The API status vocabulary is active/inactive/suspended/banned; the
+      // "Activate" button's action label maps to "active".
+      const status = action === 'activate' ? 'active' : action;
       btn.disabled = true;
       const oldText = btn.textContent;
       btn.textContent = '…';
@@ -134,7 +137,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         const res = await adminFetch(`/api/v1/admin/users/${id}/status`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: action, days, reason }),
+          body: JSON.stringify({ status, days, reason }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));

@@ -35,7 +35,6 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preconnect" href={API} crossorigin />
     <link rel="dns-prefetch" href={API} />
-    <link rel="preload" as="fetch" href={`${API}/api/v1/config`} crossorigin />
     <title>{title}</title>
   </head>
   <body>
