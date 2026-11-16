@@ -95,7 +95,7 @@ import BrandName from '../components/BrandName.astro';
   </div>
 
   <script>
-    import { API, getToken, authFetch, esc, money, toast, MARKET_LABEL } from '../lib/api';
+    import { API, getToken, authFetch, esc, money, toast, MARKET_LABEL, fetchConfig } from '../lib/api';
     import { maybeAskPush } from '../lib/push';
 
     type BetConfig = { stake_tiers_cents: number[]; payout_multiplier_bp: number };
@@ -123,8 +123,7 @@ import BrandName from '../components/BrandName.astro';
 
     async function loadConfig() {
       try {
-        const res = await fetch(`${API}/api/v1/config`);
-        config = await res.json().catch(() => ({}));
+        config = await fetchConfig();
       } catch {
         /* keep defaults */
       }

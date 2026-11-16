@@ -15,6 +15,74 @@ function resolveApiBase(): string {
 export const API: string = resolveApiBase();
 if (typeof window !== 'undefined') (window as any).BETVA_API = API;
 
+// Cache the public config (stake tiers, markets, payment number, fee) so pages
+// render instantly on repeat visits and on slow connections. The cache is
+// refreshed in the background; nothing user-specific lives in it.
+const CONFIG_CACHE_KEY = 'betva_config_cache';
+const CONFIG_TTL_MS = 60 * 60 * 1000;
+
+let configCache: any = null;
+let configPromise: Promise<any> | null = null;
+
+function readCachedConfig(): any | null {
+  if (configCache) return configCache;
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(CONFIG_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || !parsed.t || Date.now() - parsed.t > CONFIG_TTL_MS) return null;
+    configCache = parsed.v;
+    return configCache;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchConfig(): Promise<any> {
+  const cached = readCachedConfig();
+  if (cached) {
+    // Refresh in the background without blocking the caller.
+    if (!configPromise) {
+      configPromise = fetch(`${API}/api/v1/config`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d) {
+            configCache = d;
+            try {
+              localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ v: d, t: Date.now() }));
+            } catch {
+              /* quota or private mode */
+            }
+          }
+          return d;
+        })
+        .catch(() => null)
+        .finally(() => {
+          configPromise = null;
+        });
+    }
+    return cached;
+  }
+  if (configPromise) return configPromise;
+  configPromise = fetch(`${API}/api/v1/config`)
+    .then((r) => (r.ok ? r.json() : {}))
+    .then((d) => {
+      configCache = d;
+      try {
+        localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ v: d, t: Date.now() }));
+      } catch {
+        /* quota or private mode */
+      }
+      return d;
+    })
+    .catch(() => ({}))
+    .finally(() => {
+      configPromise = null;
+    });
+  return configPromise;
+}
+
 const TOKEN_KEY = 'betva_token';
 
 export function getToken(): string | null {

@@ -329,6 +329,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 // Only user-facing values live here: the admin's DAU target and running-cost
 // figures stay behind the admin analytics endpoint.
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=300")
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"stake_tiers_cents":    s.Cfg.StakeTiers,
 		"payout_multiplier_bp": s.Cfg.PayoutMultiplier,

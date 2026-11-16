@@ -67,7 +67,7 @@ import Layout from '../layouts/Layout.astro';
     import { API } from '../lib/api';
     fetch(`${API}/api/v1/config`)
       .then((res) => (res.ok ? res.json() : {}))
-      .then((cfg) => {
+      .then((cfg: any) => {
         if (cfg.payment_number) {
           const n = document.getElementById('terms-number');
           if (n) n.textContent = String(cfg.payment_number);

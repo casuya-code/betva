@@ -127,7 +127,7 @@ import TrackRecord from '../components/TrackRecord.astro';
   </div>
 
   <script>
-    import { API, authFetch, esc, money, clearToken, toast } from '../lib/api';
+    import { authFetch, esc, money, clearToken, toast, fetchConfig } from '../lib/api';
     import { enablePush, pushSupported } from '../lib/push';
 
     const statusClass: Record<string, string> = {
@@ -146,15 +146,8 @@ import TrackRecord from '../components/TrackRecord.astro';
     };
 
     async function loadFee() {
-      // The flat rate the admin set. Users see only the rate — never the
-      // admin's targets, costs, or planning figures.
       try {
-        const res = await fetch(`${API}/api/v1/config`);
-        const cfg = await res.json().catch(() => ({}));
-        const numberEl = document.getElementById('admin-number');
-        if (numberEl && cfg.payment_number) numberEl.textContent = String(cfg.payment_number);
-        const nameEl = document.getElementById('payment-name');
-        if (nameEl) nameEl.textContent = cfg.payment_name ? `Pay only ${String(cfg.payment_name)}` : '';
+        const cfg = await fetchConfig();
         const feeEl = document.getElementById('access-fee');
         const noteEl = document.getElementById('access-fee-note');
         if (!feeEl) return;
@@ -165,6 +158,10 @@ import TrackRecord from '../components/TrackRecord.astro';
           feeEl.textContent = 'Ask the admin';
           if (noteEl) noteEl.textContent = 'rate not published yet';
         }
+        const numberEl = document.getElementById('admin-number');
+        if (numberEl && cfg.payment_number) numberEl.textContent = String(cfg.payment_number);
+        const nameEl = document.getElementById('payment-name');
+        if (nameEl) nameEl.textContent = cfg.payment_name ? `Pay only ${String(cfg.payment_name)}` : '';
       } catch {
         /* keep the placeholder */
       }
