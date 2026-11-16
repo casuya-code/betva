@@ -23,7 +23,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 	if err := os.MkdirAll(cfg.MediaDir, 0o755); err != nil {
 		log.Printf("media dir: %v", err)
 	}
-	r.Handle("/media/*", http.StripPrefix("/media/", http.FileServer(http.Dir(cfg.MediaDir))))
+	r.Handle("/media/*", http.StripPrefix("/media/", mediaCache(http.FileServer(http.Dir(cfg.MediaDir)))))
 
 	r.Get("/health", s.handleHealth)
 
@@ -102,6 +102,16 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"ok","service":"betva-api"}`))
+}
+
+// mediaCache marks uploaded media as immutable for a year. Uploads are stored
+// under content-hash filenames, so the same URL never changes content — phones
+// on slow networks should never re-download an image they already have.
+func mediaCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handlePing(w http.ResponseWriter, _ *http.Request) {

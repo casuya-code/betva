@@ -40,6 +40,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(httpapi.CORSMiddleware(cfg.CORSOrigins))
+	r.Use(middleware.Compress(5))
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
