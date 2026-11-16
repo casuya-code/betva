@@ -25,13 +25,16 @@ const links = [
     <meta name="description" content="Betva administration: matches, users, community moderation, and notifications." />
     <meta name="theme-color" content="#0b0f14" />
     <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
     <title>{title}</title>
   </head>
   <body>
     <header class="admin-header">
       <div class="admin-header-inner">
         <a href="/admin" class="admin-brand">
-          <span class="admin-logo">B</span>
+          <img src="/favicon.svg" alt="" class="admin-logo" width="30" height="30" />
           <span><BrandName /> <span class="admin-tag">Admin</span></span>
         </a>
         <nav class="admin-nav">
@@ -93,11 +96,8 @@ const links = [
     width: 30px;
     height: 30px;
     border-radius: 9px;
-    display: grid;
-    place-items: center;
-    background: #4285F4;
-    color: #fff;
-    font-weight: 800;
+    display: block;
+    flex: none;
   }
   .admin-tag {
     font-size: 11px;
