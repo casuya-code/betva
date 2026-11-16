@@ -33,6 +33,8 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		u := &AuthUser{ID: claims.Subject, Phone: claims.Phone, IsAdmin: claims.IsAdmin}
+		// DAU record: one write per user per EAT day, app-only table.
+		s.trackActivity(claims.Subject)
 		ctx := context.WithValue(r.Context(), userCtxKey, u)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

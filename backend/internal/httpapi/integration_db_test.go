@@ -154,6 +154,54 @@ func jsonMap(t *testing.T, w *httptest.ResponseRecorder) map[string]interface{} 
 	return out
 }
 
+func TestIntegration_Analytics(t *testing.T) {
+	pool, cleanup := openIntegrationPool(t)
+	defer cleanup()
+	s := dbTestServer(pool)
+	ctx := context.Background()
+
+	// Two users active today, one yesterday.
+	ids := make([]string, 0, 2)
+	for i := 0; i < 2; i++ {
+		var id string
+		phone := "+25573" + fmt.Sprintf("%07d", time.Now().UnixNano()%1e7)
+		if err := pool.QueryRow(ctx, `
+			INSERT INTO users (nickname, phone, official_name, password_hash, status, balance_cents)
+			VALUES ('dau', $1, 'DAU Tester', 'x', 'active', 0) RETURNING id
+		`, phone).Scan(&id); err != nil {
+			t.Fatalf("seed user: %v", err)
+		}
+		ids = append(ids, id)
+		s.trackActivity(id)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO activity_days (user_id, day)
+		VALUES ($1, ((NOW() AT TIME ZONE 'Africa/Dar_es_Salaam')::date - 1))
+		ON CONFLICT DO NOTHING
+	`, ids[0]); err != nil {
+		t.Fatalf("seed yesterday: %v", err)
+	}
+
+	w := doReq(s.handleAdminAnalytics, httptest.NewRequest("GET", "/api/v1/admin/analytics?days=7", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("analytics code=%d body=%s", w.Code, w.Body.String())
+	}
+	out := jsonMap(t, w)
+	if dau, _ := out["dau_today"].(float64); dau < 2 {
+		t.Fatalf("dau_today=%v want >=2", out["dau_today"])
+	}
+	if total, _ := out["users_total"].(float64); total < 2 {
+		t.Fatalf("users_total=%v want >=2", out["users_total"])
+	}
+	days, _ := out["days"].([]interface{})
+	if len(days) != 7 {
+		t.Fatalf("days=%d want 7", len(days))
+	}
+	if fp, _ := out["fee_plan"].(map[string]interface{}); fp == nil {
+		t.Fatal("missing fee_plan")
+	}
+}
+
 func TestIntegration_RegisterLogin(t *testing.T) {
 	pool, cleanup := openIntegrationPool(t)
 	defer cleanup()

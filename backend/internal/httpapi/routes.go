@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/betva/backend/internal/config"
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,11 @@ type Server struct {
 	Cfg  *config.Config
 	Pool *pgxpool.Pool
 	RDB  *redis.Client
+
+	// Daily-active-user tracking: per-day in-memory seen set, backed by the
+	// append-only activity_days table.
+	actMu   sync.Mutex
+	actSeen map[string]bool
 }
 
 func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Client) {
@@ -86,6 +92,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			adm.Get("/users", s.handleAdminListUsers)
 			adm.Put("/users/{id}/status", s.handleAdminUpdateUserStatus)
 			adm.Post("/users/{id}/credit", s.handleAdminCredit)
+			adm.Get("/analytics", s.handleAdminAnalytics)
 
 			adm.Get("/community/posts", s.handleAdminCommunityPosts)
 			adm.Put("/community/posts/{id}/status", s.handleAdminModeratePost)

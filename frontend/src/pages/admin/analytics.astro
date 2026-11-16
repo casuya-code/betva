@@ -1,0 +1,184 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+---
+<AdminLayout title="Betva Admin — Analytics" active="analytics">
+  <div class="space-y-5">
+    <div>
+      <h1 class="text-2xl font-bold">Analytics</h1>
+      <p class="text-sm text-[var(--text-2)]">
+        Daily active users (EAT days) and the access-fee planner for the monthly contribution decision.
+      </p>
+    </div>
+
+    <div class="glass-el p-3 text-sm text-[var(--text-2)]">
+      <strong class="text-[var(--text)]">How it works:</strong>
+      every signed-in user is counted once per day, on their first request of that EAT day.
+      The record is append-only and is never edited, so it can back financial decisions.
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="card">
+        <div class="text-xs text-[var(--text-3)]">DAU today</div>
+        <div class="text-2xl font-bold counter" id="a-today">—</div>
+        <div class="text-xs text-[var(--text-3)]">active users</div>
+      </div>
+      <div class="card">
+        <div class="text-xs text-[var(--text-3)]">7-day average</div>
+        <div class="text-2xl font-bold counter" id="a-avg">—</div>
+        <div class="text-xs text-[var(--text-3)]">per day</div>
+      </div>
+      <div class="card">
+        <div class="text-xs text-[var(--text-3)]">Peak</div>
+        <div class="text-2xl font-bold counter" id="a-peak">—</div>
+        <div class="text-xs text-[var(--text-3)]">in the window</div>
+      </div>
+      <div class="card">
+        <div class="text-xs text-[var(--text-3)]">Users</div>
+        <div class="text-2xl font-bold counter" id="a-total">—</div>
+        <div class="text-xs text-[var(--text-3)]"><span id="a-new-today">—</span> new today</div>
+      </div>
+    </div>
+
+    <!-- DAU chart -->
+    <section class="card space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h2 class="font-semibold">Daily active users</h2>
+        <span class="text-xs text-[var(--text-3)]" id="a-window">last 30 days</span>
+      </div>
+      <div id="chart" class="dau-chart" role="img" aria-label="Bar chart of daily active users"></div>
+      <div id="chart-labels" class="flex justify-between text-[10px] text-[var(--text-3)]"></div>
+    </section>
+
+    <!-- Day table -->
+    <section class="card">
+      <h2 class="font-semibold mb-3">Day by day</h2>
+      <div class="overflow-x-auto">
+        <table class="admin-table">
+          <thead>
+            <tr><th>Day</th><th>Active</th><th>New users</th></tr>
+          </thead>
+          <tbody id="day-rows">
+            <tr><td colspan="3">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Access-fee planner -->
+    <section class="card space-y-3">
+      <h2 class="font-semibold">Access-fee planner</h2>
+      <p class="text-sm text-[var(--text-2)]">
+        When DAU reaches the target, this suggests the monthly contribution per user that covers the
+        running costs: <em>monthly cost ÷ users, rounded up to whole 500 TZS steps</em>.
+        The final amount is always the admin's decision — set the two inputs with
+        <code class="text-xs">ACCESS_FEE_DAU_TARGET</code> and
+        <code class="text-xs">MONTHLY_OPERATING_COST_CENTS</code> environment variables.
+      </p>
+      <div id="fee" class="text-sm text-[var(--text-2)]">Loading…</div>
+    </section>
+  </div>
+
+  <script>
+    import { adminFetch, esc, money, requireAdmin } from '../../lib/admin';
+
+    if (requireAdmin()) load();
+
+    async function load() {
+      try {
+        const res = await adminFetch('/api/v1/admin/analytics?days=30');
+        if (!res.ok) return;
+        const d = await res.json().catch(() => ({}));
+        setText('a-today', String(d.dau_today ?? 0));
+        setText('a-avg', String(d.dau_avg_7d ?? 0));
+        setText('a-peak', String(d.dau_peak ?? 0));
+        setText('a-total', String(d.users_total ?? 0));
+        setText('a-new-today', String(d.users_new_today ?? 0));
+
+        renderChart(d.days || []);
+        renderTable(d.days || []);
+        renderFee(d.fee_plan || {});
+      } catch {
+        /* adminFetch redirects on auth failure */
+      }
+    }
+
+    function renderChart(days: any[]) {
+      const el = document.getElementById('chart')!;
+      const max = Math.max(1, ...days.map((x: any) => x.dau));
+      el.innerHTML = days
+        .map((x: any) => {
+          const h = Math.max(2, Math.round((x.dau / max) * 100));
+          const isToday = x.dau > 0 ? '' : ' dau-zero';
+          return `<div class="dau-bar${isToday}" style="height:${h}%" title="${x.day}: ${x.dau} active, ${x.new_users} new"></div>`;
+        })
+        .join('');
+      const labels = document.getElementById('chart-labels')!;
+      const first = days[0]?.day || '';
+      const last = days[days.length - 1]?.day || '';
+      labels.innerHTML = `<span>${esc(first)}</span><span>${esc(last)}</span>`;
+    }
+
+    function renderTable(days: any[]) {
+      const el = document.getElementById('day-rows')!;
+      const rows = [...days].reverse().map(
+        (x: any) => `
+        <tr>
+          <td>${esc(x.day)}</td>
+          <td>${x.dau}</td>
+          <td>${x.new_users}</td>
+        </tr>`
+      );
+      el.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="3">No data yet.</td></tr>';
+    }
+
+    function renderFee(f: any) {
+      const el = document.getElementById('fee')!;
+      if (!f.configured) {
+        el.innerHTML =
+          'Not configured yet — set <code>ACCESS_FEE_DAU_TARGET</code> and <code>MONTHLY_OPERATING_COST_CENTS</code> on the server, then reopen this page.';
+        return;
+      }
+      const reached = f.reached
+        ? '<span class="badge badge-win">Target reached</span>'
+        : '<span class="badge badge-pending">Below target</span>';
+      const fee = f.suggested_fee_cents
+        ? `${money(f.suggested_fee_cents)} TZS / user / month`
+        : '—';
+      el.innerHTML = `
+        <div class="flex items-center gap-3 flex-wrap mb-2">
+          ${reached}
+          <span class="text-xs text-[var(--text-3)]">target ${f.target_dau} DAU · cost ${money(f.monthly_cost_cents)} TZS / month</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div><div class="text-xl font-bold counter">${f.target_dau}</div><div class="text-[11px] text-[var(--text-3)]">Target DAU</div></div>
+          <div><div class="text-xl font-bold counter">${money(f.monthly_cost_cents)}</div><div class="text-[11px] text-[var(--text-3)]">Monthly cost (TZS)</div></div>
+          <div><div class="text-xl font-bold counter">${fee.split(' ')[0]}</div><div class="text-[11px] text-[var(--text-3)]">Suggested fee / user / month</div></div>
+        </div>`;
+    }
+
+    function setText(id: string, v: string) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = v;
+    }
+  </script>
+
+  <style>
+    .dau-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 120px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .dau-bar {
+      flex: 1;
+      min-width: 3px;
+      background: linear-gradient(180deg, var(--brand), var(--brand-2));
+      border-radius: 3px 3px 0 0;
+    }
+    .dau-bar.dau-zero {
+      background: var(--border);
+    }
+  </style>
+</AdminLayout>

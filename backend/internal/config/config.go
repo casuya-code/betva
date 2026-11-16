@@ -37,6 +37,12 @@ type Config struct {
 	// AI results assistant (Groq, inference-only).
 	GroqAPIKey string
 	GroqModel  string
+
+	// Access-fee planner (admin analytics). The admin sets the DAU target and
+	// the monthly running cost here; the analytics endpoint turns them into a
+	// suggested per-user monthly contribution.
+	FeeTargetDAU     int   // ACCESS_FEE_DAU_TARGET, 0 = not configured
+	MonthlyCostCents int64 // MONTHLY_OPERATING_COST_CENTS, 0 = not configured
 }
 
 func Load() *Config {
@@ -81,6 +87,9 @@ func Load() *Config {
 
 		GroqAPIKey: getEnv("GROQ_API_KEY", ""),
 		GroqModel:  getEnv("GROQ_MODEL", "openai/gpt-oss-20b"),
+
+		FeeTargetDAU:     Atoi(getEnv("ACCESS_FEE_DAU_TARGET", "0"), 0),
+		MonthlyCostCents: int64(Atoi(getEnv("MONTHLY_OPERATING_COST_CENTS", "0"), 0)),
 	}
 }
 

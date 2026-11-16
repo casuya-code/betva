@@ -651,6 +651,20 @@ Every mismatch resolution lands here, never auto-approved.
 - Shows the admin identity and current configuration state.
 - Because credentials come from environment variables, **changing them is a redeploy** — the profile page reflects, but does not store, them.
 
+### 5. Analytics (Daily Active Users & Access-Fee Planner)
+
+The record of **daily active users (DAU)** used for the monthly access-fee decision.
+
+- **How it is counted:** every signed-in user is recorded once per EAT day (`Africa/Dar_es_Salaam`), on their first authenticated request of that day. Nothing is recorded for the admin token.
+- **Storage:** the append-only `activity_days` table (`user_id`, `day`, `first_seen`, `last_seen`). It is a business record backing financial decisions — rows are never edited or deleted.
+- **Cost model:** an in-memory per-day seen set means at most one Postgres write per user per day; repeat requests add no queries.
+- **Admin view:** the **Analytics** centre (`/admin/analytics`) shows DAU today, the 7-day average, the peak, total/new users, a 30-day bar chart, and a day-by-day table.
+- **API:** `GET /api/v1/admin/analytics?days=7..90` returns per-day `{day, dau, new_users}`, the summary counters, and the fee plan.
+- **Access-fee planner:** two environment variables drive the suggestion:
+  - `ACCESS_FEE_DAU_TARGET` — the DAU number at which the admin introduces (or re-decides) the monthly contribution.
+  - `MONTHLY_OPERATING_COST_CENTS` — the platform's total monthly running cost in cents.
+  - When DAU reaches the target, the planner suggests `monthly cost ÷ users (target or current DAU, whichever is larger)`, **rounded up to whole 500 TZS steps**. The suggested figure is decision support only — **the final amount is always the admin's decision**, and it remains a contribution to running costs, never a prediction fee.
+
 ### Suggested Additions (Gaps Worth Filling)
 
 These were not in the brief but the product will need them:
