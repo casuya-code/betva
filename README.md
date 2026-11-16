@@ -266,6 +266,8 @@ The split is deliberate: Home stays small and fast, so it loads quickly on 3G an
 
 A single feed of user posts — text, one image, or one short video. It is the only place in the product with infinite scroll, and the only place users can publish.
 
+On phones the composer sits directly above the feed. From 1024px it moves into the **sticky right rail** (with a desktop-only house-rules card) and the feed takes the main column, so the composer stays reachable while scrolling.
+
 **What a post is**
 
 - Up to **500 characters** of text, optionally with **one** image or **one** video.
@@ -542,12 +544,12 @@ Every user route renders inside one shared frame, so gutters and content width l
 | Token / class | Phones (<640px) | Tablet (640–1023px) | Desktop (≥1024px) |
 | --- | --- | --- | --- |
 | `.page-frame` | full width, 16px gutter | 24px gutter, 720px cap | 32px gutter, 720px cap |
-| `.page-frame-wide` (Home, History) | as above | as above | **1120px cap, two columns** |
+| `.page-frame-wide` (Home, History, Community) | as above | as above | **1120px cap, two columns** |
 | `.page-frame-narrow` (login, register) | 440px cap, centred | same | same |
 | `.bottom-nav` | full-width bar, 64px | same | **centred floating pill, 560×60, 16px from bottom** |
 | Bet slip | bottom sheet, full width | centred dialog (≥640px) | centred dialog |
 
-- **Two-column split** (`.page-split`): mobile keeps a single column in DOM order — trust record / personal record first, then the list. From 1024px the aside becomes a **sticky right rail** (360px, 24px gap) and the list takes the remaining 672px. Home's rail also carries a desktop-only "How Betva works" card.
+- **Two-column split** (`.page-split`): mobile keeps a single column in DOM order — trust record / personal record / composer first, then the list. From 1024px the aside becomes a **sticky right rail** (360px, 24px gap) and the list takes the remaining 672px. Home's rail also carries a desktop-only "How Betva works" card; Community's carries a desktop-only "House rules" card, with the composer pinned at the top of the same rail so posting is always one tap away.
 - **Team names wrap, never clip.** Match and history rows use `grid-template-columns: minmax(0,1fr) auto minmax(0,1fr)`, so the score stays optically centred and long names wrap to a second line instead of being truncated.
 - **Control heights are tokens:** `--tap: 44px` (every touch target) and `--control: 48px` (form controls). Buttons set height, not padding, so labels centre exactly.
 - **Section rhythm:** `.section-gap` (24px) between major blocks; `space-y-4` (16px) inside a page frame.

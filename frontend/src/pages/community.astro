@@ -2,49 +2,68 @@
 import Layout from '../layouts/Layout.astro';
 ---
 <Layout title="Betva — Community" description="Community — photos, short videos, and talk from Betva users in Tanzania." active="community">
-  <div class="page-frame space-y-4">
-    <div class="flex items-end justify-between gap-2">
-      <div>
+  <div class="page-frame page-frame-wide">
+    <header class="flex items-end justify-between gap-2 mb-4">
+      <div class="min-w-0">
         <h1 class="text-2xl font-bold">Community</h1>
         <p class="text-sm text-[var(--text-2)]">Real posts from real users. No fake activity, ever.</p>
       </div>
-      <span class="text-xs text-[var(--text-3)]" id="feed-count"></span>
-    </div>
+      <span class="text-xs text-[var(--text-3)] shrink-0" id="feed-count"></span>
+    </header>
 
-    <!-- Composer -->
-    <div class="glass p-4 space-y-3">
-      <label class="text-sm text-[var(--text-2)] block" for="postBody">Share something</label>
-      <textarea
-        id="postBody"
-        class="input"
-        rows="3"
-        maxlength="500"
-        placeholder="Talk about a match, a slip, or the league…"></textarea>
-      <div class="flex items-center justify-between text-xs text-[var(--text-3)]">
-        <span id="charCount">0 / 500</span>
-        <span>Text only is cheapest on data.</span>
+    <div class="page-split">
+      <!-- Composer rail. On phones it sits above the feed, as before. -->
+      <aside class="page-split-aside space-y-4">
+        <div class="glass p-4 space-y-3">
+          <label class="text-sm text-[var(--text-2)] block" for="postBody">Share something</label>
+          <textarea
+            id="postBody"
+            class="input"
+            rows="3"
+            maxlength="500"
+            placeholder="Talk about a match, a slip, or the league…"></textarea>
+          <div class="flex items-center justify-between gap-2 text-xs text-[var(--text-3)]">
+            <span id="charCount">0 / 500</span>
+            <span class="text-right">Text only is cheapest on data.</span>
+          </div>
+
+          <div id="mediaPreview" class="hidden"></div>
+
+          <div class="flex items-center gap-2 flex-wrap">
+            <label class="btn btn-secondary text-sm cursor-pointer" for="mediaInput">
+              <span aria-hidden="true">📎</span> Photo / short video
+            </label>
+            <input id="mediaInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" class="hidden" />
+            <span class="text-xs text-[var(--text-3)]">Images ≤ 400 KB · video ≤ 3 MB</span>
+            <button class="btn btn-primary ml-auto" id="postBtn" type="button">Post</button>
+          </div>
+          <div id="composeMsg" class="text-sm" aria-live="polite"></div>
+        </div>
+
+        <section class="card hidden lg:block space-y-3" aria-labelledby="community-rules">
+          <h2 class="font-semibold" id="community-rules">House rules</h2>
+          <ul class="space-y-2 text-sm text-[var(--text-2)]">
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">1.</span><span>Real posts only — no fake proof, no copied slips, no invented wins.</span></li>
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">2.</span><span>Keep it civil: no abuse, scam links, or misleading claims.</span></li>
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">3.</span><span>Three independent reports hide a post until a moderator reviews it.</span></li>
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">4.</span><span>Media never autoplays — it loads only when someone opens the post.</span></li>
+          </ul>
+          <div class="pt-3 border-t border-[var(--border)]">
+            <a href="/profile" class="btn btn-ghost w-full text-sm">Mute or manage notifications</a>
+          </div>
+        </section>
+      </aside>
+
+      <div class="page-split-main">
+        <div id="feed" class="space-y-3">
+          <div class="card"><div class="skeleton h-28"></div></div>
+          <div class="card"><div class="skeleton h-28"></div></div>
+        </div>
+
+        <div id="sentinel" class="h-8" aria-hidden="true"></div>
+        <div id="feedMsg" class="text-center text-sm text-[var(--text-3)]"></div>
       </div>
-
-      <div id="mediaPreview" class="hidden"></div>
-
-      <div class="flex items-center gap-2 flex-wrap">
-        <label class="btn btn-secondary text-sm cursor-pointer" for="mediaInput">
-          <span aria-hidden="true">📎</span> Photo / short video
-        </label>
-        <input id="mediaInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" class="hidden" />
-        <span class="text-xs text-[var(--text-3)]">Images ≤ 400 KB · video ≤ 3 MB</span>
-        <button class="btn btn-primary ml-auto" id="postBtn" type="button">Post</button>
-      </div>
-      <div id="composeMsg" class="text-sm" aria-live="polite"></div>
     </div>
-
-    <div id="feed" class="space-y-3">
-      <div class="card"><div class="skeleton h-28"></div></div>
-      <div class="card"><div class="skeleton h-28"></div></div>
-    </div>
-
-    <div id="sentinel" class="h-8" aria-hidden="true"></div>
-    <div id="feedMsg" class="text-center text-sm text-[var(--text-3)]"></div>
   </div>
 
   <!-- Report sheet -->
