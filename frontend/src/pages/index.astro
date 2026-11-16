@@ -234,6 +234,17 @@ import BrandName from '../components/BrandName.astro';
       }
     }
 
+    function marketOutcome(m: any, mk: string): boolean | null {
+      // Only settled matches with a final score have a real outcome.
+      if (!m.settled || m.home_goals == null || m.away_goals == null) return null;
+      if (mk === 'ft_over_0_5') return m.home_goals + m.away_goals >= 1;
+      if (mk === 'ht_over_0_5') {
+        if (m.home_goals_ht == null || m.away_goals_ht == null) return null;
+        return m.home_goals_ht + m.away_goals_ht >= 1;
+      }
+      return null;
+    }
+
     function cardHTML(m: any): string {
       const st = statusMap[m.status] || statusMap.upcoming;
       const conf = confidenceMap[m.confidence] || confidenceMap.medium;
@@ -244,6 +255,16 @@ import BrandName from '../components/BrandName.astro';
         ? markets
             .map((mk: string) => {
               const label = MARKET_LABEL[mk] || mk;
+              if (m.settled) {
+                const won = marketOutcome(m, mk);
+                if (won === true) {
+                  return `<button class="btn btn-secondary flex-1 text-sm" disabled>${esc(label)} <span class="mk-outcome mk-win" aria-label="won">✔</span></button>`;
+                }
+                if (won === false) {
+                  return `<button class="btn btn-secondary flex-1 text-sm" disabled>${esc(label)} <span class="mk-outcome mk-loss" aria-label="lost">✘</span></button>`;
+                }
+                return `<button class="btn btn-secondary flex-1 text-sm" disabled>${esc(label)}</button>`;
+              }
               if (!m.is_open) {
                 return `<button class="btn btn-secondary flex-1 text-sm" disabled>${esc(label)} · closed</button>`;
               }
@@ -450,6 +471,18 @@ import BrandName from '../components/BrandName.astro';
       overflow: hidden;
       text-overflow: ellipsis;
       max-width: 100%;
+    }
+
+    /* Win / lost tick and cross on settled market buttons */
+    .mk-outcome {
+      font-weight: 700;
+      margin-left: 2px;
+    }
+    .mk-win {
+      color: #4ade80;
+    }
+    .mk-loss {
+      color: #f87171;
     }
   </style>
 </Layout>

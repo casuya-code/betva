@@ -289,6 +289,36 @@ func TestIntegration_PlaceSettleAndCorrect(t *testing.T) {
 		t.Fatalf("balance after win=%d want 125000", balAfterWin)
 	}
 
+	// public feed must expose the settled score so the UI can show win/loss ticks
+	r2 := httptest.NewRequest("GET", "/api/v1/matches", nil)
+	w2 := doReq(s.handleListMatches, r2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("list matches code=%d", w2.Code)
+	}
+	var feed struct {
+		Matches []struct {
+			ID      string `json:"id"`
+			Settled bool   `json:"settled"`
+			HomeGoals *int `json:"home_goals"`
+			AwayGoals *int `json:"away_goals"`
+		} `json:"matches"`
+	}
+	if err := json.Unmarshal(w2.Body.Bytes(), &feed); err != nil {
+		t.Fatalf("feed decode: %v", err)
+	}
+	var found bool
+	for _, fm := range feed.Matches {
+		if fm.ID == matchID {
+			found = true
+			if !fm.Settled || fm.HomeGoals == nil || *fm.HomeGoals != 1 || fm.AwayGoals == nil || *fm.AwayGoals != 0 {
+				t.Fatalf("settled feed row wrong: %+v", fm)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("settled match missing from public feed")
+	}
+
 	// correct: 0-0 => should reverse win and result in loss (no payout), balance back to 50000
 	correctBody := map[string]interface{}{
 		"home_goals": 0, "away_goals": 0,
