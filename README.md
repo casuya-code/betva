@@ -1824,7 +1824,7 @@ The script exits `0` only when the throwaway database was created, restored, and
 | `CORS_ORIGINS` | Production | Comma-separated frontend origins |
 | `PORT` | No | Defaults to `8080` |
 | `ENV` | No | `development` or `production` |
-| `STAKE_TIERS_CENTS` | No | Comma-separated fixed stakes in cents; default `50000,100000,200000,500000` (500–5,000 TZS) |
+| `STAKE_TIERS_CENTS` | No | Comma-separated fixed stakes in cents; default `50000,100000,200000,500000` (500–5,000 TZS). Staging adds `1000000` (10,000 TZS) for the two-option demo. |
 | `PAYOUT_MULTIPLIER_BP` | No | Basis points returned on a win; default `15000` = 1.50× |
 | `MAX_BET_PER_DAY_CENTS` | No | Optional per-user daily stake cap in cents; `0` disables it |
 | `MEDIA_DIR` | No | Where community uploads are stored; default `media` (relative to the backend working directory) |

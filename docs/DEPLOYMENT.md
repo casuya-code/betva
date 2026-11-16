@@ -303,7 +303,9 @@ The E2E test created one staging user (`+255711161006`), one fixture
 (Simba SC vs Yanga SC, settled 2–0, HT 1–0), and three ledger rows. Delete or keep as
 staging fixtures; they are not production data. A second inactive fixture
 (`+255788880001`, password `PreviewPass123`) was added 2026-11-16 to verify the
-three-match preview and the read-only community.
+three-match preview and the read-only community. A two-option demo was also added:
+a 2026-11-17 match with two settled bets of 1,000,000 cents (10,000 TZS) each, and
+`STAKE_TIERS_CENTS` on `api` now includes `1000000`.
 
 ---
 
