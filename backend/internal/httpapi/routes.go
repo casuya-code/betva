@@ -85,6 +85,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 
 			protected.Get("/community/posts", s.handleCommunityFeed)
 			protected.Post("/community/posts", s.handleCreatePost)
+			protected.Post("/community/posts/{id}/react", s.handleReactPost)
 			protected.Delete("/community/posts/{id}", s.handleDeleteOwnPost)
 			protected.Post("/community/posts/{id}/report", s.handleReportPost)
 			protected.Post("/media", s.mediaUpload.WrapUser(s.handleMediaUpload))

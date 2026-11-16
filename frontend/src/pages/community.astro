@@ -14,7 +14,7 @@ import Layout from '../layouts/Layout.astro';
     <div class="page-split">
       <!-- Composer rail. On phones it sits above the feed, as before. -->
       <aside class="page-split-aside space-y-4">
-        <div class="glass p-4 space-y-3">
+        <div class="glass p-4 space-y-3" id="composerCard">
           <label class="text-sm text-[var(--text-2)] block" for="postBody">Share something</label>
           <textarea
             id="postBody"
@@ -55,6 +55,9 @@ import Layout from '../layouts/Layout.astro';
       </aside>
 
       <div class="page-split-main">
+        <div id="readOnlyNote" class="card hidden mb-3 text-sm text-[var(--text-2)]" role="status">
+          You can read the community while your account is inactive. Activate it to post, react, and upload. Pay only the single official number shown on your Profile.
+        </div>
         <div id="feed" class="space-y-3">
           <div class="card"><div class="skeleton h-28"></div></div>
           <div class="card"><div class="skeleton h-28"></div></div>
@@ -100,9 +103,15 @@ import Layout from '../layouts/Layout.astro';
       is_mine: boolean;
       reported: boolean;
       report_count: number;
+      likes: number;
+      loves: number;
+      hahas: number;
+      my_reaction: string;
     };
 
     let cursor: string | null = null;
+    let canParticipate = false;
+    const postsById: Record<string, Post> = {};
     let loading = false;
     let done = false;
     let media: { url: string; type: string; bytes: number } | null = null;
@@ -134,21 +143,47 @@ import Layout from '../layouts/Layout.astro';
       return `<img class="post-media mt-3" src="${src}" alt="Photo shared by ${esc(p.nickname)}" loading="lazy" decoding="async" />`;
     }
 
+    function reactionBar(p: Post): string {
+      const total = p.likes + p.loves + p.hahas;
+      const summary = total
+        ? `<div class="text-xs text-[var(--text-3)] mt-2">${total} reaction${total === 1 ? '' : 's'}</div>`
+        : '';
+      const btns = (
+        [
+          ['like', '👍', 'Like', p.likes],
+          ['love', '❤️', 'Love', p.loves],
+          ['haha', '😂', 'Haha', p.hahas],
+        ] as Array<[string, string, string, number]>
+      )
+        .map(
+          ([key, emoji, label, count]) => `
+            <button type="button"
+              class="react-btn ${p.my_reaction === key ? 'active' : ''}"
+              data-reaction="${key}"
+              aria-label="${label}" aria-pressed="${p.my_reaction === key}"
+              ${canParticipate ? '' : 'disabled'}>
+              <span aria-hidden="true">${emoji}</span> <span>${label}</span>${count ? ` <span class="counter">${count}</span>` : ''}
+            </button>`
+        )
+        .join('');
+      return `${summary}<div class="mt-2 pt-2 border-t border-[var(--border)] flex items-center gap-2 flex-wrap">${btns}</div>`;
+    }
+
     function postHtml(p: Post): string {
       const initial = esc((p.nickname || '?').slice(0, 1).toUpperCase());
       const avatar = p.profile_pic
-        ? `<img src="${esc(p.profile_pic)}" alt="" class="w-9 h-9 rounded-full object-cover" />`
-        : `<div class="w-9 h-9 rounded-full bg-[var(--surface-el)] grid place-items-center font-semibold">${initial}</div>`;
+        ? `<img src="${esc(p.profile_pic)}" alt="" class="w-10 h-10 rounded-full object-cover" />`
+        : `<div class="w-10 h-10 rounded-full bg-[var(--brand)] text-white grid place-items-center font-semibold">${initial}</div>`;
 
       return `
         <article class="card" data-post="${esc(p.id)}">
-          <div class="flex items-center gap-2 mb-2">
+          <div class="flex items-center gap-3 mb-3">
             ${avatar}
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
               <div class="font-semibold truncate">${esc(p.nickname)}</div>
-              <div class="text-xs text-[var(--text-3)]">${esc(p.created_at)}</div>
+              <div class="text-xs text-[var(--text-3)]">${esc(p.created_at)} · Community post</div>
             </div>
-            <div class="ml-auto flex items-center gap-1">
+            <div class="flex items-center gap-1">
               ${
                 p.is_mine
                   ? `<button class="btn btn-ghost text-xs post-delete" type="button">Delete</button>`
@@ -160,6 +195,7 @@ import Layout from '../layouts/Layout.astro';
           </div>
           ${p.body ? `<p class="text-[15px] whitespace-pre-wrap break-words">${esc(p.body)}</p>` : ''}
           ${renderMedia(p)}
+          ${reactionBar(p)}
         </article>`;
     }
 
@@ -175,6 +211,7 @@ import Layout from '../layouts/Layout.astro';
         if (!res.ok) throw new Error('failed');
         const data = await res.json().catch(() => ({}));
         const posts: Post[] = data.posts || [];
+        posts.forEach((p) => (postsById[p.id] = p));
 
         if (reset) {
           feed.innerHTML = '';
@@ -314,6 +351,38 @@ import Layout from '../layouts/Layout.astro';
       if (!article) return;
       const id = article.dataset.post!;
 
+      const reactBtn = target.closest('.react-btn') as HTMLButtonElement | null;
+      if (reactBtn) {
+        if (!canParticipate) return;
+        const reaction = reactBtn.dataset.reaction!;
+        reactBtn.disabled = true;
+        try {
+          const res = await authFetch(`/api/v1/community/posts/${id}/react`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reaction }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            toast(data.error || 'Could not react.', 'error');
+            return;
+          }
+          const p = postsById[id];
+          if (p) {
+            p.likes = data.likes;
+            p.loves = data.loves;
+            p.hahas = data.hahas;
+            p.my_reaction = data.my_reaction;
+            article.outerHTML = postHtml(p);
+          }
+        } catch {
+          toast('Could not react. Try again.', 'error');
+        } finally {
+          reactBtn.disabled = false;
+        }
+        return;
+      }
+
       if (target.closest('.post-report')) {
         pendingReportId = id;
         (document.getElementById('reportReason') as HTMLTextAreaElement).value = '';
@@ -381,6 +450,21 @@ import Layout from '../layouts/Layout.astro';
       }
     });
 
+    async function loadAccess() {
+      try {
+        const res = await authFetch('/api/v1/me');
+        if (!res.ok) return;
+        const me = await res.json().catch(() => ({}));
+        canParticipate = me.active === true;
+      } catch {
+        canParticipate = false;
+      }
+      if (!canParticipate) {
+        document.getElementById('composerCard')?.classList.add('hidden');
+        document.getElementById('readOnlyNote')?.classList.remove('hidden');
+      }
+    }
+
     // Infinite scroll: community only, never on slips.
     const sentinel = document.getElementById('sentinel')!;
     const observer = new IntersectionObserver(
@@ -391,6 +475,7 @@ import Layout from '../layouts/Layout.astro';
     );
     observer.observe(sentinel);
 
+    await loadAccess();
     loadFeed(true);
   </script>
 

@@ -50,6 +50,10 @@ import BrandName from '../components/BrandName.astro';
             <span class="dt-sub" id="tab-tomorrow-sub">—</span>
           </button>
         </div>
+        <div id="previewNote" class="card hidden mb-3 text-sm text-[var(--text-2)]" role="status">
+          You are seeing a preview of 3 matches. Activate your account to see every match and take part.
+          Pay the single official number shown on your Profile, then ask the admin to activate you.
+        </div>
         <div id="matches" class="mt-3 space-y-3" role="tabpanel" aria-label="Match list">
           <div class="card"><div class="skeleton h-24"></div></div>
           <div class="card"><div class="skeleton h-24"></div></div>
@@ -216,7 +220,7 @@ import BrandName from '../components/BrandName.astro';
           slipMsg.className = 'mt-2 text-center text-sm text-red-400';
           return;
         }
-        toast(`Slip placed. Balance ${money(data.balance_cents)} TZS`);
+        toast('Slip placed.');
         closeSlip();
         markPlaced(placedId, placedMarket);
         maybeAskPush();
@@ -343,9 +347,15 @@ import BrandName from '../components/BrandName.astro';
     async function load() {
       const el = document.getElementById('matches')!;
       try {
-        const res = await fetch(`${API}/api/v1/matches`);
+        // Send the token when signed in so an inactive account receives only
+        // the three-match preview instead of the full published list.
+        const token = getToken();
+        const res = token
+          ? await authFetch('/api/v1/matches')
+          : await fetch(`${API}/api/v1/matches`);
         const data = await res.json().catch(() => ({}));
         allMatches = data.matches || [];
+        document.getElementById('previewNote')?.classList.toggle('hidden', !data.preview);
 
         // The API only publishes the two days Home cares about. Keep the
         // device-computed EAT dates as the tab labels; when only one day has

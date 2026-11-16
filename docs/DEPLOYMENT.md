@@ -40,7 +40,7 @@ redeploy or promote it.
 - `ghcr.io/railwayapp-templates/postgres-ssl:18`, 5 GB volume at
   `/var/lib/postgresql/data`.
 - `DATABASE_URL` on `api` references `${{Postgres.DATABASE_URL}}`.
-- Migrations `001`–`006` are applied; `schema_migrations` records each version.
+- Migrations `001`–`007` are applied; `schema_migrations` records each version (`007` adds `post_reactions`).
 
 ### Railway: `backup`
 
@@ -255,6 +255,7 @@ every name.
 | `JWT_SECRET` | generated for staging | 48 random hex chars; rotated 2026-11-16; rotate = every session logs out |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | rotated 2026-11-16 | New values in `backend/.env.staging.local` (untracked). Change again before public launch |
 | `ADMIN_TOTP_SECRET` / `ADMIN_RECOVERY_CODE` | generated 2026-11-16 | TOTP enforced on staging; generate new ones with `go run ./cmd/totp` |
+| `PAYMENT_NUMBER` | **not set** | Single official number shown on Profile and referenced in `/terms`; unset shows “Ask the admin” |
 | `CORS_ORIGINS` | Vercel alias + localhost | Exact origins only |
 | `ACCESS_FEE_CENTS` | `500000` | 5,000 TZS flat monthly rate |
 | `PAYOUT_MULTIPLIER_BP` | `15000` | 1.50× return on a win |
@@ -290,12 +291,17 @@ Run these after every deploy. All were run on 2026-11-16.
 | Login rate limit | 10 `401`s for one phone, then `429` with `Retry-After` |
 | Register → activate → credit → upload CSV → bet → settle | Bet `win`, payout `75000`, balance `225000` |
 | `GET /api/v1/stats` | Settled tips counted, losses visible |
+| Inactive account | `GET /matches` returns `preview: true` and at most 3 matches; posting/react returns `403` |
+| Community reactions | Like → Love → toggle off updates counts and `my_reaction` in the feed |
+| `/terms` | Public page loads; registration links to it; `terms_version: 2` in config |
 | Frontend home | Match cards render, settled markets show ✓, track record matches the API |
 | Restore drill | See [section 7](#7-restore-drill) |
 
 The E2E test created one staging user (`+255711161006`), one fixture
 (Simba SC vs Yanga SC, settled 2–0, HT 1–0), and three ledger rows. Delete or keep as
-staging fixtures; they are not production data.
+staging fixtures; they are not production data. A second inactive fixture
+(`+255788880001`, password `PreviewPass123`) was added 2026-11-16 to verify the
+three-match preview and the read-only community.
 
 ---
 

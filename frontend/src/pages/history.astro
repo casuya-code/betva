@@ -34,10 +34,6 @@ import Layout from '../layouts/Layout.astro';
               <div class="text-[11px] text-[var(--text-3)]">Win rate</div>
             </div>
           </div>
-          <div class="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between text-sm">
-            <span class="text-[var(--text-2)]">Net return</span>
-            <span class="counter" id="h-net">—</span>
-          </div>
         </div>
 
         <section class="card hidden lg:block space-y-2 text-sm text-[var(--text-2)]" aria-labelledby="about-record">
@@ -161,20 +157,10 @@ import Layout from '../layouts/Layout.astro';
       const losses = bets.filter((b) => b.status === 'loss').length;
       const rate = settled.length ? Math.round((wins / settled.length) * 100) : 0;
 
-      let net = 0;
-      for (const b of bets) {
-        if (b.status === 'win') net += b.payout_cents - b.stake_cents;
-        else if (b.status === 'loss') net -= b.stake_cents;
-      }
-
       document.getElementById('h-settled')!.textContent = String(settled.length);
       document.getElementById('h-wins')!.textContent = String(wins);
       document.getElementById('h-losses')!.textContent = String(losses);
       document.getElementById('h-rate')!.textContent = settled.length ? `${rate}%` : '—';
-
-      const netEl = document.getElementById('h-net')!;
-      netEl.textContent = `${net >= 0 ? '+' : '−'}${money(Math.abs(net))} TZS`;
-      netEl.className = `counter ${net > 0 ? 'text-green-400' : net < 0 ? 'text-red-400' : ''}`;
 
       document.getElementById('h-count')!.textContent = `${bets.length} bet${bets.length === 1 ? '' : 's'}`;
       document.getElementById('h-range')!.textContent = 'Last 6 months';

@@ -48,7 +48,11 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 		       p.created_at, p.user_id, u.nickname, COALESCE(u.profile_pic, ''),
 		       (p.user_id = $1),
 		       EXISTS (SELECT 1 FROM post_reports pr WHERE pr.post_id = p.id AND pr.reporter_id = $1),
-		       (SELECT COUNT(*) FROM post_reports pr WHERE pr.post_id = p.id)
+		       (SELECT COUNT(*) FROM post_reports pr WHERE pr.post_id = p.id),
+		       (SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = p.id AND pr.reaction = 'like'),
+		       (SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = p.id AND pr.reaction = 'love'),
+		       (SELECT COUNT(*) FROM post_reactions pr WHERE pr.post_id = p.id AND pr.reaction = 'haha'),
+		       COALESCE((SELECT pr.reaction FROM post_reactions pr WHERE pr.post_id = p.id AND pr.user_id = $1), '')
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
 		WHERE p.status = 'visible'
@@ -76,6 +80,10 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 		IsMine      bool      `json:"is_mine"`
 		Reported    bool      `json:"reported"`
 		ReportCount int       `json:"report_count"`
+		Likes       int       `json:"likes"`
+		Loves       int       `json:"loves"`
+		Hahas       int       `json:"hahas"`
+		MyReaction  string    `json:"my_reaction"`
 	}
 
 	out := []post{}
@@ -83,7 +91,8 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 		var p post
 		if err := rows.Scan(&p.ID, &p.Body, &p.MediaURL, &p.MediaType, &p.MediaBytes,
 			&p.CreatedAt, &p.CreatedRaw, &p.UserID, &p.Nickname, &p.ProfilePic,
-			&p.IsMine, &p.Reported, &p.ReportCount); err != nil {
+			&p.IsMine, &p.Reported, &p.ReportCount,
+			&p.Likes, &p.Loves, &p.Hahas, &p.MyReaction); err != nil {
 			continue
 		}
 		out = append(out, p)
@@ -104,8 +113,7 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 // handleCreatePost publishes a text and/or media post.
 func (s *Server) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 	u := UserFromCtx(r)
-	if u == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	if !s.requireActive(w, r, u) {
 		return
 	}
 
@@ -158,12 +166,85 @@ func (s *Server) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
+// handleReactPost stores one real reaction per user per post. Clicking the
+// same reaction again removes it; clicking a different one changes it.
+func (s *Server) handleReactPost(w http.ResponseWriter, r *http.Request) {
+	u := UserFromCtx(r)
+	if !s.requireActive(w, r, u) {
+		return
+	}
+	postID := chiURLParam(r, "id")
+	if postID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing post id"})
+		return
+	}
+
+	var body struct {
+		Reaction string `json:"reaction"`
+	}
+	if err := jsonDecode(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad json"})
+		return
+	}
+	switch body.Reaction {
+	case "like", "love", "haha":
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid reaction"})
+		return
+	}
+
+	ctx := r.Context()
+	var visible bool
+	if err := s.Pool.QueryRow(ctx, `SELECT status = 'visible' FROM posts WHERE id = $1`, postID).Scan(&visible); err != nil || !visible {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "post not found"})
+		return
+	}
+
+	var current string
+	_ = s.Pool.QueryRow(ctx, `
+		SELECT reaction FROM post_reactions WHERE post_id = $1 AND user_id = $2
+	`, postID, u.ID).Scan(&current)
+
+	if current == body.Reaction {
+		_, err := s.Pool.Exec(ctx, `DELETE FROM post_reactions WHERE post_id = $1 AND user_id = $2`, postID, u.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
+			return
+		}
+	} else {
+		_, err := s.Pool.Exec(ctx, `
+			INSERT INTO post_reactions (post_id, user_id, reaction) VALUES ($1, $2, $3)
+			ON CONFLICT (post_id, user_id) DO UPDATE SET reaction = EXCLUDED.reaction, created_at = NOW()
+		`, postID, u.ID, body.Reaction)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
+			return
+		}
+	}
+
+	var likes, loves, hahas int
+	var mine string
+	if err := s.Pool.QueryRow(ctx, `
+		SELECT
+		  COUNT(*) FILTER (WHERE reaction = 'like'),
+		  COUNT(*) FILTER (WHERE reaction = 'love'),
+		  COUNT(*) FILTER (WHERE reaction = 'haha'),
+		  COALESCE(MAX(reaction) FILTER (WHERE user_id = $2), '')
+		FROM post_reactions WHERE post_id = $1
+	`, postID, u.ID).Scan(&likes, &loves, &hahas, &mine); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"likes": likes, "loves": loves, "hahas": hahas, "my_reaction": mine,
+	})
+}
+
 // handleDeleteOwnPost soft-deletes the caller's post. Nothing is physically
 // removed: moderators need the record if a report is disputed.
 func (s *Server) handleDeleteOwnPost(w http.ResponseWriter, r *http.Request) {
 	u := UserFromCtx(r)
-	if u == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	if !s.requireActive(w, r, u) {
 		return
 	}
 	id := chiURLParam(r, "id")
@@ -186,8 +267,7 @@ func (s *Server) handleDeleteOwnPost(w http.ResponseWriter, r *http.Request) {
 // auto-hide a post pending review; that is a guardrail, not a verdict.
 func (s *Server) handleReportPost(w http.ResponseWriter, r *http.Request) {
 	u := UserFromCtx(r)
-	if u == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	if !s.requireActive(w, r, u) {
 		return
 	}
 	postID := chiURLParam(r, "id")
@@ -251,8 +331,7 @@ func (s *Server) handleReportPost(w http.ResponseWriter, r *http.Request) {
 // "no autoplay" rule stay the same.
 func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	u := UserFromCtx(r)
-	if u == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	if !s.requireActive(w, r, u) {
 		return
 	}
 

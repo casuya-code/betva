@@ -18,6 +18,9 @@ type Config struct {
 	// environment, never the database.
 	AdminTOTP     string
 	AdminRecovery string
+	// PaymentNumber is the single official number users pay before the admin
+	// activates their account. Empty means "ask the admin" in the UI.
+	PaymentNumber string
 	Env           string
 	CORSOrigins   []string
 
@@ -78,6 +81,7 @@ func Load() *Config {
 		AdminPass:     getEnv("ADMIN_PASSWORD", ""),
 		AdminTOTP:     getEnv("ADMIN_TOTP_SECRET", ""),
 		AdminRecovery: getEnv("ADMIN_RECOVERY_CODE", ""),
+		PaymentNumber: getEnv("PAYMENT_NUMBER", ""),
 		Env:           getEnv("ENV", "development"),
 		CORSOrigins:   origins,
 

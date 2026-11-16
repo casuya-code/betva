@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
@@ -38,6 +39,46 @@ func normalizePhone(p string) string {
 }
 
 var phoneRe = regexp.MustCompile(`^\+255[0-9]{9}$`)
+
+// userActive reports whether an account is activated and its access has not
+// expired. Inactive users can browse three matches and read the community,
+// but cannot post, react, upload, or bet.
+func (s *Server) userActive(ctx context.Context, id string) (bool, error) {
+	var active bool
+	err := s.Pool.QueryRow(ctx, `
+		SELECT status = 'active' AND access_expires_at IS NOT NULL AND access_expires_at > NOW()
+		FROM users WHERE id = $1
+	`, id).Scan(&active)
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	return active, err
+}
+
+// requireActive writes a 403 and returns false when the user may not
+// participate. Used by posting, reacting, upload, and report endpoints.
+func (s *Server) requireActive(w http.ResponseWriter, r *http.Request, u *AuthUser) bool {
+	if u == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return false
+	}
+	active, err := s.userActive(r.Context(), u.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
+		return false
+	}
+	if !active {
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "Activate your account to take part. Pay the official number shown in your app and ask the admin to activate you.",
+		})
+		return false
+	}
+	return true
+}
+
+// TermsVersion changes when the Terms of Service change. Registration records
+// the version the user accepted, so a future revision can require re-consent.
+const TermsVersion = 2
 
 // dummyBcryptHash is compared against when a phone number does not exist, so
 // an unknown account costs the same as a wrong password. Without it, response
@@ -107,8 +148,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	// record consent
 	_, _ = s.Pool.Exec(ctx, `
-		INSERT INTO consent_log (user_id, notice_version, accepted_at) VALUES ($1, 1, NOW())
-	`, userID)
+		INSERT INTO consent_log (user_id, notice_version, accepted_at) VALUES ($1, $2, NOW())
+	`, userID, TermsVersion)
 
 	tok, err := s.issueToken(userID, req.Phone, false)
 	if err != nil {
@@ -185,11 +226,13 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	var nickname, phone, status, officialName string
 	var balance int64
 	var accessExpiresAt *string
+	var active bool
 	err := s.Pool.QueryRow(ctx, `
 		SELECT nickname, phone, status, official_name, balance_cents,
-		       to_char(access_expires_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI')
+		       to_char(access_expires_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI'),
+		       status = 'active' AND access_expires_at IS NOT NULL AND access_expires_at > NOW()
 		FROM users WHERE id = $1
-	`, u.ID).Scan(&nickname, &phone, &status, &officialName, &balance, &accessExpiresAt)
+	`, u.ID).Scan(&nickname, &phone, &status, &officialName, &balance, &accessExpiresAt, &active)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
 		return
@@ -202,6 +245,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"official_name":     officialName,
 		"balance_cents":     balance,
 		"access_expires_at": accessExpiresAt,
+		"active":            active,
 	})
 }
 

@@ -374,6 +374,18 @@ func (s *Server) handleUploadMatches(w http.ResponseWriter, r *http.Request) {
 // handleListMatches is the public Home feed: today and tomorrow only.
 func (s *Server) handleListMatches(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	// Public feed, but an inactive signed-in user may only preview three
+	// matches. Anonymous visitors see the full published list.
+	var previewLimit *int64
+	if tok := bearerToken(r); tok != "" {
+		if claims, err := s.parseToken(tok); err == nil && !claims.IsAdmin {
+			if active, err := s.userActive(ctx, claims.Subject); err == nil && !active {
+				n := int64(3)
+				previewLimit = &n
+			}
+		}
+	}
+
 	rows, err := s.Pool.Query(ctx, `
 		SELECT m.id, to_char(m.match_date, 'YYYY-MM-DD'), to_char(m.kickoff_time, 'HH24:MI'), COALESCE(m.league, ''),
 		       m.home_team, m.away_team, m.status, m.confidence,
@@ -388,7 +400,8 @@ func (s *Server) handleListMatches(w http.ResponseWriter, r *http.Request) {
 		  AND m.match_date <= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Dar_es_Salaam')::date + 1
 		GROUP BY m.id
 		ORDER BY m.match_date, m.kickoff_time, m.home_team
-	`)
+		LIMIT $1
+	`, previewLimit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
 		return
@@ -424,7 +437,7 @@ func (s *Server) handleListMatches(w http.ResponseWriter, r *http.Request) {
 		out = append(out, m)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"matches": out})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"matches": out, "preview": previewLimit != nil})
 }
 
 // handleAdminListMatches lists every match for one date, with its markets.

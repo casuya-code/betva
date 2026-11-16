@@ -338,6 +338,8 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"push_daily_cap":       s.Cfg.PushDailyCap,
 		"quiet_hours":          map[string]int{"start": s.Cfg.QuietStartHour, "end": s.Cfg.QuietEndHour},
 		"access_fee_cents":     s.Cfg.AccessFeeCents,
+		"payment_number":       s.Cfg.PaymentNumber,
+		"terms_version":        TermsVersion,
 	})
 }
 

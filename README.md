@@ -305,9 +305,15 @@ Only two markets are offered. Keeping it to two is deliberate: fewer decisions, 
 
 The split is deliberate: Home stays small and fast, so it loads quickly on 3G and never becomes an endless list. The 6-month record lives in History, where users look backwards.
 
+**Access gating (2026-11-16):** an inactive or expired account sees only the **first three matches by kickoff** from the published list; the rest are hidden by the API, not just by CSS. A notice explains how to activate. Active accounts see the full list. Users never see a wallet balance: money is paid to the single official number and the admin activates the account manually. ✅
+
+**Terms & the one payment number:** `/terms` is a public, versioned Terms of Service (v2). Registration links to it and requires acceptance; the accepted version and timestamp are recorded in `consent_log`. The terms state that there is exactly one official payment number (shown on Profile from `PAYMENT_NUMBER`, or “Ask the admin” when unset), that money sent to any other number or person is the user's responsibility, and that users own what they post. ✅
+
 ### Community
 
-A single feed of user posts — text, one image, or one short video. It is the only place in the product with infinite scroll, and the only place users can publish.
+A single feed of user posts — text, one image, or one short video. It is the only place in the product with infinite scroll, and the only place users can publish. The layout follows a page feed: author avatar, name, timestamp, message, media, then a reaction bar.
+
+**Reactions:** 👍 Like, ❤️ Love, 😂 Haha. One real reaction per user per post; tapping the active one removes it, tapping another changes it. Counts come from `post_reactions` rows — never seeded or fabricated. Inactive users can read posts but cannot post, react, upload, or report; the server enforces this with `403`. ✅
 
 On phones the composer sits directly above the feed. From 1024px it moves into the **sticky right rail** (with a desktop-only house-rules card) and the feed takes the main column, so the composer stays reachable while scrolling.
 
@@ -1155,7 +1161,7 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
    workspaces", so RPO is up to 24 hours until the workspace is upgraded. ⬜
 5. **Redis persistence** — Redis is connected at startup but **currently unused**, so it
    holds no data worth backing up. ⬜
-6. **Code & config in Git** — the schema is versioned (`001`–`006`), so a fresh database
+6. **Code & config in Git** — the schema is versioned (`001`–`007`), so a fresh database
    can be rebuilt from scratch. ✅
 7. **Media storage** — uploads live on the Railway volume `media` mounted at `/data` and
    are **not** in a Postgres dump. A volume mounts to one service, so the cron cannot read
@@ -1239,7 +1245,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 - **Idempotency keys** on every write — a retried request cannot double-charge or double-pay. ⬜ Not implemented; duplicate placement is currently blocked by the one-bet-per-market constraint and the row lock, not by request keys.
 - **Append-only ledger** — balance changes are never overwritten, only appended; reconciliation is always possible. ✅
 - **Backups run continuously**, not only at night, so a failure at peak loses minutes, not hours. ⬜
-- **Migrations are versioned** — `001`–`006`, applied in order. They are forward-only; automatic rollback is ⬜. 🟡
+- **Migrations are versioned** — `001`–`007`, applied in order. They are forward-only; automatic rollback is ⬜. 🟡
 
 ### Capacity Planning
 
@@ -1318,7 +1324,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 | --- | --- | --- |
 | Frontend | Astro 7 + Tailwind v4, static output, PWA manifest + service worker | ✅ |
 | Backend | Go 1.x, chi, pgx | ✅ |
-| Database | PostgreSQL 18 locally; migrations `001`–`006` | ✅ |
+| Database | PostgreSQL 18 locally; migrations `001`–`007` | ✅ |
 | Cache / queues | Redis client connected at startup, no reads or writes yet | 🟡 |
 | Media | Local `MEDIA_DIR`, served from `/media/*` with immutable cache headers | 🟡 |
 | Results extraction | Groq `openai/gpt-oss-20b`, admin-triggered, manual approval | ✅ |
@@ -1555,7 +1561,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Area | Status | Location |
 | --- | --- | --- |
 | Go API (chi router, pgx, Redis-ready) | ✅ Working | `backend/` |
-| Postgres schema and migrations `001`–`006` | ✅ Working | `backend/migrations/` |
+| Postgres schema and migrations `001`–`007` | ✅ Working | `backend/migrations/` |
 | User register / login / profile | ✅ Working | `backend/internal/httpapi/auth.go` |
 | Admin login from environment variables | ✅ Working | `backend/internal/httpapi/admin.go` |
 | Matches CSV upload, validation, duplicate detection, import log | ✅ Working | `backend/internal/httpapi/matches.go` |
@@ -1567,7 +1573,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Admin app (separate layout) | ✅ Working | `frontend/src/pages/admin/` |
 | Bet slip with fixed stake tiers | ✅ Working | `frontend/src/pages/index.astro` |
 | Home Today / Tomorrow tabs with settled ✓ / ✕ | ✅ Working | `frontend/src/pages/index.astro` |
-| Wallet balance and append-only ledger | ✅ Working | `backend/internal/httpapi/bets.go` |
+| Internal wallet ledger (admin-only; never shown to users) | ✅ Working | `backend/internal/httpapi/bets.go` |
 | Bet placement (atomic debit + bet row + ledger) | ✅ Working | `backend/internal/httpapi/bets.go` |
 | Settlement, correction with reversal, postponed refunds | ✅ Working | `backend/internal/httpapi/settlement.go` |
 | History with final scores and visible losses | ✅ Working | `frontend/src/pages/history.astro` |
@@ -1698,12 +1704,13 @@ All routes are under `/api/v1`. User routes require `Authorization: Bearer <user
 | `POST` | `/api/v1/auth/logout` | Stateless: returns `logged out`; the client discards the token |
 | `GET` | `/api/v1/me` | Current profile |
 | `PUT` | `/api/v1/me` | Update password and/or `profile_pic` (no nickname change) |
-| `GET` | `/api/v1/matches` | Today + tomorrow, with `is_open` and markets |
+| `GET` | `/api/v1/matches` | Today + tomorrow, with `is_open`, markets, and `preview: true` when an inactive account gets only three |
 | `POST` | `/api/v1/bets` | Place a slip: `match_id`, `market`, `stake_cents` |
 | `GET` | `/api/v1/wallet` | Balance + last 50 ledger entries |
 | `GET` | `/api/v1/history` | User bets for the last 6 months, with scores |
 | `GET` | `/api/v1/community/posts?limit=&before=` | Visible posts, newest first; `next_before` is the cursor |
-| `POST` | `/api/v1/community/posts` | Publish text and/or one media item |
+| `POST` | `/api/v1/community/posts` | Publish text and/or one media item (active accounts only) |
+| `POST` | `/api/v1/community/posts/{id}/react` | `like`, `love`, or `haha`; tapping the current one removes it (active accounts only) |
 | `DELETE` | `/api/v1/community/posts/{id}` | Soft-delete your own post |
 | `POST` | `/api/v1/community/posts/{id}/report` | Report a post once; 3 distinct reports auto-hide |
 | `POST` | `/api/v1/media` | Multipart `file`; image ≤ 400 KB, video ≤ 3 MB |
