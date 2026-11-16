@@ -5,7 +5,7 @@ import Layout from '../layouts/Layout.astro';
   <div class="page-frame page-frame-wide">
     <header class="mb-4">
       <h1 class="text-2xl font-bold">History</h1>
-      <p class="text-sm text-[var(--text-2)]">Your bets from the last 6 months. Nothing is hidden — wins and losses both stay here.</p>
+      <p class="text-sm text-[var(--text-2)]">Slips placed by <strong>your account</strong> in the last 6 months. Wins and losses both stay here. The Betva track record on Home is the combined count across all users.</p>
     </header>
 
     <div class="page-split">
@@ -95,7 +95,7 @@ import Layout from '../layouts/Layout.astro';
       const list = document.getElementById('list')!;
       if (!bets.length) {
         list.innerHTML =
-          '<div class="card text-center text-[var(--text-2)]">No bets yet. Open Home to place your first slip.</div>';
+          '<div class="card text-center text-[var(--text-2)]">No slips from your account yet. Only bets you place appear here. The Betva track record on Home combines settled tips from everyone.</div>';
         return;
       }
 

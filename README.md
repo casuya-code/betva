@@ -1873,7 +1873,7 @@ Rules the audit enforces: **no horizontal overflow at 320 px**, every control at
 - Settlement: **official league source decides**, admin enters and approves, corrections are reversing entries. Two-source `DISPUTED` automation is ⬜
 - Statuses: **WIN / LOSS / PENDING / LIVE / POSTPONED** — fixed colour tokens, text + icon on every badge
 - Markets: **Full Time Over 0.5 Goals**, **Over 0.5 Half Time** only
-- Trust counter: **aggregate wins/losses/rate/streak**, confidence badge per match, losses never hidden, updates at settlement, never resets
+- Trust counter: **aggregate wins/losses/rate/streak**, confidence badge per match, losses never hidden, updates at settlement, never resets. It is labelled “Betva track record” in the UI to distinguish it from History, which lists only the signed-in account's own slips.
 - Visibility: **Home = today + tomorrow** (separate Today/Tomorrow buttons), **History = last 6 months**
 - Design: **dark-only v1**, glass surfaces, system fonts, 44px tap targets, 12/16px radius, Google-blue brand, eagle-B mark
 - Engagement: **mechanics approved**, guardrails enforced as release blockers (see Engagement Policy)
