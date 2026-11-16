@@ -19,8 +19,18 @@ import BrandName from '../components/BrandName.astro';
 
     <!-- Matches -->
     <div>
-      <h2 class="text-lg font-semibold mb-3">Today &amp; Tomorrow</h2>
-      <div id="matches" class="space-y-3">
+      <h2 class="text-lg font-semibold mb-3">Matches</h2>
+      <div class="day-tabs" id="day-tabs" role="tablist" aria-label="Match day">
+        <button type="button" class="day-tab active" id="tab-today" role="tab" aria-selected="true" aria-controls="matches" data-day="today">
+          <span class="dt-label">Today</span>
+          <span class="dt-sub" id="tab-today-sub">—</span>
+        </button>
+        <button type="button" class="day-tab" id="tab-tomorrow" role="tab" aria-selected="false" aria-controls="matches" data-day="tomorrow">
+          <span class="dt-label">Tomorrow</span>
+          <span class="dt-sub" id="tab-tomorrow-sub">—</span>
+        </button>
+      </div>
+      <div id="matches" class="mt-3 space-y-3" role="tabpanel" aria-label="Match list">
         <div class="card"><div class="skeleton h-24"></div></div>
         <div class="card"><div class="skeleton h-24"></div></div>
         <div class="card"><div class="skeleton h-24"></div></div>
@@ -205,39 +215,44 @@ import BrandName from '../components/BrandName.astro';
       btn.textContent = 'Placed';
     }
 
-    async function load() {
-      const el = document.getElementById('matches')!;
+    let allMatches: any[] = [];
+    let currentDay: 'today' | 'tomorrow' = 'today';
+
+    // EAT (UTC+3, no DST) day keys as a fallback when the server has no rows.
+    function eatDateKey(offsetDays: number): string {
+      return new Date(Date.now() + 3 * 60 * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10);
+    }
+    let dayKeys: Record<'today' | 'tomorrow', string> = { today: eatDateKey(0), tomorrow: eatDateKey(1) };
+
+    function shortDate(key: string): string {
       try {
-        const res = await fetch(`${API}/api/v1/matches`);
-        const data = await res.json().catch(() => ({}));
-        const matches = data.matches || [];
+        return new Date(key + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      } catch {
+        return key;
+      }
+    }
 
-        if (!matches.length) {
-          el.innerHTML =
-            '<div class="card text-center text-[var(--text-2)]">No matches published right now. Check back later today.</div>';
-          return;
-        }
+    function cardHTML(m: any): string {
+      const st = statusMap[m.status] || statusMap.upcoming;
+      const conf = confidenceMap[m.confidence] || confidenceMap.medium;
+      const markets = m.markets || [];
+      const teams = `${m.home_team} vs ${m.away_team}`;
 
-        el.innerHTML = matches
-          .map((m: any) => {
-            const st = statusMap[m.status] || statusMap.upcoming;
-            const conf = confidenceMap[m.confidence] || confidenceMap.medium;
-            const markets = m.markets || [];
-            const teams = `${m.home_team} vs ${m.away_team}`;
+      const buttons = markets.length
+        ? markets
+            .map((mk: string) => {
+              const label = MARKET_LABEL[mk] || mk;
+              if (!m.is_open) {
+                return `<button class="btn btn-secondary flex-1 text-sm" disabled>${esc(label)} · closed</button>`;
+              }
+              return `<button class="btn btn-secondary flex-1 text-sm" data-match="${esc(m.id)}" data-market="${esc(mk)}" data-teams="${esc(teams)}" data-league="${esc(m.league || '')}" data-kickoff="${esc(m.match_date)} ${esc(m.kickoff)}" data-confidence="${esc(m.confidence || 'medium')}">${esc(label)}</button>`;
+            })
+            .join('')
+        : '<span class="text-xs text-[var(--text-3)]">No markets open</span>';
 
-            const buttons = markets.length
-              ? markets
-                  .map((mk: string) => {
-                    const label = MARKET_LABEL[mk] || mk;
-                    if (!m.is_open) {
-                      return `<button class="btn btn-secondary flex-1 text-sm" disabled>${esc(label)} · closed</button>`;
-                    }
-                    return `<button class="btn btn-secondary flex-1 text-sm" data-match="${esc(m.id)}" data-market="${esc(mk)}" data-teams="${esc(teams)}" data-league="${esc(m.league || '')}" data-kickoff="${esc(m.match_date)} ${esc(m.kickoff)}" data-confidence="${esc(m.confidence || 'medium')}">${esc(label)}</button>`;
-                  })
-                  .join('')
-              : '<span class="text-xs text-[var(--text-3)]">No markets open</span>';
-
-            return `
+      return `
               <div class="card">
                 <div class="flex items-center justify-between mb-2 gap-2">
                   <span class="text-xs text-[var(--text-3)] truncate">
@@ -256,8 +271,68 @@ import BrandName from '../components/BrandName.astro';
                 </div>
                 <div class="mt-3 flex gap-2">${buttons}</div>
               </div>`;
-          })
-          .join('');
+    }
+
+    function matchesFor(day: 'today' | 'tomorrow'): any[] {
+      const key = dayKeys[day];
+      return allMatches.filter((m: any) => m.match_date === key);
+    }
+
+    function renderDay() {
+      const el = document.getElementById('matches')!;
+      const list = matchesFor(currentDay);
+      if (!list.length) {
+        el.innerHTML = `<div class="card text-center text-[var(--text-2)]">No matches ${currentDay === 'today' ? 'today' : 'tomorrow'} yet. Check back later.</div>`;
+        return;
+      }
+      el.innerHTML = list.map(cardHTML).join('');
+    }
+
+    function setDay(day: 'today' | 'tomorrow') {
+      currentDay = day;
+      document.querySelectorAll<HTMLButtonElement>('.day-tab').forEach((tab) => {
+        const on = tab.dataset.day === day;
+        tab.classList.toggle('active', on);
+        tab.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      renderDay();
+    }
+
+    async function load() {
+      const el = document.getElementById('matches')!;
+      try {
+        const res = await fetch(`${API}/api/v1/matches`);
+        const data = await res.json().catch(() => ({}));
+        allMatches = data.matches || [];
+
+        // Trust the server's EAT dates: the two distinct days it returns are
+        // today and tomorrow. Fall back to the device-computed EAT date.
+        const dates = [...new Set(allMatches.map((m: any) => String(m.match_date)))].sort();
+        if (dates.length) {
+          dayKeys.today = dates[0];
+          dayKeys.tomorrow = dates[1] || dates[0];
+        }
+
+        for (const day of ['today', 'tomorrow'] as const) {
+          const n = matchesFor(day).length;
+          const sub = document.getElementById(`tab-${day}-sub`);
+          if (sub) {
+            sub.textContent = `${shortDate(dayKeys[day])}${n ? ` · ${n} match${n === 1 ? '' : 'es'}` : ''}`;
+          }
+        }
+
+        if (!allMatches.length) {
+          el.innerHTML =
+            '<div class="card text-center text-[var(--text-2)]">No matches published right now. Check back later today.</div>';
+          return;
+        }
+
+        // If today has nothing but tomorrow does, land the user on tomorrow.
+        if (currentDay === 'today' && !matchesFor('today').length && matchesFor('tomorrow').length) {
+          setDay('tomorrow');
+        } else {
+          renderDay();
+        }
       } catch {
         el.innerHTML =
           '<div class="card text-center text-[var(--text-2)]">Could not load matches. Check your connection and try again.</div>';
@@ -275,6 +350,13 @@ import BrandName from '../components/BrandName.astro';
         kickoff: btn.dataset.kickoff!,
         confidence: btn.dataset.confidence!,
       });
+    });
+
+    document.getElementById('day-tabs')!.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.day-tab') as HTMLElement | null;
+      if (!btn) return;
+      const day = btn.dataset.day as 'today' | 'tomorrow' | undefined;
+      if (day && day !== currentDay) setDay(day);
     });
 
     (async () => {
@@ -318,6 +400,56 @@ import BrandName from '../components/BrandName.astro';
       border-radius: 999px;
       background: var(--border);
       margin: 0 auto 12px;
+    }
+
+    /* Today / Tomorrow segmented control */
+    .day-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 14px;
+      background: var(--surface-el);
+      border: 1px solid var(--border);
+    }
+    .day-tab {
+      min-height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1px;
+      border-radius: 10px;
+      padding: 4px 8px;
+      color: var(--text-2);
+      transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .day-tab:hover {
+      color: var(--text);
+    }
+    .day-tab.active {
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      color: #fff;
+      box-shadow: 0 2px 12px var(--brand-glow);
+    }
+    .day-tab:focus-visible {
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+    }
+    .dt-label {
+      font-weight: 700;
+      font-size: 0.95rem;
+      line-height: 1.1;
+    }
+    .dt-sub {
+      font-size: 0.7rem;
+      line-height: 1.2;
+      opacity: 0.85;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
     }
   </style>
 </Layout>
