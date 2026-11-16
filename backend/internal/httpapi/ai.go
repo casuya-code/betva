@@ -58,9 +58,16 @@ func (s *Server) handleAdminGenerateSuggestion(w http.ResponseWriter, r *http.Re
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
 
-	// 1. Fetch the page.
-	client := &http.Client{Timeout: 20 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, body.SourceURL, nil)
+	// 1. Fetch the page. Reject internal/loopback/metadata addresses and any
+	// hostname that resolves to them, then pin the dial to vetted IPs.
+	client, err := publicHTTPClient(ctx, u)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "source_url host is not public",
+		})
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "could not build request"})
 		return
@@ -120,7 +127,7 @@ Rules:
 	}
 	gReq.Header.Set("Authorization", "Bearer "+s.Cfg.GroqAPIKey)
 	gReq.Header.Set("Content-Type", "application/json")
-	gResp, err := client.Do(gReq)
+	gResp, err := (&http.Client{Timeout: 20 * time.Second}).Do(gReq)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "groq request failed: " + err.Error()})
 		return

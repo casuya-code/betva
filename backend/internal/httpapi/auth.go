@@ -44,6 +44,15 @@ var phoneRe = regexp.MustCompile(`^\+255[0-9]{9}$`)
 // timing reveals which phone numbers are registered.
 const dummyBcryptHash = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 
+// profilePicRe accepts only local uploaded images. A profile picture is later
+// rendered as an <img src>, so arbitrary URLs would allow tracking pixels and
+// javascript:/data: payloads.
+var profilePicRe = regexp.MustCompile(`^/media/[A-Za-z0-9_-]+\.(jpg|jpeg|png|webp|gif)$`)
+
+func validProfilePic(s string) bool {
+	return len(s) <= 200 && profilePicRe.MatchString(s)
+}
+
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -228,7 +237,13 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if body.ProfilePic != "" {
-		// size check done client-side (<10KB); store as-is (base64 or URL)
+		if !validProfilePic(body.ProfilePic) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "profile_pic must be a local /media/ image path",
+			})
+			return
+		}
+		// size check done client-side (<10KB); stored as a local media path
 		_, err := s.Pool.Exec(ctx, `UPDATE users SET profile_pic = $1, updated_at = NOW() WHERE id = $2`, body.ProfilePic, u.ID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})

@@ -19,7 +19,7 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 - [ ] Registration requires `official_name` and `accepted_terms`; a missing checkbox returns `400`.
 - [ ] `consent_log` receives one row per registration with `notice_version` and timestamp.
 - [ ] `PUT /me` cannot change `nickname`, `phone`, `official_name`, `status`, `balance_cents`, or `access_expires_at`.
-- [ ] **Known gap:** `PUT /me` accepts an arbitrary `profile_pic` string with no server-side size, MIME, or URL validation. Confirm it cannot be used for stored XSS or tracking pixels.
+- [ ] `PUT /me` now allows only `/media/<name>.(jpg|jpeg|png|webp|gif)` for `profile_pic`. Confirm a remote URL, `javascript:`, `data:`, `../`, or `.svg` value is rejected with `400` and cannot become a stored tracking pixel or XSS.
 - [ ] Admin and user tokens are not interchangeable (claims checked, not just signature).
 
 ## Money integrity
@@ -56,7 +56,7 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 - [ ] `/media/*` cannot traverse outside `MEDIA_DIR` (`../`, encoded variants, Windows `..\`).
 - [ ] CSV upload rejects malformed rows with line numbers; no path traversal in file name.
 - [ ] CSV `replace` is refused when bets exist for that date.
-- [ ] **AI source URL:** `/admin/ai/suggest` only accepts `http`/`https`, but it does **not** block private/link-local addresses. Attempt SSRF to `127.0.0.1`, `169.254.169.254`, `localhost`, and an internal hostname; fix with an allow-list or DNS/IP guard before launch.
+- [ ] **AI source URL:** `/admin/ai/suggest` now resolves the hostname, rejects loopback/private/link-local/multicast/CGNAT addresses (including `127.0.0.1`, `169.254.169.254`, `localhost`, and Railway internal names), pins the dial to the vetted IPs, and refuses redirects. Confirm SSRF attempts return `400` without any request reaching internal services.
 - [ ] AI fetch enforces the 20s timeout and 1MB read cap; a slow-loris or huge page cannot exhaust the server.
 - [ ] AI response is validated (both goals present, 0–30, confidence enum) and stored as `pending`; nothing auto-settles.
 - [ ] Rejecting an AI suggestion without a reason returns `400`; an already-reviewed suggestion returns `409`.
@@ -104,6 +104,7 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 
 - Admin password and JWT secret rotated; old password now returns `401`.
 - API security headers verified on `/api/v1/config`; media keeps `Cache-Control: public, max-age=31536000, immutable`.
+- SSRF guard and profile-picture allow-list covered by unit tests; client DNS rebinding blocked by pinning the dial to resolved public IPs.
 - Login limiter verified: 10 `401`s then `429` with `Retry-After` for one phone.
 - `npm run check` passes; all 14 built pages have zero inline script tags and zero inline styles/CSS.
 - CSP and the other headers verified on the live Vercel alias.

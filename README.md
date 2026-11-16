@@ -1389,7 +1389,7 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 ### Delivery & Compression: local today, Cloudflare later 🟡
 
 - **Images:** uploads are stored as received, capped at **400 KB**, and served from `/media/*`. Server-side MIME sniffing prevents a renamed executable from being served as an image. Auto-conversion to WebP/AVIF and blur-up placeholders are ⬜.
-- **Profile pictures:** the API accepts a `profile_pic` string with **no server-side size check** (the 10 KB rule is client-side only) and there is no upload UI. ⬜
+- **Profile pictures:** `PUT /me` now accepts only local `/media/<name>.(jpg|jpeg|png|webp|gif)` paths, so a tracking pixel, `javascript:` URL, or remote embed cannot be stored as an avatar. There is still no upload UI or separate 10 KB image-size check. 🟡
 - **Videos:** uploads are capped at **3 MB**, served as a single file with `preload="none"` and native controls. No autoplay. HLS adaptive bitrate is ⬜.
 - **Storage:** local `MEDIA_DIR` with random 24-character hex filenames and `Cache-Control: public, max-age=31536000, immutable`. Production moves to R2/Images/Stream behind the same upload endpoint. ⬜
 
