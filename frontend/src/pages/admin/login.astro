@@ -20,6 +20,11 @@ import Layout from '../../layouts/Layout.astro';
         <label class="text-sm text-[var(--text-2)] mb-1 block" for="password">Password</label>
         <input class="input" id="password" name="password" type="password" autocomplete="current-password" required />
       </div>
+      <div id="codeField" class="hidden">
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="totpCode">Authenticator code</label>
+        <input class="input counter" id="totpCode" name="totp_code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" />
+        <p class="text-xs text-[var(--text-3)] mt-1">Six-digit code from your authenticator app, or your recovery code.</p>
+      </div>
       <button class="btn btn-primary w-full" type="submit">Sign in</button>
       <div id="msg" class="text-center text-sm"></div>
     </form>
@@ -33,6 +38,19 @@ import Layout from '../../layouts/Layout.astro';
     import { API } from '../../lib/admin';
     const form = document.getElementById('form') as HTMLFormElement;
     const msg = document.getElementById('msg')!;
+    const codeField = document.getElementById('codeField');
+    const codeInput = document.getElementById('totpCode') as HTMLInputElement | null;
+
+    // Show the code field only when the server has an admin TOTP secret.
+    fetch(`${API}/api/v1/admin/2fa/status`)
+      .then((res) => (res.ok ? res.json() : { required: false }))
+      .then((data: { required?: boolean }) => {
+        if (data.required) {
+          codeField?.classList.remove('hidden');
+          if (codeInput) codeInput.required = true;
+        }
+      })
+      .catch(() => {});
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -46,6 +64,7 @@ import Layout from '../../layouts/Layout.astro';
           body: JSON.stringify({
             username: fd.get('username'),
             password: fd.get('password'),
+            totp_code: codeInput?.value || '',
           }),
         });
         const data = await res.json().catch(() => ({}));

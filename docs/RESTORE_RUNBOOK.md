@@ -144,14 +144,18 @@ A drill that has never failed is not evidence. Verify the failing path once (rem
 Production recovery starts from the newest verified object in the `betva-backups` bucket,
 not from the live database.
 
-1. **List what exists.**
+1. **List what exists in each provider.**
    ```bash
    cd backend
-   go run ./cmd/backup -list
+   go run ./cmd/backup -list           # Railway bucket
+   go run ./cmd/backup -secondary -list # Cloudflare R2 mirror
    ```
+   The same key is written to both. If one bucket is unavailable, restore from the other.
 2. **Download and verify.**
    ```bash
    go run ./cmd/backup -download db/YYYY/MM/DD/betva-YYYYMMDDTHHMMSSZ.dump -out ./restore.dump
+   # or, from the mirror:
+   go run ./cmd/backup -secondary -download db/YYYY/MM/DD/betva-YYYYMMDDTHHMMSSZ.dump -out ./restore.dump
    ```
    The job compares the downloaded size and SHA-256 with the `.dump.json` manifest and
    aborts on a mismatch, so a corrupt download never reaches the restore step.
@@ -190,7 +194,7 @@ Staging drill details and the current topology are in [`DEPLOYMENT.md`](DEPLOYME
 - [ ] `restore_test.ps1` is local-only (hardcoded binary path, role, and database). Parameterise it so the staging drill is one command.
 - [x] Daily off-site backups: Railway cron `backup` writes verified dumps to the `betva-backups` bucket with GFS retention (`DEPLOYMENT.md#4-off-site-backups`).
 - [ ] Managed PITR (near-zero RPO): Pro-only on Railway, not enabled.
-- [ ] A second off-site copy on a different provider (Cloudflare R2) for account-level isolation (⬜).
+- [x] A second off-site copy on a different provider (Cloudflare R2, `betva-backups-r2`) is written and pruned by the same cron job. ✅ 2026-11-16.
 - [ ] Media files live on the Railway volume `media` (`/data`) and are **not** covered by the Postgres dump (🟡). Back up the volume manually or move media to R2.
 - [x] Full restore from an off-site bucket object passed on 2026-11-16 (counts, ledger sum, 19 tables).
 - [ ] No second person has independently verified a restore (⬜).

@@ -60,6 +60,7 @@ func main() {
 	_ = godotenv.Load()
 
 	list := flag.Bool("list", false, "list stored dumps and exit")
+	secondary := flag.Bool("secondary", false, "use the R2 mirror for -list/-download/-delete")
 	deleteKey := flag.String("delete", "", "delete one stored dump by exact key and exit")
 	downloadKey := flag.String("download", "", "download one stored dump by exact key and exit")
 	outPath := flag.String("out", "", "destination file for -download")
@@ -78,8 +79,29 @@ func main() {
 		log.Fatalf("backup: s3 client: %v", err)
 	}
 
+	// Optional mirror on a second provider. A partial configuration is fatal
+	// so a typo cannot silently disable the off-site copy.
+	var mirror *s3.Client
+	if cfg.HasSecondary() {
+		if missing := cfg.SecondaryMissing(); len(missing) > 0 {
+			log.Fatalf("backup: incomplete R2 mirror config: %s", strings.Join(missing, ", "))
+		}
+		mirror, err = newS3With(ctx, cfg.SecondaryEndpoint, cfg.SecondaryRegion, cfg.SecondaryKeyID, cfg.SecondarySecret)
+		if err != nil {
+			log.Fatalf("backup: r2 client: %v", err)
+		}
+	}
+
+	bucket := cfg.Bucket
+	if *secondary {
+		if mirror == nil {
+			log.Fatal("backup: no R2 mirror is configured")
+		}
+		client, bucket = mirror, cfg.SecondaryBucket
+	}
+
 	if *list {
-		if err := listDumps(ctx, client, cfg); err != nil {
+		if err := listDumps(ctx, client, bucket, cfg); err != nil {
 			log.Fatalf("backup: list: %v", err)
 		}
 		return
@@ -89,7 +111,7 @@ func main() {
 		if *outPath == "" {
 			log.Fatal("backup: -download requires -out <path>")
 		}
-		if err := downloadDump(ctx, client, cfg, *downloadKey, *outPath); err != nil {
+		if err := downloadDump(ctx, client, bucket, cfg, *downloadKey, *outPath); err != nil {
 			log.Fatalf("backup: download: %v", err)
 		}
 		return
@@ -101,7 +123,7 @@ func main() {
 		}
 		for _, k := range []string{*deleteKey, *deleteKey + ".json"} {
 			if _, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{
-				Bucket: aws.String(cfg.Bucket),
+				Bucket: aws.String(bucket),
 				Key:    aws.String(k),
 			}); err != nil {
 				log.Fatalf("backup: delete %s: %v", k, err)
@@ -141,7 +163,7 @@ func main() {
 		started.Format("20060102T150405Z"),
 	)
 
-	if err := upload(ctx, client, cfg.Bucket, key, "application/octet-stream", dumpPath, info.Size()); err != nil {
+	if err := upload(ctx, client, bucket, key, "application/octet-stream", dumpPath, info.Size()); err != nil {
 		log.Fatalf("backup: upload dump: %v", err)
 	}
 
@@ -162,38 +184,56 @@ func main() {
 	if err != nil {
 		log.Fatalf("backup: marshal manifest: %v", err)
 	}
-	if err := uploadBytes(ctx, client, cfg.Bucket, key+".json", "application/json", body); err != nil {
+	if err := uploadBytes(ctx, client, bucket, key+".json", "application/json", body); err != nil {
 		log.Fatalf("backup: upload manifest: %v", err)
 	}
 
-	log.Printf("backup: uploaded %s (%d bytes, %d tables, sha256 %s)", key, info.Size(), tables, sum[:12])
+	log.Printf("backup: uploaded %s to %s (%d bytes, %d tables, sha256 %s)", key, bucket, info.Size(), tables, sum[:12])
 
-	deleted, err := prune(ctx, client, cfg, started)
+	if mirror != nil {
+		if err := upload(ctx, mirror, cfg.SecondaryBucket, key, "application/octet-stream", dumpPath, info.Size()); err != nil {
+			log.Fatalf("backup: R2 upload dump: %v", err)
+		}
+		if err := uploadBytes(ctx, mirror, cfg.SecondaryBucket, key+".json", "application/json", body); err != nil {
+			log.Fatalf("backup: R2 upload manifest: %v", err)
+		}
+		log.Printf("backup: mirrored %s to %s", key, cfg.SecondaryBucket)
+	}
+
+	deleted, err := prune(ctx, client, bucket, cfg, started)
 	if err != nil {
 		log.Fatalf("backup: prune: %v", err)
+	}
+	if mirror != nil {
+		mirrorDeleted, err := prune(ctx, mirror, cfg.SecondaryBucket, cfg, started)
+		if err != nil {
+			log.Fatalf("backup: R2 prune: %v", err)
+		}
+		deleted += mirrorDeleted
 	}
 	log.Printf("backup: done in %s; pruned %d expired dump(s)", time.Since(started).Round(time.Millisecond), deleted)
 }
 
 func newS3(ctx context.Context, cfg *config.BackupConfig) (*s3.Client, error) {
+	return newS3With(ctx, cfg.Endpoint, cfg.Region,
+		os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"))
+}
+
+// newS3With creates a virtual-host-style S3 client for a given endpoint and
+// credential pair. Railway buckets and R2 both speak the same S3 API.
+func newS3With(ctx context.Context, endpoint, region, keyID, secret string) (*s3.Client, error) {
 	opts := []func(*awsconfig.LoadOptions) error{
-		awsconfig.WithRegion(cfg.Region),
-		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			os.Getenv("AWS_ACCESS_KEY_ID"),
-			os.Getenv("AWS_SECRET_ACCESS_KEY"),
-			"",
-		)),
+		awsconfig.WithRegion(region),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(keyID, secret, "")),
 	}
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		if cfg.Endpoint != "" {
-			o.BaseEndpoint = aws.String(cfg.Endpoint)
+		if endpoint != "" {
+			o.BaseEndpoint = aws.String(endpoint)
 		}
-		// Railway buckets and R2 use path-style addressing only when asked;
-		// virtual-host style is the default for both.
 		o.UsePathStyle = false
 	}), nil
 }
@@ -304,9 +344,9 @@ func uploadBytes(ctx context.Context, client *s3.Client, bucket, key, contentTyp
 }
 
 // listDumps prints every stored dump with its size and age, newest first.
-func listDumps(ctx context.Context, client *s3.Client, cfg *config.BackupConfig) error {
+func listDumps(ctx context.Context, client *s3.Client, bucket string, cfg *config.BackupConfig) error {
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
-		Bucket: aws.String(cfg.Bucket),
+		Bucket: aws.String(bucket),
 		Prefix: aws.String(cfg.Prefix + "/"),
 	})
 	type row struct {
@@ -344,13 +384,13 @@ func listDumps(ctx context.Context, client *s3.Client, cfg *config.BackupConfig)
 
 // downloadDump fetches a dump and verifies its size and SHA-256 against the
 // manifest written at upload time. A corrupt download never lands silently.
-func downloadDump(ctx context.Context, client *s3.Client, cfg *config.BackupConfig, key, out string) error {
+func downloadDump(ctx context.Context, client *s3.Client, bucket string, cfg *config.BackupConfig, key, out string) error {
 	if !strings.HasPrefix(key, cfg.Prefix+"/") || !strings.HasSuffix(key, ".dump") {
 		return fmt.Errorf("key must be a .dump under %s/", cfg.Prefix)
 	}
 
 	manifestObj, err := client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(cfg.Bucket),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(key + ".json"),
 	})
 	if err != nil {
@@ -363,7 +403,7 @@ func downloadDump(ctx context.Context, client *s3.Client, cfg *config.BackupConf
 	}
 
 	obj, err := client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(cfg.Bucket),
+		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
@@ -398,9 +438,9 @@ func downloadDump(ctx context.Context, client *s3.Client, cfg *config.BackupConf
 
 // prune applies GFS retention. The dump timestamp comes from the key path, so
 // pruning needs no metadata calls.
-func prune(ctx context.Context, client *s3.Client, cfg *config.BackupConfig, now time.Time) (int, error) {
+func prune(ctx context.Context, client *s3.Client, bucket string, cfg *config.BackupConfig, now time.Time) (int, error) {
 	paginator := s3.NewListObjectsV2Paginator(client, &s3.ListObjectsV2Input{
-		Bucket: aws.String(cfg.Bucket),
+		Bucket: aws.String(bucket),
 		Prefix: aws.String(cfg.Prefix + "/"),
 	})
 
@@ -424,7 +464,7 @@ func prune(ctx context.Context, client *s3.Client, cfg *config.BackupConfig, now
 			}
 			for _, k := range []string{key, key + ".json"} {
 				_, err := client.DeleteObject(ctx, &s3.DeleteObjectInput{
-					Bucket: aws.String(cfg.Bucket),
+					Bucket: aws.String(bucket),
 					Key:    aws.String(k),
 				})
 				if err != nil {

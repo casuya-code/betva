@@ -11,6 +11,7 @@ import (
 type adminLoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	TOTPCode string `json:"totp_code"`
 }
 
 // handleAdminLogin authenticates against credentials held only in environment
@@ -35,6 +36,10 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}
+	if !verifyAdminSecondFactor(s.Cfg.AdminTOTP, s.Cfg.AdminRecovery, req.TOTPCode) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid 2FA code"})
+		return
+	}
 
 	tok, err := s.issueToken("admin", "", true)
 	if err != nil {
@@ -45,6 +50,14 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"token": tok,
 		"admin": map[string]string{"username": s.Cfg.AdminUser},
+	})
+}
+
+// handleAdmin2FAStatus lets the admin login form know whether to show the
+// code field. It reveals only that 2FA is configured, never the secret.
+func (s *Server) handleAdmin2FAStatus(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{
+		"required": strings.TrimSpace(s.Cfg.AdminTOTP) != "",
 	})
 }
 

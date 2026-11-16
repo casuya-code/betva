@@ -72,6 +72,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 
 		// admin login uses env credentials, never the database
 		api.Post("/admin/login", s.adminLoginIP.Wrap(s.handleAdminLogin))
+		api.Get("/admin/2fa/status", s.handleAdmin2FAStatus)
 
 		// protected
 		api.Group(func(protected chi.Router) {

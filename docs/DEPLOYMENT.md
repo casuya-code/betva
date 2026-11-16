@@ -157,7 +157,9 @@ and outside the database volume.
 | Image | `backend/Dockerfile.backup` |
 | Schedule | `0 1 * * *` UTC (04:00 EAT) |
 | Bucket | `betva-backups` (`06597326-ad58-422f-b9d9-48df345276b9`), name `betva-backups-yulkgd-4ic` |
+| Mirror | Cloudflare R2 bucket `betva-backups-r2` (separate credentials) |
 | Endpoint | `https://t3.storageapi.dev`, region `auto`, virtual-host style |
+| R2 endpoint | `https://de02bd0e1be4fc699d9003ad1eae5e2f.r2.cloudflarestorage.com`, region `auto` |
 | Layout | `db/YYYY/MM/DD/betva-YYYYMMDDTHHMMSSZ.dump` + `.dump.json` |
 | Retention | daily 14 days, Sunday 56 days, first-of-month 183 days |
 
@@ -187,6 +189,12 @@ Railway API — Config-as-Code is deprecated.
 | `BACKUP_WEEKLY_KEEP_DAYS` | `56` |
 | `BACKUP_MONTHLY_KEEP_DAYS` | `183` |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | bucket credentials |
+| `BACKUP_R2_BUCKET` | `betva-backups-r2` |
+| `BACKUP_R2_ENDPOINT` | `https://de02bd0e1be4fc699d9003ad1eae5e2f.r2.cloudflarestorage.com` |
+| `BACKUP_R2_REGION` | `auto` |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | R2 credentials (stored locally in `backend/.env.r2.local`, untracked) |
+
+API credentials and R2 credentials are on the `backup` service only; `api` has neither.
 
 ### Operating the job
 
@@ -195,8 +203,10 @@ or `railway run --service backup <command>`):
 
 ```bash
 go run ./cmd/backup                                        # take, verify, upload, prune now
-go run ./cmd/backup -list                                  # stored dumps, newest first
+go run ./cmd/backup -list                                  # primary bucket, newest first
+go run ./cmd/backup -secondary -list                       # R2 mirror
 go run ./cmd/backup -download <key> -out ./restore.dump    # verifies size + SHA-256
+go run ./cmd/backup -secondary -download <key> -out ./restore.dump
 go run ./cmd/backup -delete <key>                          # delete one dump + manifest
 ```
 
@@ -211,6 +221,11 @@ Railway cron deployment failed.
   logs showed `uploaded … 19 tables` and `done in 550ms`.
 - Downloading that object back verified its SHA-256 and 19 table-data entries with
   `pg_restore --list`. The schedule was then restored to `0 1 * * *`.
+- The R2 mirror was added on 2026-11-16: a temporary `*/5` run produced
+  `db/2026/11/16/betva-20261116T115050Z.dump` (44,782 bytes, 19 tables) in **both**
+  buckets; logs showed `uploaded … to betva-backups-yulkgd-4ic`, `mirrored … to
+  betva-backups-r2`, and `done in 2.011s`. The R2 object's SHA-256 and 19 table-data
+  entries were verified after download. Schedule restored to `0 1 * * *`.
 - Restoring the downloaded dump is covered in
   [`RESTORE_RUNBOOK.md`](RESTORE_RUNBOOK.md#5-restoring-from-the-off-site-bucket).
 
@@ -239,6 +254,7 @@ every name.
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | Private network |
 | `JWT_SECRET` | generated for staging | 48 random hex chars; rotated 2026-11-16; rotate = every session logs out |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | rotated 2026-11-16 | New values in `backend/.env.staging.local` (untracked). Change again before public launch |
+| `ADMIN_TOTP_SECRET` / `ADMIN_RECOVERY_CODE` | generated 2026-11-16 | TOTP enforced on staging; generate new ones with `go run ./cmd/totp` |
 | `CORS_ORIGINS` | Vercel alias + localhost | Exact origins only |
 | `ACCESS_FEE_CENTS` | `500000` | 5,000 TZS flat monthly rate |
 | `PAYOUT_MULTIPLIER_BP` | `15000` | 1.50× return on a win |
@@ -246,7 +262,7 @@ every name.
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | from the operator's local `.env` | Push enabled |
 | `PUSH_DAILY_CAP` | `2` | Enforced server-side |
 | `QUIET_START_HOUR` / `QUIET_END_HOUR` | `22` / `7` | EAT |
-| `GROQ_API_KEY` | **not set** | AI suggestions disabled until a key is added |
+| `GROQ_API_KEY` | set 2026-11-16 | AI suggestions enabled; never logged or returned to clients |
 | `ACCESS_FEE_DAU_TARGET` / `MONTHLY_OPERATING_COST_CENTS` | **not set** | Fee planner shows unconfigured |
 
 `REDIS_URL` is not set; the connection failure is non-fatal.
@@ -336,8 +352,8 @@ Launch blockers or follow-ups, in order:
    mid-range Android over 3G is still unmeasured; Cloudflare in front is the planned fix.
 7. **Config-as-Code deprecation.** `railway.toml` stops working on 2026-12-01. Migrate to
    `.railway/railway.ts` or keep configuring the service through the dashboard/API.
-8. **Security gate not fully run.** `docs/PEN_TEST_CHECKLIST.md` still needs an independent tester. Security headers, a strict CSP, basic rate limiting, and credential-rotation are done; admin 2FA is not.
-9. **AI results disabled.** No `GROQ_API_KEY` on staging.
+8. **Security gate not fully run.** `docs/PEN_TEST_CHECKLIST.md` still needs an independent tester. Security headers, a strict CSP, rate limiting, credential rotation, and TOTP admin 2FA are done.
+9. **AI results enabled.** `GROQ_API_KEY` was set on 2026-11-16; SSRF-guarded source fetching uses it. Confidence thresholds and scraping permissions are still product questions.
 10. **Fee planner unconfigured.** Set `ACCESS_FEE_DAU_TARGET` and
     `MONTHLY_OPERATING_COST_CENTS` when the operator has real numbers.
 11. **Container runs as root.** The image has no `USER` because Railway volumes mount

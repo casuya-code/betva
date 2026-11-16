@@ -138,7 +138,10 @@ Rules:
 	defer gResp.Body.Close()
 	gRaw, _ := io.ReadAll(io.LimitReader(gResp.Body, 1<<20))
 	if gResp.StatusCode < 200 || gResp.StatusCode >= 300 {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("groq returned HTTP %d: %s", gResp.StatusCode, strings.TrimSpace(string(gRaw)))})
+		log.Printf("groq returned HTTP %d: %s", gResp.StatusCode, strings.TrimSpace(string(gRaw)))
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": fmt.Sprintf("groq returned HTTP %d", gResp.StatusCode),
+		})
 		return
 	}
 

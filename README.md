@@ -1144,17 +1144,20 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
    verifies the archive with `pg_restore --list` (refuses to upload a dump with no table
    data), records size + SHA-256 in a JSON manifest, uploads both to the `betva-backups`
    bucket, then prunes. ✅ `docs/DEPLOYMENT.md#4-off-site-backups`
-2. **Grandfather-father-son retention** — daily 14 days, Sunday 56 days, first-of-month
+2. **Second-provider mirror** — the same dump and manifest are mirrored to Cloudflare R2
+   (`betva-backups-r2`) with separate credentials, and both buckets are pruned. A Railway
+   account-level outage cannot take both copies. ✅
+3. **Grandfather-father-son retention** — daily 14 days, Sunday 56 days, first-of-month
    183 days. Nothing younger than 24 hours is deleted, so the 6-month archive window is
    covered. ✅
-3. **Railway managed volume backups / PITR** — Pro-only. The Hobby workspace rejects the
+4. **Railway managed volume backups / PITR** — Pro-only. The Hobby workspace rejects the
    schedule API with "Manual backups and backup schedules are only available for Pro
    workspaces", so RPO is up to 24 hours until the workspace is upgraded. ⬜
-4. **Redis persistence** — Redis is connected at startup but **currently unused**, so it
+5. **Redis persistence** — Redis is connected at startup but **currently unused**, so it
    holds no data worth backing up. ⬜
-5. **Code & config in Git** — the schema is versioned (`001`–`006`), so a fresh database
+6. **Code & config in Git** — the schema is versioned (`001`–`006`), so a fresh database
    can be rebuilt from scratch. ✅
-6. **Media storage** — uploads live on the Railway volume `media` mounted at `/data` and
+7. **Media storage** — uploads live on the Railway volume `media` mounted at `/data` and
    are **not** in a Postgres dump. A volume mounts to one service, so the cron cannot read
    it; backup is manual (`railway volume files download /media ./media-backup`) until
    media moves to R2. 🟡
@@ -1267,7 +1270,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 - **XSS prevention** — user content is escaped before rendering, post media is restricted to `/media/...`, and a strict CSP with no inline script backstops it. ✅
 - **CSRF protection** — the API authenticates with a bearer token in `Authorization`, not an ambient cookie, so classic CSRF does not apply. Any future cookie-based auth must add tokens. ✅/⬜
 - **Authentication:** phone + bcrypt-hashed password, normalized phone numbers, JWT with 30-day expiry. **Argon2 is not used** — bcrypt at the library default cost. ✅
-- **Admin 2FA** — username/password from env vars is not enough for the person who can move money. ⬜
+- **Admin 2FA** — when `ADMIN_TOTP_SECRET` is set, admin login requires a current six-digit TOTP code (or `ADMIN_RECOVERY_CODE`) in addition to the env-var password. Generate secrets with `go run ./cmd/totp`; the login form shows the code field only when 2FA is configured. ✅ TOTP; WebAuthn/passkeys remain ⬜.
 - **Rate limiting** on login, registration, admin login, media upload, and AI suggestions — fixed windows keyed by IP, phone, or user ID, with `Retry-After` on `429`. ✅ `backend/internal/httpapi/ratelimit.go`. Limits are in-memory and per-process: fine for one replica, but a scale-out needs shared Redis counters. Progressive lockout and a safe unlock flow are still ⬜.
 - **Account enumeration** — unknown phone numbers run a dummy bcrypt comparison, so login timing does not reveal whether an account exists. ✅
 - **Account lockout** after repeated failures, with a safe unlock path. ⬜ The per-phone attempt cap slows guessing but does not implement a formal lockout/unlock flow.
@@ -1522,7 +1525,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 ### Reliability & Security
 
 - [x] ~~**Backup owner**~~ — resolved: the restore drill is a **hard launch blocker**, owned by the operator. Runbook: `docs/RESTORE_RUNBOOK.md`; staging drill passed 2026-11-16; daily off-site dumps run to the `betva-backups` bucket. ✅
-- [ ] **Admin 2FA** — which provider (TOTP / WebAuthn) and is it mandatory before launch?
+- [x] ~~**Admin 2FA**~~ — resolved: TOTP (authenticator app) plus a recovery code, both stored in environment variables alongside the admin password. ✅ WebAuthn remains a future option.
 - [ ] **Penetration test** — budget and vendor for the pre-launch test?
 - [ ] **Incident contact** — who is on call, and how are users notified?
 
@@ -1545,7 +1548,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Development Status
 
-**Phases 1–5 are complete and verified locally. Phase 6 (launch) is in progress: documentation, security checklist, restore runbook, staging deployment, the staging restore drill, and daily off-site backups are done. The penetration test, Cloudflare edge/media, managed PITR, and real-device latency measurement remain.**
+**Phases 1–5 are complete and verified locally. Phase 6 (launch) is in progress: documentation, security checklist, restore runbook, staging deployment, both restore drills, daily off-site backups with an R2 mirror, admin TOTP 2FA, security headers, and rate limiting are done. The independent penetration test, Cloudflare edge/WAF, managed PITR, and real-device latency measurement remain.**
 
 ### What exists now
 
@@ -1586,7 +1589,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Daily off-site Postgres backup cron | ✅ Live | `backend/cmd/backup`, `backend/Dockerfile.backup`, `docs/DEPLOYMENT.md#4-off-site-backups` |
 | PNG/ICO app icons from the eagle-B mark | ✅ Working | `frontend/scripts/generate-icons.mjs` |
 | Penetration test and real-device latency measurement | ⬜ Later | Phase 6 |
-| Cloudflare edge, R2 media, managed PITR | ⬜ Later | Phase 6 |
+| Cloudflare edge/WAF, R2 media, managed PITR | ⬜ Later | Phase 6 |
 | Public landing page, KYC queue, admin profile, results archive page | ⬜ Later | Post-launch |
 
 ### Matches CSV format
@@ -1826,7 +1829,7 @@ The script exits `0` only when the throwaway database was created, restored, and
 | `PUSH_DAILY_CAP` | No | Pushes per user per EAT day; default `2` |
 | `QUIET_START_HOUR` | No | Default `22` (EAT) |
 | `QUIET_END_HOUR` | No | Default `7` (EAT) |
-| `GROQ_API_KEY` | AI | Groq API key. Empty disables the AI Results centre (`503`) |
+| `GROQ_API_KEY` | AI | Groq API key. Empty disables the AI Results centre (`503`). Set on staging 2026-11-16 |
 | `GROQ_MODEL` | No | Default `openai/gpt-oss-20b` |
 | `ACCESS_FEE_CENTS` | No | Flat monthly access rate in cents; public via `/config`, shown on Profile. `0` shows "Ask the admin" |
 | `ACCESS_FEE_DAU_TARGET` | No | **Admin-only.** DAU at which the fee planner activates; `0` = unconfigured |
@@ -1874,6 +1877,6 @@ Rules the audit enforces: **no horizontal overflow at 320 px**, every control at
 - Public landing page: **planned** (live match ticker + activity feed + signup wall at the point of action) ⬜
 - Notifications: **PWA Web Push** from admin, with in-app inbox authoritative and per-category mutes; SMS fallback is ⬜
 - Results extraction: **Groq parses a server-fetched page → validator → admin approval**; AI never settles bets
-- Data: **daily off-site database dumps** run to the `betva-backups` bucket with verified manifests and GFS retention; the restore drill is a launch blocker. Managed PITR and a second-provider (R2) copy remain ⬜.
+- Data: **daily off-site database dumps** run to the `betva-backups` bucket with verified manifests and GFS retention, and are mirrored to Cloudflare R2 (`betva-backups-r2`). Restore drills passed for both the staging copy and the off-site object. Managed PITR remains ⬜.
 - Security: **HTTPS + Cloudflare WAF**, parameterized queries, bcrypt, admin 2FA ⬜, audit trail, pen test before launch ⬜
 - Revenue: **access contribution** for running costs — explicitly **not** payment for predictions

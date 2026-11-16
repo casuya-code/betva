@@ -13,8 +13,13 @@ type Config struct {
 	JWTSecret   string
 	AdminUser   string
 	AdminPass   string
-	Env         string
-	CORSOrigins []string
+	// Admin 2FA. When AdminTOTP is set, admin login also requires a current
+	// six-digit TOTP code or the one-time recovery code. Both come from the
+	// environment, never the database.
+	AdminTOTP     string
+	AdminRecovery string
+	Env           string
+	CORSOrigins   []string
 
 	// Wallet / betting rules.
 	StakeTiers       []int64 // allowed stake amounts, in cents
@@ -65,14 +70,16 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Port:        getEnv("PORT", "8080"),
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://betva:betva@localhost:5432/betva?sslmode=disable"),
-		RedisURL:    getEnv("REDIS_URL", "redis://localhost:6379"),
-		JWTSecret:   getEnv("JWT_SECRET", "change-me-in-production"),
-		AdminUser:   getEnv("ADMIN_USERNAME", ""),
-		AdminPass:   getEnv("ADMIN_PASSWORD", ""),
-		Env:         getEnv("ENV", "development"),
-		CORSOrigins: origins,
+		Port:          getEnv("PORT", "8080"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://betva:betva@localhost:5432/betva?sslmode=disable"),
+		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
+		JWTSecret:     getEnv("JWT_SECRET", "change-me-in-production"),
+		AdminUser:     getEnv("ADMIN_USERNAME", ""),
+		AdminPass:     getEnv("ADMIN_PASSWORD", ""),
+		AdminTOTP:     getEnv("ADMIN_TOTP_SECRET", ""),
+		AdminRecovery: getEnv("ADMIN_RECOVERY_CODE", ""),
+		Env:           getEnv("ENV", "development"),
+		CORSOrigins:   origins,
 
 		StakeTiers:       parseStakeTiers(getEnv("STAKE_TIERS_CENTS", "50000,100000,200000,500000")),
 		PayoutMultiplier: Atoi(getEnv("PAYOUT_MULTIPLIER_BP", "15000"), 15000),
