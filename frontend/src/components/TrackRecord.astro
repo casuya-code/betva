@@ -1,0 +1,90 @@
+---
+// Aggregate tip record, shown on Home and Profile. It is the same for every
+// user: published tips, wins, losses, win rate, and the current streak.
+// Losses are always visible — a counter that only shows wins is worthless.
+---
+
+<div class="glass p-4" data-track-record>
+  <div class="flex items-center justify-between gap-2 mb-3">
+    <h2 class="text-sm font-semibold text-[var(--text-2)]">Track record</h2>
+    <span class="badge badge-pending" data-tr-status>No settled results yet</span>
+  </div>
+  <div class="grid grid-cols-4 gap-2 text-center">
+    <div>
+      <div class="text-xl sm:text-2xl font-bold counter" data-tr="total">—</div>
+      <div class="text-[11px] text-[var(--text-3)]">Tips</div>
+    </div>
+    <div>
+      <div class="text-xl sm:text-2xl font-bold counter text-green-400" data-tr="wins">—</div>
+      <div class="text-[11px] text-[var(--text-3)]">Wins</div>
+    </div>
+    <div>
+      <div class="text-xl sm:text-2xl font-bold counter text-red-400" data-tr="losses">—</div>
+      <div class="text-[11px] text-[var(--text-3)]">Losses</div>
+    </div>
+    <div>
+      <div class="text-xl sm:text-2xl font-bold counter" data-tr="rate">—</div>
+      <div class="text-[11px] text-[var(--text-3)]">Win rate</div>
+    </div>
+  </div>
+  <div data-tr-footer class="mt-3 hidden items-center justify-between gap-2 text-xs text-[var(--text-3)]">
+    <span data-tr="streak"></span>
+    <span>Updates after settlement</span>
+  </div>
+</div>
+
+<script>
+  import { API } from '../lib/api';
+
+  function mountTrackRecord(root: HTMLElement) {
+    const pick = (key: string) => root.querySelector<HTMLElement>(`[data-tr="${key}"]`);
+    const status = root.querySelector<HTMLElement>('[data-tr-status]');
+    const footer = root.querySelector<HTMLElement>('[data-tr-footer]');
+
+    (async () => {
+      try {
+        const res = await fetch(`${API}/api/v1/stats`);
+        if (!res.ok) return;
+        const d = await res.json();
+        const total = Number(d.total) || 0;
+        const wins = Number(d.wins) || 0;
+        const losses = Number(d.losses) || 0;
+
+        const set = (key: string, value: string) => {
+          const el = pick(key);
+          if (el) el.textContent = value;
+        };
+        set('total', String(total));
+        set('wins', String(wins));
+        set('losses', String(losses));
+        set('rate', total ? `${d.win_rate_pct}%` : '—');
+
+        if (!total) {
+          if (status) {
+            status.textContent = 'No settled results yet';
+            status.className = 'badge badge-pending';
+          }
+          return;
+        }
+
+        if (status) {
+          status.textContent = `${total} settled ${total === 1 ? 'tip' : 'tips'}`;
+          status.className = 'badge badge-pending';
+        }
+
+        const streak = Number(d.current_streak) || 0;
+        if (streak > 0 && d.streak_type && footer) {
+          const isWin = d.streak_type === 'win';
+          const noun = isWin ? (streak === 1 ? 'win' : 'wins') : streak === 1 ? 'loss' : 'losses';
+          set('streak', `Current streak: ${streak} ${noun}`);
+          footer.classList.remove('hidden');
+          footer.classList.add('flex');
+        }
+      } catch {
+        /* Leave the placeholders rather than invent a number. */
+      }
+    })();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-track-record]').forEach(mountTrackRecord);
+</script>

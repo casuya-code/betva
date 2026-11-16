@@ -433,6 +433,7 @@ A persistent, compact counter shown on Home and in Profile:
 
 - The counter **updates only after settlement**, never in real time, so it cannot flicker.
 - It is **aggregate**, not per-user — the same record for everyone, which keeps it cheap to compute and cache.
+- **Implementation:** `GET /api/v1/stats` counts one tip per published market on a settled match, so a settled match with two markets counts twice. A correction replaces the match's current result, so a corrected match is counted once, at its corrected outcome. The response carries `total`, `wins`, `losses`, `win_rate_pct`, `current_streak`, `streak_type`, and `best_win_streak`, and is cached for 60 seconds. The UI (`components/TrackRecord.astro`) renders it on Home and Profile and shows losses in the same weight as wins.
 
 ### Confidence Badge
 
@@ -1413,6 +1414,7 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 | `PUT` | `/api/v1/me` | Update password / nickname |
 | `GET` | `/api/v1/matches` | Today + tomorrow, with `is_open` and markets |
 | `GET` | `/api/v1/config` | Stake tiers, payout multiplier, markets |
+| `GET` | `/api/v1/stats` | Aggregate track record: tips, wins, losses, win rate, streak |
 | `POST` | `/api/v1/bets` | Place a slip: `match_id`, `market`, `stake_cents` |
 | `GET` | `/api/v1/wallet` | Balance + last 50 ledger entries |
 | `GET` | `/api/v1/history` | User bets for the last 6 months, with scores |

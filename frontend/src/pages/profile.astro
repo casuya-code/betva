@@ -1,5 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import TrackRecord from '../components/TrackRecord.astro';
 ---
 <Layout title="Betva — Profile" description="Your Betva wallet, notification settings, and self-exclusion controls." active="profile">
   <div class="px-4 pt-4 space-y-4">
@@ -15,6 +16,9 @@ import Layout from '../layouts/Layout.astro';
         </div>
       </div>
     </div>
+
+    <!-- Track record (aggregate, same for everyone) -->
+    <TrackRecord />
 
     <!-- Wallet -->
     <div class="glass p-4">

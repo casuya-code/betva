@@ -1,5 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import TrackRecord from '../components/TrackRecord.astro';
 ---
 <Layout title="Betva — Home" description="Today’s and tomorrow’s football matches. Fixed stakes, fast settlement, honest records." active="home">
   <div class="px-4 pt-4 space-y-4">
@@ -10,26 +11,7 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <!-- Trust counter -->
-    <div class="glass p-4">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm text-[var(--text-2)]">Track record</span>
-        <span class="badge badge-pending" id="counter-status">No settled results yet</span>
-      </div>
-      <div class="grid grid-cols-3 gap-3 text-center">
-        <div>
-          <div class="text-2xl font-bold counter" id="c-total">—</div>
-          <div class="text-xs text-[var(--text-3)]">Matches</div>
-        </div>
-        <div>
-          <div class="text-2xl font-bold counter text-green-400" id="c-wins">—</div>
-          <div class="text-xs text-[var(--text-3)]">Wins</div>
-        </div>
-        <div>
-          <div class="text-2xl font-bold counter" id="c-rate">—</div>
-          <div class="text-xs text-[var(--text-3)]">Win rate</div>
-        </div>
-      </div>
-    </div>
+    <TrackRecord />
 
     <!-- Matches -->
     <div>

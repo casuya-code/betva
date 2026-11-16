@@ -38,6 +38,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 		// matches (public read)
 		api.Get("/matches", s.handleListMatches)
 		api.Get("/config", s.handleConfig)
+		api.Get("/stats", s.handleStats)
 
 		// admin login uses env credentials, never the database
 		api.Post("/admin/login", s.handleAdminLogin)
