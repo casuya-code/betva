@@ -1,5 +1,19 @@
-export const API: string =
-  (typeof window !== 'undefined' && (window as any).BETVA_API) || 'http://localhost:8080';
+// The API origin is baked into a meta tag by the layout, so pages need no
+// inline script (a strict CSP forbids inline script). window.BETVA_API is kept
+// for compatibility and set once this module loads.
+function resolveApiBase(): string {
+  if (typeof document !== 'undefined') {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="betva-api"]');
+    if (meta?.content) return meta.content;
+  }
+  if (typeof window !== 'undefined' && (window as any).BETVA_API) {
+    return (window as any).BETVA_API;
+  }
+  return 'http://localhost:8080';
+}
+
+export const API: string = resolveApiBase();
+if (typeof window !== 'undefined') (window as any).BETVA_API = API;
 
 const TOKEN_KEY = 'betva_token';
 

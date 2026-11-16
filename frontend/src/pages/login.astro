@@ -25,7 +25,7 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <script>
-    const API = (window as any).BETVA_API;
+    import { API } from '../lib/api';
     const form = document.getElementById('loginForm') as HTMLFormElement;
     form.addEventListener('submit', async (e) => {
       e.preventDefault();

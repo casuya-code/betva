@@ -8,15 +8,15 @@ const { tag = 'span', class: className = '' } = Astro.props;
 const Tag = tag as any;
 // "Betva" -> B e t v a with Google colours.
 const letters = [
-  { ch: 'B', color: '#4285F4' },
-  { ch: 'e', color: '#EA4335' },
-  { ch: 't', color: '#FBBC05' },
-  { ch: 'v', color: '#34A853' },
-  { ch: 'a', color: '#EA4335' },
+  { ch: 'B', key: 'b' },
+  { ch: 'e', key: 'e' },
+  { ch: 't', key: 't' },
+  { ch: 'v', key: 'v' },
+  { ch: 'a', key: 'a' },
 ];
 ---
 <Tag class:list={['brand-name', className]} aria-label="Betva">
-  {letters.map((l) => <span style={`color:${l.color}`} aria-hidden="true">{l.ch}</span>)}
+  {letters.map((l) => <span class={`brand-letter brand-${l.key}`} aria-hidden="true">{l.ch}</span>)}
 </Tag>
 
 <style>
@@ -24,7 +24,22 @@ const letters = [
     font-weight: inherit;
     letter-spacing: -0.01em;
   }
-  .brand-name span {
+  .brand-letter {
     display: inline-block;
+  }
+  .brand-b {
+    color: #4285f4;
+  }
+  .brand-e {
+    color: #ea4335;
+  }
+  .brand-t {
+    color: #fbbc05;
+  }
+  .brand-v {
+    color: #34a853;
+  }
+  .brand-a {
+    color: #ea4335;
   }
 </style>

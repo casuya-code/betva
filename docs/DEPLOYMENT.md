@@ -237,8 +237,8 @@ every name.
 | `ENV` | `production` | Enables production behaviour |
 | `PORT` | `8080` | Railway routes the domain here |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | Private network |
-| `JWT_SECRET` | generated for staging | 48 random hex chars; rotate = redeploy |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | from the operator's local `.env` | Change before any public launch |
+| `JWT_SECRET` | generated for staging | 48 random hex chars; rotated 2026-11-16; rotate = every session logs out |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | rotated 2026-11-16 | New values in `backend/.env.staging.local` (untracked). Change again before public launch |
 | `CORS_ORIGINS` | Vercel alias + localhost | Exact origins only |
 | `ACCESS_FEE_CENTS` | `500000` | 5,000 TZS flat monthly rate |
 | `PAYOUT_MULTIPLIER_BP` | `15000` | 1.50× return on a win |
@@ -270,6 +270,8 @@ Run these after every deploy. All were run on 2026-11-16.
 | Admin login + `GET /api/v1/admin/me` | `env: production` |
 | `GET /api/v1/admin/analytics?days=7` | 7 day rows, no `db error` |
 | CORS preflight from the Vercel origin | `204` with the alias echoed |
+| Security headers on API and frontend | CSP, HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` present |
+| Login rate limit | 10 `401`s for one phone, then `429` with `Retry-After` |
 | Register → activate → credit → upload CSV → bet → settle | Bet `win`, payout `75000`, balance `225000` |
 | `GET /api/v1/stats` | Settled tips counted, losses visible |
 | Frontend home | Match cards render, settled markets show ✓, track record matches the API |
@@ -316,8 +318,10 @@ Launch blockers or follow-ups, in order:
    managed volume backups and point-in-time recovery are Pro-only and this workspace is
    Hobby. Near-zero RPO for wallets needs Pro PITR or a WAL-shipping setup. Media on the
    volume is not covered by the database dump and is backed up manually.
-3. **Admin credentials are the development ones.** Rotate `ADMIN_PASSWORD` and
-   `JWT_SECRET` for production; rotating the JWT secret logs every user out.
+3. **Admin credentials rotated 2026-11-16.** New values live only in
+   `backend/.env.staging.local` (untracked) and Railway; the old development password is
+   rejected. Rotating `JWT_SECRET` logged every session out. Rotate again before public
+   launch and store the values in a password manager.
 4. **No Redis.** Fine today because nothing uses it; required before any feature that
    assumes it.
 5. **Single replica, no load test.** Kickoff-scale behaviour is unmeasured.
@@ -326,9 +330,7 @@ Launch blockers or follow-ups, in order:
    mid-range Android over 3G is still unmeasured; Cloudflare in front is the planned fix.
 7. **Config-as-Code deprecation.** `railway.toml` stops working on 2026-12-01. Migrate to
    `.railway/railway.ts` or keep configuring the service through the dashboard/API.
-8. **Security gate not run.** `docs/PEN_TEST_CHECKLIST.md` still needs to be executed
-   against this staging environment, including rate limiting, security headers, and
-   admin 2FA, none of which are implemented.
+8. **Security gate not fully run.** `docs/PEN_TEST_CHECKLIST.md` still needs an independent tester. Security headers, a strict CSP, basic rate limiting, and credential-rotation are done; admin 2FA is not.
 9. **AI results disabled.** No `GROQ_API_KEY` on staging.
 10. **Fee planner unconfigured.** Set `ACCESS_FEE_DAU_TARGET` and
     `MONTHLY_OPERATING_COST_CENTS` when the operator has real numbers.

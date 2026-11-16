@@ -30,7 +30,7 @@ import Layout from '../../layouts/Layout.astro';
   </div>
 
   <script>
-    const API = (window as any).BETVA_API;
+    import { API } from '../../lib/admin';
     const form = document.getElementById('form') as HTMLFormElement;
     const msg = document.getElementById('msg')!;
 

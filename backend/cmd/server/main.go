@@ -39,6 +39,7 @@ func main() {
 	}
 
 	r := chi.NewRouter()
+	r.Use(httpapi.SecurityHeaders(cfg.Env))
 	r.Use(httpapi.CORSMiddleware(cfg.CORSOrigins))
 	r.Use(middleware.Compress(5))
 	r.Use(middleware.RequestID)

@@ -22,6 +22,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#0b0f14" />
+    <meta name="betva-api" content={API} />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta property="og:title" content={title} />
@@ -73,11 +74,9 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
       <div id="breakMsg" class="text-sm mt-2" aria-live="polite"></div>
     </div>
 
-    <script define:vars={{ API }}>
-      window.BETVA_API = API;
-    </script>
     <script>
       import { registerServiceWorker } from '../lib/push';
+      import { API } from '../lib/api';
       registerServiceWorker();
 
       const HOUR_MS = 60 * 60 * 1000;
@@ -113,7 +112,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
           btn.disabled = true;
           btn.textContent = 'Pausing…';
           try {
-            const res = await fetch(`${(window as any).BETVA_API}/api/v1/self-exclusion`, {
+            const res = await fetch(`${API}/api/v1/self-exclusion`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',

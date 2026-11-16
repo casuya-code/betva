@@ -1,5 +1,16 @@
-export const API: string =
-  (typeof window !== 'undefined' && (window as any).BETVA_API) || 'http://localhost:8080';
+function resolveApiBase(): string {
+  if (typeof document !== 'undefined') {
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="betva-api"]');
+    if (meta?.content) return meta.content;
+  }
+  if (typeof window !== 'undefined' && (window as any).BETVA_API) {
+    return (window as any).BETVA_API;
+  }
+  return 'http://localhost:8080';
+}
+
+export const API: string = resolveApiBase();
+if (typeof window !== 'undefined') (window as any).BETVA_API = API;
 
 const TOKEN_KEY = 'betva_admin_token';
 

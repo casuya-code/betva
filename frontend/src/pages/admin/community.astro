@@ -26,7 +26,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   </div>
 
   <script>
-    import { adminFetch, requireAdmin, esc, statusBadge } from '../../lib/admin';
+    import { adminFetch, requireAdmin, esc, statusBadge, API } from '../../lib/admin';
 
     let currentStatus = 'reported';
 
@@ -74,7 +74,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                       <div class="text-[var(--text)] whitespace-pre-wrap break-words">${esc(p.body || '(media only)')}</div>
                       ${
                         p.media_url
-                          ? `<a class="text-xs text-[var(--brand)]" href="${esc((window as any).BETVA_API + p.media_url)}" target="_blank" rel="noopener">${esc(p.media_type)} attachment</a>`
+                          ? `<a class="text-xs text-[var(--brand)]" href="${esc(API + p.media_url)}" target="_blank" rel="noopener">${esc(p.media_type)} attachment</a>`
                           : ''
                       }
                       ${p.moderation_reason ? `<div class="text-xs text-[var(--text-3)] mt-1">Reason: ${esc(p.moderation_reason)}</div>` : ''}

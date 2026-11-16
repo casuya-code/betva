@@ -1,7 +1,10 @@
 # Backend
 backend/betva.exe
 backend/betva-migrate.exe
+backend/betva-backup.exe
 backend/.env
+backend/.env.*
+!backend/.env.example
 backend/vendor/
 
 # Frontend

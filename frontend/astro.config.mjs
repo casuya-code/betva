@@ -5,7 +5,15 @@ import tailwindcss from '@tailwindcss/vite';
 
 // https://astro.build/config
 export default defineConfig({
+  build: {
+    // Keep CSS in external files so the deployed CSP can forbid inline styles.
+    inlineStylesheets: 'never',
+  },
   vite: {
+    build: {
+      // Never inline JS or CSS: the deployed CSP allows only same-origin files.
+      assetsInlineLimit: 0,
+    },
     plugins: [tailwindcss()]
   }
 });

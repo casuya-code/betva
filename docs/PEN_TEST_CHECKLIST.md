@@ -2,7 +2,7 @@
 
 Hard launch gate: every box must be ticked and dated by the tester before go-live. Run against a staging copy of production, never against live money.
 
-**Staging target:** frontend <https://betva-two.vercel.app>, API <https://api-production-a377a156.up.railway.app>. Topology and credentials handling: [`DEPLOYMENT.md`](DEPLOYMENT.md). Staging admin credentials are the development ones and **must be rotated before the test**.
+**Staging target:** frontend <https://betva-two.vercel.app>, API <https://api-production-a377a156.up.railway.app>. Topology and credentials handling: [`DEPLOYMENT.md`](DEPLOYMENT.md). Staging admin credentials were rotated on 2026-11-16 and live only in `backend/.env.staging.local` (untracked); the tester gets them out-of-band.
 
 Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`/data`), Web Push, and the admin app. The tester is not the developer.
 
@@ -63,7 +63,7 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 
 ## Rate limits & abuse
 
-- [ ] **Known gap:** there is no rate limiting on login, registration, or any endpoint. Attempt credential stuffing and bulk registration; document the result and fix before launch.
+- [ ] **Rate limiting is implemented** on login (`60/5min` per IP, `10/15min` per phone), registration (`30/h` IP, `3/h` phone), admin login (`20/5min` IP), media upload and AI suggest (`30/h` per user). Attempt credential stuffing and bulk registration from one IP and from many phones; verify `429` + `Retry-After` and that a shared mobile NAT is not locked out.
 - [ ] **Known gap:** there is no account lockout after repeated failures.
 - [ ] Push cap (2/day) and quiet hours cannot be bypassed by repeated calls.
 - [ ] A muted category still writes the inbox row but sends no push.
@@ -75,9 +75,9 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 
 ## Transport, headers & browser
 
-- [ ] HTTPS only; HTTP redirects; HSTS present.
-- [ ] `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` present on every response (currently **not set** — expected to fail until added).
-- [ ] No inline script executes under the deployed CSP.
+- [ ] HTTPS only; HTTP redirects; HSTS present on both the Vercel frontend and the Railway API.
+- [ ] `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` present on every response.
+- [ ] No inline script or inline style executes under the deployed CSP; all 14 built pages load external JS/CSS only.
 - [ ] CORS origins are explicit in production; wildcard is absent; credentials are not allowed from unknown origins.
 - [ ] Error responses do not leak stack traces, SQL, file paths, or secrets.
 - [ ] Admin and user tokens in `localStorage` are accepted risk, documented, and mitigated by CSP.
@@ -87,17 +87,27 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 - [ ] `.env`, `backend/media/`, and `frontend/scripts/` are not served or committed.
 - [ ] Admin credentials come only from environment variables, never the database.
 - [ ] No PII in logs or error responses (phone numbers, official names, tokens).
-- [ ] Database backup files, if any, are encrypted and not publicly reachable.
+- [ ] Database backup files are encrypted at rest and not publicly reachable; bucket credentials exist only on the `backup` service, never on `api`.
 - [ ] A user cannot read another user's wallet, history, notifications, or bets by changing an ID.
 - [ ] Delete/export paths for personal data are either implemented or documented as a launch exception.
 
 ## Availability
 
 - [ ] Restore drill (`backend/scripts/restore_test.ps1`) passes on a fresh database **and fails closed** when the throwaway database cannot be created (exit code `1`, no success message).
+- [ ] A dump downloaded from the off-site bucket passes manifest SHA-256 verification and restores into a throwaway database with matching counts and ledger sum.
 - [ ] Restore verification checks row counts, ledger sum, and schema completeness — not just that `pg_restore` exited `0`.
 - [ ] Health endpoint `/health` returns 200.
 - [ ] Graceful handling of Postgres downtime (clear 5xx, no panic) and Redis downtime (API still starts and serves).
 - [ ] Gzip is applied to JSON responses; media is served with immutable cache headers.
+
+## Developer pre-flight (2026-11-16, not a substitute for the tester sign-off)
+
+- Admin password and JWT secret rotated; old password now returns `401`.
+- API security headers verified on `/api/v1/config`; media keeps `Cache-Control: public, max-age=31536000, immutable`.
+- Login limiter verified: 10 `401`s then `429` with `Retry-After` for one phone.
+- `npm run check` passes; all 14 built pages have zero inline script tags and zero inline styles/CSS.
+- CSP and the other headers verified on the live Vercel alias.
+- In-memory rate limits reset on redeploy and are per-process: re-test if replicas are added.
 
 ## Sign-off
 

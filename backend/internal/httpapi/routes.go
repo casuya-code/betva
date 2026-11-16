@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/betva/backend/internal/config"
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,15 @@ type Server struct {
 	Pool *pgxpool.Pool
 	RDB  *redis.Client
 
+	// Rate limiters. In-memory and per-process; see ratelimit.go.
+	loginIP       *RateLimiter
+	loginPhone    *RateLimiter
+	registerIP    *RateLimiter
+	registerPhone *RateLimiter
+	adminLoginIP  *RateLimiter
+	mediaUpload   *RateLimiter
+	aiSuggest     *RateLimiter
+
 	// Daily-active-user tracking: per-day in-memory seen set, backed by the
 	// append-only activity_days table.
 	actMu   sync.Mutex
@@ -24,7 +34,21 @@ type Server struct {
 }
 
 func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Client) {
-	s := &Server{Cfg: cfg, Pool: pool, RDB: rdb}
+	s := &Server{
+		Cfg:           cfg,
+		Pool:          pool,
+		RDB:           rdb,
+		loginIP:       NewRateLimiter(60, 5*time.Minute),
+		loginPhone:    NewRateLimiter(10, 15*time.Minute),
+		registerIP:    NewRateLimiter(30, time.Hour),
+		registerPhone: NewRateLimiter(3, time.Hour),
+		adminLoginIP:  NewRateLimiter(20, 5*time.Minute),
+		mediaUpload:   NewRateLimiter(30, time.Hour),
+		aiSuggest:     NewRateLimiter(30, time.Hour),
+	}
+
+	// Broad flood guard. Auth, upload, and AI routes add stricter limits.
+	r.Use(NewRateLimiter(600, time.Minute).Middleware)
 
 	if err := os.MkdirAll(cfg.MediaDir, 0o755); err != nil {
 		log.Printf("media dir: %v", err)
@@ -37,8 +61,8 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 		api.Get("/ping", s.handlePing)
 
 		// auth
-		api.Post("/auth/register", s.handleRegister)
-		api.Post("/auth/login", s.handleLogin)
+		api.Post("/auth/register", s.registerIP.Wrap(s.handleRegister))
+		api.Post("/auth/login", s.loginIP.Wrap(s.handleLogin))
 		api.Post("/auth/logout", s.handleLogout)
 
 		// matches (public read)
@@ -47,7 +71,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 		api.Get("/stats", s.handleStats)
 
 		// admin login uses env credentials, never the database
-		api.Post("/admin/login", s.handleAdminLogin)
+		api.Post("/admin/login", s.adminLoginIP.Wrap(s.handleAdminLogin))
 
 		// protected
 		api.Group(func(protected chi.Router) {
@@ -62,7 +86,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			protected.Post("/community/posts", s.handleCreatePost)
 			protected.Delete("/community/posts/{id}", s.handleDeleteOwnPost)
 			protected.Post("/community/posts/{id}/report", s.handleReportPost)
-			protected.Post("/media", s.handleMediaUpload)
+			protected.Post("/media", s.mediaUpload.WrapUser(s.handleMediaUpload))
 
 			protected.Get("/notifications", s.handleListNotifications)
 			protected.Post("/notifications/{id}/read", s.handleMarkNotificationRead)
@@ -99,7 +123,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			adm.Post("/notifications/send", s.handleAdminSendNotification)
 			adm.Get("/notifications", s.handleAdminListNotifications)
 
-			adm.Post("/ai/suggest", s.handleAdminGenerateSuggestion)
+			adm.Post("/ai/suggest", s.aiSuggest.WrapUser(s.handleAdminGenerateSuggestion))
 			adm.Get("/ai/suggestions", s.handleAdminListSuggestions)
 			adm.Put("/ai/suggestions/{id}/review", s.handleAdminReviewSuggestion)
 		})

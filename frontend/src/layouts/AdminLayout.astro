@@ -25,6 +25,7 @@ const links = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Betva administration: matches, users, community moderation, and notifications." />
     <meta name="theme-color" content="#0b0f14" />
+    <meta name="betva-api" content={API} />
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
@@ -51,9 +52,6 @@ const links = [
       <slot />
     </main>
 
-    <script define:vars={{ API }}>
-      window.BETVA_API = API;
-    </script>
     <script>
       document.getElementById('adminLogout')?.addEventListener('click', () => {
         localStorage.removeItem('betva_admin_token');

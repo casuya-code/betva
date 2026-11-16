@@ -39,6 +39,11 @@ func normalizePhone(p string) string {
 
 var phoneRe = regexp.MustCompile(`^\+255[0-9]{9}$`)
 
+// dummyBcryptHash is compared against when a phone number does not exist, so
+// an unknown account costs the same as a wrong password. Without it, response
+// timing reveals which phone numbers are registered.
+const dummyBcryptHash = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -63,6 +68,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if !req.AcceptedTerms {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "terms not accepted"})
+		return
+	}
+	// Per-phone limit: one number cannot be used to spam registrations. The
+	// IP limit is deliberately generous because mobile carriers put many users
+	// behind one NAT address.
+	if ok, retry := s.registerPhone.Allow("phone:" + req.Phone); !ok {
+		writeRateLimited(w, retry)
 		return
 	}
 
@@ -108,12 +120,20 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Phone = normalizePhone(req.Phone)
 
+	// Per-phone attempt limit. Ten attempts per 15 minutes leaves room for a
+	// mistyped password without allowing an online guessing loop.
+	if ok, retry := s.loginPhone.Allow("phone:" + req.Phone); !ok {
+		writeRateLimited(w, retry)
+		return
+	}
+
 	ctx := r.Context()
 	var userID, hash, nickname, status string
 	err := s.Pool.QueryRow(ctx, `
 		SELECT id, password_hash, nickname, status FROM users WHERE phone = $1
 	`, req.Phone).Scan(&userID, &hash, &nickname, &status)
 	if err == pgx.ErrNoRows {
+		_ = bcrypt.CompareHashAndPassword([]byte(dummyBcryptHash), []byte(req.Password))
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 		return
 	}

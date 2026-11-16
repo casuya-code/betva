@@ -1257,19 +1257,20 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 
 - **HTTPS everywhere**, HSTS preloaded, TLS 1.2 minimum — Cloudflare enforces this at the edge. ⬜
 - **Cloudflare WAF** with managed rulesets, bot protection, and DDoS mitigation. ⬜
-- **Security headers** on every response: `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`. ⬜ Not set by the Go server yet.
-- **Strict CSP** — no inline scripts. Astro's output is CSP-friendly, but the current pages use inline scripts, so a nonce or hash strategy is required first. ⬜
+- **Security headers** on every API and frontend response: `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, HSTS. ✅ Go: `internal/httpapi/security.go`; Vercel: `frontend/vercel.json`.
+- **Strict CSP** — no inline scripts or styles in the 14 built pages; `script-src 'self'`, `style-src 'self'`, no `unsafe-inline`. ✅ Astro builds external JS/CSS (`assetsInlineLimit: 0`, `inlineStylesheets: 'never'`) and the API origin is injected via a `<meta>` tag instead of inline script.
 
 ### Application
 
 - **Parameterized queries only** — every query uses pgx placeholders; no string-built SQL. ✅
 - **Input validation** on every endpoint, server-side, with allow-lists (stake tiers, markets, statuses, media MIME and size). ✅ Core paths; a full per-field audit is ⬜.
-- **XSS prevention** — user content is escaped before rendering, and post media is restricted to `/media/...`. A CSP is still ⬜.
+- **XSS prevention** — user content is escaped before rendering, post media is restricted to `/media/...`, and a strict CSP with no inline script backstops it. ✅
 - **CSRF protection** — the API authenticates with a bearer token in `Authorization`, not an ambient cookie, so classic CSRF does not apply. Any future cookie-based auth must add tokens. ✅/⬜
 - **Authentication:** phone + bcrypt-hashed password, normalized phone numbers, JWT with 30-day expiry. **Argon2 is not used** — bcrypt at the library default cost. ✅
 - **Admin 2FA** — username/password from env vars is not enough for the person who can move money. ⬜
-- **Rate limiting** on login and registration — brute force protection, with progressive lockout. ⬜ **Known gap.**
-- **Account lockout** after repeated failures, with a safe unlock path. ⬜
+- **Rate limiting** on login, registration, admin login, media upload, and AI suggestions — fixed windows keyed by IP, phone, or user ID, with `Retry-After` on `429`. ✅ `backend/internal/httpapi/ratelimit.go`. Limits are in-memory and per-process: fine for one replica, but a scale-out needs shared Redis counters. Progressive lockout and a safe unlock flow are still ⬜.
+- **Account enumeration** — unknown phone numbers run a dummy bcrypt comparison, so login timing does not reveal whether an account exists. ✅
+- **Account lockout** after repeated failures, with a safe unlock path. ⬜ The per-phone attempt cap slows guessing but does not implement a formal lockout/unlock flow.
 - **Least privilege in the database** — the API role currently owns the schema locally; production should split migration and runtime roles. 🟡
 - **Secrets in environment variables only** — never in the repo, never in client bundles. ✅
 
@@ -1377,7 +1378,7 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 | Component | Role | Status |
 | --- | --- | --- |
 | **PostgreSQL** | User accounts, wallet balances, betting slips, matches, community, notifications, analytics | ✅ Authoritative store |
-| **Redis** | Intended for live odds, feeds, rate limits, and pub/sub | 🟡 Connected at startup; no application reads or writes yet |
+| **Redis** | Intended for live odds, feeds, and pub/sub | 🟡 Connected at startup; no application reads or writes yet. Rate limiting is in-memory today. |
 
 ---
 
@@ -1809,7 +1810,7 @@ The script exits `0` only when the throwaway database was created, restored, and
 | `JWT_SECRET` | Yes | Long random string in production |
 | `ADMIN_USERNAME` | Yes | Never stored in the database |
 | `ADMIN_PASSWORD` | Yes | Changing it requires a redeploy |
-| `REDIS_URL` | No | Optional today; required for live feeds and rate limits |
+| `REDIS_URL` | No | Optional today; required for live feeds, shared rate-limit counters on multi-replica deploys |
 | `CORS_ORIGINS` | Production | Comma-separated frontend origins |
 | `PORT` | No | Defaults to `8080` |
 | `ENV` | No | `development` or `production` |
