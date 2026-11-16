@@ -57,7 +57,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         const res = await adminFetch(
           `/api/v1/admin/users?limit=100&q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`
         );
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         const users = data.users || [];
         document.getElementById('count')!.textContent = `${data.total ?? users.length} user(s)`;
 

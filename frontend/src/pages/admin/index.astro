@@ -80,17 +80,17 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           adminFetch('/api/v1/admin/imports?limit=5'),
         ]);
 
-        const todayData = await todayRes.json();
-        const tomorrowData = await tomorrowRes.json();
-        const usersData = await usersRes.json();
-        const importsData = await importsRes.json();
+        const todayData = await todayRes.json().catch(() => ({}));
+        const tomorrowData = await tomorrowRes.json().catch(() => ({}));
+        const usersData = await usersRes.json().catch(() => ({}));
+        const importsData = await importsRes.json().catch(() => ({}));
 
         setText('stat-today', String(todayData.matches?.length ?? 0));
         setText('stat-tomorrow', String(tomorrowData.matches?.length ?? 0));
         setText('stat-users', String(usersData.total ?? 0));
 
         const activeRes = await adminFetch('/api/v1/admin/users?status=active&limit=1');
-        const activeData = await activeRes.json();
+        const activeData = await activeRes.json().catch(() => ({}));
         setText('stat-active', String(activeData.total ?? 0));
 
         const el = document.getElementById('imports')!;

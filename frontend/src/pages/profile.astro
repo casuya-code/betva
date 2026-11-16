@@ -162,7 +162,7 @@ import TrackRecord from '../components/TrackRecord.astro';
     async function loadMe() {
       const res = await authFetch('/api/v1/me');
       if (!res.ok) return;
-      const d = await res.json();
+      const d = await res.json().catch(() => ({}));
       document.getElementById('p-nickname')!.textContent = d.nickname || '—';
       document.getElementById('p-phone')!.textContent = d.phone || '—';
 
@@ -179,7 +179,7 @@ import TrackRecord from '../components/TrackRecord.astro';
     async function loadWallet() {
       const res = await authFetch('/api/v1/wallet');
       if (!res.ok) throw new Error('failed');
-      const d = await res.json();
+      const d = await res.json().catch(() => ({}));
 
       if (document.getElementById('p-balance')) {
         document.getElementById('p-balance')!.textContent = money(d.balance_cents);
@@ -219,7 +219,7 @@ import TrackRecord from '../components/TrackRecord.astro';
         document.getElementById('inbox')!.textContent = 'Could not load notifications. Check your connection.';
         return;
       }
-      const d = await res.json();
+      const d = await res.json().catch(() => ({}));
       const items: Array<any> = d.notifications || [];
       const el = document.getElementById('inbox')!;
       document.getElementById('unreadBadge')!.textContent = `${d.unread || 0} UNREAD`;
@@ -291,7 +291,7 @@ import TrackRecord from '../components/TrackRecord.astro';
           '<div class="text-sm text-[var(--text-3)]">Could not load preferences.</div>';
         return;
       }
-      const prefs: Prefs = await res.json();
+      const prefs: Prefs = await res.json().catch(() => ({}));
       const el = document.getElementById('prefList')!;
       const keys = Object.keys(CATEGORY_LABEL) as Array<keyof Prefs>;
 
@@ -363,7 +363,7 @@ import TrackRecord from '../components/TrackRecord.astro';
     async function loadExclusion() {
       const res = await authFetch('/api/v1/self-exclusion');
       if (!res.ok) return;
-      const d = await res.json();
+      const d = await res.json().catch(() => ({}));
       const badge = document.getElementById('exclusionBadge')!;
       const status = document.getElementById('exclusionStatus')!;
       const buttons = document.querySelectorAll<HTMLButtonElement>('.exclusion');

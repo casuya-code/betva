@@ -172,7 +172,7 @@ import Layout from '../layouts/Layout.astro';
       try {
         const res = await authFetch('/api/v1/history');
         if (!res.ok) throw new Error('failed');
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         const bets: Bet[] = data.bets || [];
         summarise(bets);
         render(bets);

@@ -154,7 +154,7 @@ import Layout from '../layouts/Layout.astro';
         if (!reset && cursor) q.set('before', cursor);
         const res = await authFetch(`/api/v1/community/posts?${q.toString()}`);
         if (!res.ok) throw new Error('failed');
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         const posts: Post[] = data.posts || [];
 
         if (reset) {
@@ -205,7 +205,7 @@ import Layout from '../layouts/Layout.astro';
       fd.append('file', file);
       try {
         const res = await authFetch('/api/v1/media', { method: 'POST', body: fd });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           composeMsg.textContent = data.error || 'Upload failed.';
           composeMsg.className = 'text-sm text-red-400';
@@ -260,7 +260,7 @@ import Layout from '../layouts/Layout.astro';
             media_bytes: media?.bytes || 0,
           }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           composeMsg.textContent = data.error || 'Could not post.';
           composeMsg.className = 'text-sm text-red-400';

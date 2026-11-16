@@ -54,7 +54,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		won := marketWon(market, home, away, homeHT, awayHT)
+		won := MarketWon(market, home, away, homeHT, awayHT)
 		rec.Total++
 		typ := "loss"
 		if won {

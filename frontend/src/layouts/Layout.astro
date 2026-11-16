@@ -121,7 +121,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
               },
               body: JSON.stringify({ hours: 24 }),
             });
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
             if (!res.ok) {
               msg.textContent = data.error || 'Could not pause betting.';
               msg.className = 'text-sm mt-2 text-red-400';

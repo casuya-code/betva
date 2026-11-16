@@ -1,4 +1,4 @@
-package httpapi
+﻿package httpapi
 
 import (
 	"context"
@@ -24,8 +24,8 @@ func validScore(p *int) bool {
 	return p != nil && *p >= 0 && *p <= 50
 }
 
-// marketWon decides a single market from the final score.
-func marketWon(market string, home, away int, homeHT, awayHT *int) bool {
+// MarketWon decides a single market from the final score.
+func MarketWon(market string, home, away int, homeHT, awayHT *int) bool {
 	switch market {
 	case marketFTOver05:
 		return home+away >= 1
@@ -56,7 +56,7 @@ func (s *Server) handleAdminSettleMatch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !validScore(body.HomeGoals) || !validScore(body.AwayGoals) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "full-time score is required (0–50)"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "full-time score is required (0â€“50)"})
 		return
 	}
 	body.Source = strings.TrimSpace(body.Source)
@@ -83,7 +83,7 @@ func (s *Server) handleAdminSettleMatch(w http.ResponseWriter, r *http.Request) 
 	}
 	if settledAt != nil && !body.Correct {
 		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": "match already settled — send correct=true with a reason to correct it",
+			"error": "match already settled â€” send correct=true with a reason to correct it",
 		})
 		return
 	}
@@ -208,7 +208,7 @@ func (s *Server) handleAdminSettleMatch(w http.ResponseWriter, r *http.Request) 
 	wins, losses := 0, 0
 	var paidOut int64
 	for _, b := range pending {
-		won := marketWon(b.Market, *body.HomeGoals, *body.AwayGoals, body.HomeGoalsHT, body.AwayGoalsHT)
+		won := MarketWon(b.Market, *body.HomeGoals, *body.AwayGoals, body.HomeGoalsHT, body.AwayGoalsHT)
 		status := "loss"
 		payout := int64(0)
 		if won {
@@ -300,14 +300,14 @@ func (s *Server) notifyMatchBettors(matchID, home, away string, hg, ag int, corr
 	if corrected {
 		prefix = "Corrected result"
 	}
-	score := fmt.Sprintf("%d–%d", hg, ag)
+	score := fmt.Sprintf("%dâ€“%d", hg, ag)
 	for _, uid := range winUsers {
 		s.notifyAndPush([]string{uid}, catResults, prefix+": WIN",
-			fmt.Sprintf("%s vs %s — FT %s. Payout +%s TZS.", home, away, score, formatTZS(winPayout[uid])), "/history")
+			fmt.Sprintf("%s vs %s â€” FT %s. Payout +%s TZS.", home, away, score, formatTZS(winPayout[uid])), "/history")
 	}
 	for _, uid := range lossUsers {
 		s.notifyAndPush([]string{uid}, catResults, prefix+": LOSS",
-			fmt.Sprintf("%s vs %s — FT %s. Open History to see the settled slip.", home, away, score), "/history")
+			fmt.Sprintf("%s vs %s â€” FT %s. Open History to see the settled slip.", home, away, score), "/history")
 	}
 }
 
@@ -359,7 +359,7 @@ func (s *Server) handleAdminRefundMatch(w http.ResponseWriter, r *http.Request) 
 	}
 	if settledAt != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": "match is already settled — correct the result instead of refunding",
+			"error": "match is already settled â€” correct the result instead of refunding",
 		})
 		return
 	}
@@ -428,9 +428,9 @@ func (s *Server) handleAdminRefundMatch(w http.ResponseWriter, r *http.Request) 
 		refundUsers = append(refundUsers, b.UserID)
 	}
 	if len(refundUsers) > 0 {
-		title := "Match postponed — stake refunded"
+		title := "Match postponed â€” stake refunded"
 		if body.Status == "cancelled" {
-			title = "Match cancelled — stake refunded"
+			title = "Match cancelled â€” stake refunded"
 		}
 		s.notifyAndPush(refundUsers, catResults, title,
 			fmt.Sprintf("%s vs %s. %s. %s", homeTeam, awayTeam, body.Reason,

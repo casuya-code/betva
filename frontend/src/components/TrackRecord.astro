@@ -45,7 +45,7 @@
       try {
         const res = await fetch(`${API}/api/v1/stats`);
         if (!res.ok) return;
-        const d = await res.json();
+        const d = await res.json().catch(() => ({}));
         const total = Number(d.total) || 0;
         const wins = Number(d.wins) || 0;
         const losses = Number(d.losses) || 0;

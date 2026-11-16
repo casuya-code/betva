@@ -48,7 +48,7 @@ import Layout from '../../layouts/Layout.astro';
             password: fd.get('password'),
           }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           msg.textContent = data.error || 'Sign in failed';
           msg.className = 'text-center text-sm text-red-400';

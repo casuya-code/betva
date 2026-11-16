@@ -89,7 +89,7 @@ import BrandName from '../components/BrandName.astro';
     async function loadConfig() {
       try {
         const res = await fetch(`${API}/api/v1/config`);
-        config = await res.json();
+        config = await res.json().catch(() => ({}));
       } catch {
         /* keep defaults */
       }
@@ -179,7 +179,7 @@ import BrandName from '../components/BrandName.astro';
             stake_cents: selectedStake,
           }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           slipMsg.textContent = data.error || 'Could not place the slip.';
           slipMsg.className = 'mt-2 text-center text-sm text-red-400';
@@ -209,7 +209,7 @@ import BrandName from '../components/BrandName.astro';
       const el = document.getElementById('matches')!;
       try {
         const res = await fetch(`${API}/api/v1/matches`);
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         const matches = data.matches || [];
 
         if (!matches.length) {
