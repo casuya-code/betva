@@ -170,7 +170,8 @@ func (s *Server) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 // same reaction again removes it; clicking a different one changes it.
 func (s *Server) handleReactPost(w http.ResponseWriter, r *http.Request) {
 	u := UserFromCtx(r)
-	if !s.requireActive(w, r, u) {
+	if u == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 	postID := chiURLParam(r, "id")

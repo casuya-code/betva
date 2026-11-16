@@ -21,6 +21,7 @@ type Config struct {
 	// PaymentNumber is the single official number users pay before the admin
 	// activates their account. Empty means "ask the admin" in the UI.
 	PaymentNumber string
+	PaymentName   string
 	Env           string
 	CORSOrigins   []string
 
@@ -82,6 +83,7 @@ func Load() *Config {
 		AdminTOTP:     getEnv("ADMIN_TOTP_SECRET", ""),
 		AdminRecovery: getEnv("ADMIN_RECOVERY_CODE", ""),
 		PaymentNumber: getEnv("PAYMENT_NUMBER", ""),
+		PaymentName:   getEnv("PAYMENT_NAME", ""),
 		Env:           getEnv("ENV", "development"),
 		CORSOrigins:   origins,
 

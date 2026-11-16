@@ -103,6 +103,7 @@ import TrackRecord from '../components/TrackRecord.astro';
       <div class="glass-el p-3 text-center mt-2">
         <div class="text-xs text-[var(--text-3)]">Official payment number</div>
         <div class="text-lg font-bold counter" id="admin-number">Ask the admin</div>
+        <div class="text-sm text-[var(--text-2)]" id="payment-name"></div>
       </div>
       <p class="text-xs text-[var(--text-3)] mt-2">
         Read the <a href="/terms" class="text-[var(--brand)]">Terms of Service</a> before paying. Bad content and payments to the wrong number are your responsibility.
@@ -151,6 +152,8 @@ import TrackRecord from '../components/TrackRecord.astro';
         const cfg = await res.json().catch(() => ({}));
         const numberEl = document.getElementById('admin-number');
         if (numberEl && cfg.payment_number) numberEl.textContent = String(cfg.payment_number);
+        const nameEl = document.getElementById('payment-name');
+        if (nameEl) nameEl.textContent = cfg.payment_name ? `Pay only ${String(cfg.payment_name)}` : '';
         const feeEl = document.getElementById('access-fee');
         const noteEl = document.getElementById('access-fee-note');
         if (!feeEl) return;

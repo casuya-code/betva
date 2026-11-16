@@ -18,7 +18,7 @@ import Layout from '../layouts/Layout.astro';
 
       <section class="space-y-2">
         <h2 class="text-base font-semibold text-[var(--text)]">2. The single official payment number</h2>
-        <p>There is <strong>only one official payment number</strong>. It is the number shown on your Profile page after login, under “Official payment number”. No other number, agent, or person is authorised to collect money for Betva.</p>
+        <p>There is <strong>only one official payment number</strong>. It is <strong id="terms-number">the number shown on your Profile page</strong>, registered to <strong id="terms-name">the account owner shown on your Profile</strong>. No other number, agent, or person is authorised to collect money for Betva.</p>
         <p>Pay only that number. Send money to any other number, user, or person at your own risk: the admin cannot trace, refund, or be held responsible for money sent anywhere else. The admin will never ask you to pay a different number in chat, a call, or a message. If someone does, do not pay them and report it.</p>
         <p>Payment does not activate your account by itself. After payment, ask the admin to activate your account. Access starts only when the admin marks your account active; access has an expiry date shown on your Profile.</p>
       </section>
@@ -61,4 +61,21 @@ import Layout from '../layouts/Layout.astro';
 
     <a href="/register" class="btn btn-primary w-full">Back to register</a>
   </div>
+
+  <script>
+    import { API } from '../lib/api';
+    fetch(`${API}/api/v1/config`)
+      .then((res) => (res.ok ? res.json() : {}))
+      .then((cfg) => {
+        if (cfg.payment_number) {
+          const n = document.getElementById('terms-number');
+          if (n) n.textContent = String(cfg.payment_number);
+        }
+        if (cfg.payment_name) {
+          const n = document.getElementById('terms-name');
+          if (n) n.textContent = String(cfg.payment_name);
+        }
+      })
+      .catch(() => {});
+  </script>
 </Layout>

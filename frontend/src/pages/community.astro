@@ -56,7 +56,7 @@ import Layout from '../layouts/Layout.astro';
 
       <div class="page-split-main">
         <div id="readOnlyNote" class="card hidden mb-3 text-sm text-[var(--text-2)]" role="status">
-          You can read the community while your account is inactive. Activate it to post, react, and upload. Pay only the single official number shown on your Profile.
+          You can read posts and react while your account is inactive. Only activated accounts can publish posts or upload media. Ask the admin to activate you after paying the single official number.
         </div>
         <div id="feed" class="space-y-3">
           <div class="card"><div class="skeleton h-28"></div></div>
@@ -160,8 +160,7 @@ import Layout from '../layouts/Layout.astro';
             <button type="button"
               class="react-btn ${p.my_reaction === key ? 'active' : ''}"
               data-reaction="${key}"
-              aria-label="${label}" aria-pressed="${p.my_reaction === key}"
-              ${canParticipate ? '' : 'disabled'}>
+              aria-label="${label}" aria-pressed="${p.my_reaction === key}">
               <span aria-hidden="true">${emoji}</span> <span>${label}</span>${count ? ` <span class="counter">${count}</span>` : ''}
             </button>`
         )
@@ -353,7 +352,6 @@ import Layout from '../layouts/Layout.astro';
 
       const reactBtn = target.closest('.react-btn') as HTMLButtonElement | null;
       if (reactBtn) {
-        if (!canParticipate) return;
         const reaction = reactBtn.dataset.reaction!;
         reactBtn.disabled = true;
         try {

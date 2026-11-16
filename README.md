@@ -307,13 +307,13 @@ The split is deliberate: Home stays small and fast, so it loads quickly on 3G an
 
 **Access gating (2026-11-16):** an inactive or expired account sees only the **first three matches by kickoff** from the published list; the rest are hidden by the API, not just by CSS. A notice explains how to activate. Active accounts see the full list. Users never see a wallet balance: money is paid to the single official number and the admin activates the account manually. ✅
 
-**Terms & the one payment number:** `/terms` is a public, versioned Terms of Service (v2). Registration links to it and requires acceptance; the accepted version and timestamp are recorded in `consent_log`. The terms state that there is exactly one official payment number (shown on Profile from `PAYMENT_NUMBER`, or “Ask the admin” when unset), that money sent to any other number or person is the user's responsibility, and that users own what they post. ✅
+**Terms & the one payment number:** `/terms` is a public, versioned Terms of Service (v2). Registration links to it and requires acceptance; the accepted version and timestamp are recorded in `consent_log`. The terms state that there is exactly one official payment number (shown on Profile from `PAYMENT_NUMBER`, with `PAYMENT_NAME` identifying the account holder), that money sent to any other number or person is the user's responsibility, and that users own what they post. ✅
 
 ### Community
 
 A single feed of user posts — text, one image, or one short video. It is the only place in the product with infinite scroll, and the only place users can publish. The layout follows a page feed: author avatar, name, timestamp, message, media, then a reaction bar.
 
-**Reactions:** 👍 Like, ❤️ Love, 😂 Haha. One real reaction per user per post; tapping the active one removes it, tapping another changes it. Counts come from `post_reactions` rows — never seeded or fabricated. Inactive users can read posts but cannot post, react, upload, or report; the server enforces this with `403`. ✅
+**Reactions:** 👍 Like, ❤️ Love, 😂 Haha. One real reaction per user per post; tapping the active one removes it, tapping another changes it. Counts come from `post_reactions` rows — never seeded or fabricated. Any signed-in user may react, including while inactive; only publishing and uploading require an active account, enforced by the server with `403`. ✅
 
 On phones the composer sits directly above the feed. From 1024px it moves into the **sticky right rail** (with a desktop-only house-rules card) and the feed takes the main column, so the composer stays reachable while scrolling.
 
