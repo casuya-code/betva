@@ -1,60 +1,120 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="betvaFaviconTitle">
   <title id="betvaFaviconTitle">BETVA Icon</title>
   <defs>
-    <!-- Google-coloured emblem body -->
-    <linearGradient id="betvaBodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4285F4" />
-      <stop offset="33%" stop-color="#EA4335" />
-      <stop offset="66%" stop-color="#FBBC05" />
-      <stop offset="100%" stop-color="#34A853" />
-    </linearGradient>
-    <linearGradient id="betvaBadgeBg" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="badgeBg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#1E293B" />
       <stop offset="100%" stop-color="#090D16" />
     </linearGradient>
+
+    <!-- Bold B outer shape -->
+    <path id="bOuter" d="
+      M136 108
+      H292
+      C352 108 386 138 386 186
+      C386 218 364 240 332 250
+      C372 260 396 288 396 328
+      C396 378 354 408 288 408
+      H136
+      Z" />
+
+    <!-- Upper counter: realistic eagle head in profile (facing right)
+         Features: curved crown, fierce eye socket with pupil, hooked beak with tip and gape -->
+    <path id="eagleHead" d="
+      M202 162
+      C202 156, 214 154, 228 156
+      C248 154, 266 158, 282 168
+      C296 176, 306 182, 314 184
+      L336 186
+      C340 188, 342 192, 338 196
+      L322 196
+      C326 200, 326 204, 320 206
+      L304 204
+      C296 210, 286 216, 274 220
+      L248 222
+      C230 224, 214 222, 204 216
+      L202 210
+      Z
+      M244 174
+      C238 174, 234 178, 234 184
+      C234 190, 238 194, 244 194
+      C250 194, 254 190, 254 184
+      C254 178, 250 174, 244 174
+      Z
+      M246 181
+      a3.5 3.5 0 1 0 7 0
+      a3.5 3.5 0 1 0 -7 0" />
+
+    <!-- Lower counter: layered wing feathers -->
+    <path id="wingFeathers" d="
+      M202 270
+      L270 270
+      C292 270, 312 276, 330 286
+      C336 290, 340 294, 338 298
+      L308 300
+      C318 306, 328 312, 334 318
+      C338 322, 336 326, 330 328
+      L304 326
+      C314 332, 322 340, 326 348
+      C328 352, 324 354, 318 354
+      L202 354
+      Z" />
+
+    <!-- B silhouette = outer minus eagle openings -->
+    <clipPath id="bClip">
+      <path fill-rule="evenodd" d="
+        M136 108 H292 C352 108 386 138 386 186 C386 218 364 240 332 250 C372 260 396 288 396 328 C396 378 354 408 288 408 H136 Z
+        M202 162
+        C202 156, 214 154, 228 156
+        C248 154, 266 158, 282 168
+        C296 176, 306 182, 314 184
+        L336 186
+        C340 188, 342 192, 338 196
+        L322 196
+        C326 200, 326 204, 320 206
+        L304 204
+        C296 210, 286 216, 274 220
+        L248 222
+        C230 224, 214 222, 204 216
+        L202 210
+        Z
+        M244 174
+        C238 174, 234 178, 234 184
+        C234 190, 238 194, 244 194
+        C250 194, 254 190, 254 184
+        C254 178, 250 174, 244 174
+        Z
+        M246 181
+        a3.5 3.5 0 1 0 7 0
+        a3.5 3.5 0 1 0 -7 0
+        M202 270
+        L270 270
+        C292 270, 312 276, 330 286
+        C336 290, 340 294, 338 298
+        L308 300
+        C318 306, 328 312, 334 318
+        C338 322, 336 326, 330 328
+        L304 326
+        C314 332, 322 340, 326 348
+        C328 352, 324 354, 318 354
+        L202 354
+        Z" />
+    </clipPath>
   </defs>
 
   <!-- Background badge -->
-  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#betvaBadgeBg)" />
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#badgeBg)" />
 
-  <!-- 'B' with eagle-shaped openings (counters) -->
-  <!-- Outer: bold B. Upper counter: eagle head profile with hooked beak and eye.
-       Lower counter: layered wing feathers. -->
-  <path fill-rule="evenodd" d="
-    M136 108
-    H292
-    C352 108 386 138 386 186
-    C386 218 364 240 332 250
-    C372 260 396 288 396 328
-    C396 378 354 408 288 408
-    H136
-    Z
-
-    M202 160
-    L266 160
-    C296 160 314 170 322 184
-    L338 190
-    L320 198
-    L326 206
-    L300 202
-    L282 222
-    L246 210
-    L222 222
-    L202 222
-    Z
-    M246 176
-    a7 7 0 1 0 14 0
-    a7 7 0 1 0 -14 0
-
-    M202 268
-    L276 268
-    C302 268 322 278 338 290
-    L304 302
-    L332 316
-    L300 328
-    L324 344
-    L282 354
-    L202 354
-    Z
-  " fill="url(#betvaBodyGrad)" />
+  <!-- Google-coloured B: four distinct colour regions clipped to the eagle-cutout B -->
+  <g clip-path="url(#bClip)">
+    <!-- Blue: top bowl region -->
+    <rect x="120" y="90" width="300" height="170" fill="#4285F4" />
+    <!-- Red: middle bridge/spine -->
+    <rect x="120" y="235" width="300" height="50" fill="#EA4335" />
+    <!-- Yellow: lower bowl upper -->
+    <rect x="120" y="270" width="300" height="70" fill="#FBBC05" />
+    <!-- Green: lower bowl base -->
+    <rect x="120" y="330" width="300" height="100" fill="#34A853" />
+    <!-- Subtle highlight sweep for depth -->
+    <ellipse cx="210" cy="170" rx="70" ry="110" fill="#ffffff" opacity="0.08" />
+  </g>
 </svg>
