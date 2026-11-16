@@ -1191,8 +1191,8 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 - **Documented runbook** — step-by-step restore procedure, stored outside the production environment. ✅ `docs/RESTORE_RUNBOOK.md`
 - **Restore drill** — actually restore a backup into a staging database and verify row counts, wallet totals, and the last 7 days of bets. A backup that has never been restored is a wish. ✅ local, ✅ staging.
   - Automated: `backend/scripts/restore_test.ps1` dumps the live database into a throwaway database, compares row counts for `users`, `bets`, `ledger`, `matches`, and `notifications`, checks the ledger sum, and confirms the restored schema is complete. It exits non-zero on any mismatch, and **fails closed** if the throwaway database was never created — a drill can never report success without a real restore. The role needs `CREATEDB` (`ALTER ROLE betva CREATEDB;`); the staging and production `postgres` roles already have it.
-- **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate. ✅ staging run passed 2026-11-16; repeat from an off-site bucket object before launch.
-- **Off-site restore path** — `go run ./cmd/backup -download <key> -out ./restore.dump` verifies size and SHA-256 against the manifest, then the dump is restored into a throwaway database and compared before promotion. ✅ documented; integrity verified 2026-11-16, full restore from the bucket ⬜.
+- **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate. ✅ staging run passed 2026-11-16; full off-site bucket restore also passed 2026-11-16.
+- **Off-site restore path** — `go run ./cmd/backup -download <key> -out ./restore.dump` verifies size and SHA-256 against the manifest, then the dump is restored into a throwaway database and compared before promotion. ✅ full drill passed 2026-11-16.
 - **Targets:** RTO ≤ 1 hour for critical data, RPO ≤ 24 hours today (daily dump); RPO ≤ 1 minute for wallets needs PITR, which is Pro-only on Railway and not enabled.
 - **No single point of failure:** backups are verified by a different person than the one who configured them.
 
@@ -1202,7 +1202,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 | --- | --- | --- | --- |
 | 2026-11-16 | Local Postgres 18, throwaway database | **Pass** | 5 users, 6 bets, 17 ledger rows, ledger sum 4,750,000 cents, 18 tables, schema check complete. Failing path also verified: with `CREATEDB` removed, the script exits `1` instead of reporting success. |
 | 2026-11-16 | Staging (Railway, restored into a throwaway DB) | **Pass** | 1 user, 1 match, 1 bet, 3 ledger rows, ledger sum 225,000 cents, 6 migrations, 19 tables. Public TCP proxy deleted immediately afterwards. See `docs/DEPLOYMENT.md`. |
-| 2026-11-16 | Off-site bucket, download only | **Pass (integrity)** | 44,353-byte dump matched its manifest SHA-256; `pg_restore --list` showed 19 table-data entries. Full restore from the bucket still to be run. |
+| 2026-11-16 | Off-site bucket (`betva-backups`), restored into a throwaway DB | **Pass** | 44,353-byte dump verified against its manifest SHA-256, then restored: 1 user, 1 match, 1 bet, 3 ledger rows, ledger sum 225,000 cents, 19 tables. Throwaway DB and temporary TCP proxy deleted. |
 
 ### Retention
 
@@ -1848,7 +1848,7 @@ Rules the audit enforces: **no horizontal overflow at 320 px**, every control at
 
 > **Astro scoping trap.** Styles declared in a page's `<style>` block are scoped with a `data-astro-*` attribute. Any markup injected through `innerHTML` does not carry that attribute, so scoped selectors never match it. Classes used by dynamically rendered markup (`.stake-chip`, `.admin-select`, `.admin-table-mid`, `.line-clamp-2`) live in `global.css` for that reason.
 
-**Next:** launch sign-off — run `docs/PEN_TEST_CHECKLIST.md` against staging, put Cloudflare in front of Vercel and media, enable managed PITR if the workspace moves to Pro, run a full restore from an off-site bucket object, measure real East-Africa latency on a mid-range Android over 3G, then go live.
+**Next:** launch sign-off — run `docs/PEN_TEST_CHECKLIST.md` against staging, put Cloudflare in front of Vercel and media, enable managed PITR if the workspace moves to Pro, measure real East-Africa latency on a mid-range Android over 3G, then go live.
 
 **Decisions locked in:**
 - Frontend hosting: **Vercel**

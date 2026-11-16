@@ -105,6 +105,7 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 - Admin password and JWT secret rotated; old password now returns `401`.
 - API security headers verified on `/api/v1/config`; media keeps `Cache-Control: public, max-age=31536000, immutable`.
 - SSRF guard and profile-picture allow-list covered by unit tests; client DNS rebinding blocked by pinning the dial to resolved public IPs.
+- Full off-site restore drill passed 2026-11-16: `db/2026/11/16/betva-20261116T103504Z.dump` verified by manifest SHA-256, restored into `betva_offsite_restore_test` (1/1/1/3 counts, 225,000-cent ledger sum, 19 tables); throwaway DB and TCP proxy deleted.
 - Staging smoke test: user login OK; `/api/v1/config` exposes only public settings; user token gets `403` on admin analytics; tampered/missing tokens get `401`; bad `profile_pic` and invalid stake get `400`; upstream AI/Groq errors are generic to the client and logged server-side.
 - Login limiter verified: 10 `401`s then `429` with `Retry-After` for one phone.
 - `npm run check` passes; all 14 built pages have zero inline script tags and zero inline styles/CSS.

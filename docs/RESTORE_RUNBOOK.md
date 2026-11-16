@@ -178,7 +178,8 @@ described in [`DEPLOYMENT.md`](DEPLOYMENT.md#4-off-site-backups).
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-16 | Local Postgres 18, throwaway DB | **Pass** | 5 | 6 | 17 | 4,750,000 | 18 | Failing path also verified: without `CREATEDB` the script exits `1` and prints `RESTORE DRILL FAILED`. |
 | 2026-11-16 | Staging (Railway Postgres 18 → throwaway DB) | **Pass** | 1 | 1 | 3 | 225,000 | 19 | `pg_dump -Fc` over a temporary TCP proxy, `pg_restore --exit-on-error` into `betva_restore_test`, counts and ledger sum matched, temp DB dropped, proxy deleted. |
-| 2026-11-16 | Off-site bucket → download only | **Pass (integrity)** | — | — | — | — | 19 | `backup -download` of `db/2026/11/16/betva-20261116T103504Z.dump` verified 44,353 bytes against the manifest SHA-256; `pg_restore --list` showed 19 table-data entries. Full restore from the bucket still to be run. |
+| 2026-11-16 | Off-site bucket → download only | **Pass (integrity)** | — | — | — | — | 19 | `backup -download` of `db/2026/11/16/betva-20261116T103504Z.dump` verified 44,353 bytes against the manifest SHA-256; `pg_restore --list` showed 19 table-data entries. |
+| 2026-11-16 | Off-site bucket → throwaway DB | **Pass** | 1 | 1 | 3 | 225,000 | 19 | Same object restored into `betva_offsite_restore_test` over a temporary TCP proxy; counts (1 user, 1 match, 1 bet, 3 ledger rows, 2 notifications), ledger sum, and 19 public tables verified. Throwaway DB and proxy deleted. |
 
 Staging drill details and the current topology are in [`DEPLOYMENT.md`](DEPLOYMENT.md#7-restore-drill).
 
@@ -191,6 +192,6 @@ Staging drill details and the current topology are in [`DEPLOYMENT.md`](DEPLOYME
 - [ ] Managed PITR (near-zero RPO): Pro-only on Railway, not enabled.
 - [ ] A second off-site copy on a different provider (Cloudflare R2) for account-level isolation (⬜).
 - [ ] Media files live on the Railway volume `media` (`/data`) and are **not** covered by the Postgres dump (🟡). Back up the volume manually or move media to R2.
-- [ ] No full restore from an off-site bucket object yet — only download + integrity verification.
+- [x] Full restore from an off-site bucket object passed on 2026-11-16 (counts, ledger sum, 19 tables).
 - [ ] No second person has independently verified a restore (⬜).
 - [ ] The staging drill used test-sized data. Repeat on production-sized data once real data exists.

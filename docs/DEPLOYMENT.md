@@ -291,6 +291,12 @@ verified, then dropped:
 | Date | Environment | Result | Users | Matches | Bets | Ledger rows | Ledger sum | Migrations | Tables |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-16 | Railway staging → throwaway DB | **Pass** | 1 | 1 | 1 | 3 | 225,000 cents | 6 | 19 |
+| 2026-11-16 | Off-site bucket dump → throwaway DB | **Pass** | 1 | 1 | 1 | 3 | 225,000 cents | 6 | 19 |
+
+The second row is a full restore of `db/2026/11/16/betva-20261116T103504Z.dump`: the
+manifest SHA-256 was verified on download, the dump restored into
+`betva_offsite_restore_test`, counts and ledger sum matched, and the throwaway database and
+temporary TCP proxy were deleted.
 
 Procedure and failure handling: [`docs/RESTORE_RUNBOOK.md`](RESTORE_RUNBOOK.md).
 The public TCP proxy used for the drill was deleted immediately afterwards.
