@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import TrackRecord from '../components/TrackRecord.astro';
 ---
 <Layout title="Betva — Profile" description="Your Betva wallet, notification settings, and self-exclusion controls." active="profile">
-  <div class="px-4 pt-4 space-y-4">
+  <div class="page-frame space-y-4">
     <h1 class="text-2xl font-bold">Profile</h1>
 
     <div class="glass p-4 space-y-3">
@@ -227,7 +227,7 @@ import TrackRecord from '../components/TrackRecord.astro';
               return `
                 <li class="flex items-center justify-between gap-3 py-2">
                   <div class="min-w-0">
-                    <div class="truncate">${esc(reasonLabel(e.reason))}</div>
+                    <div class="leading-snug break-words">${esc(reasonLabel(e.reason))}</div>
                     <div class="text-xs text-[var(--text-3)]">${esc(e.created_at)}</div>
                   </div>
                   <div class="counter shrink-0 ${positive ? 'text-green-400' : 'text-red-400'}">

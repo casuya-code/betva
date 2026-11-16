@@ -83,7 +83,7 @@ body::before {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   box-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 
@@ -92,7 +92,7 @@ body::before {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
 }
 
 /* buttons — every variant shares one metric frame: 44px height, 20px
@@ -211,7 +211,7 @@ label:has(> input[type="radio"]) {
   background: linear-gradient(90deg, var(--surface) 25%, var(--surface-el) 50%, var(--surface) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
 }
 @keyframes shimmer {
   0% { background-position: 200% 0; }
@@ -243,15 +243,45 @@ label:has(> input[type="radio"]) {
   align-items: center;
   gap: 2px;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: var(--t-xs);
   font-weight: 500;
   text-decoration: none;
-  padding: 6px 12px;
-  border-radius: 8px;
+  min-height: var(--tap);
+  padding: var(--s1) var(--s3);
+  border-radius: var(--r-sm);
   transition: color 150ms;
 }
 .nav-item.active { color: var(--brand); }
 .nav-item svg { width: 22px; height: 22px; }
+
+/* Desktop: the bottom bar becomes a centred floating pill, so a wide
+   canvas keeps one deliberate navigation anchor instead of a full-width
+   bar with four items stranded at the edges. */
+@media (min-width: 1024px) {
+  .bottom-nav {
+    left: 50%;
+    right: auto;
+    bottom: var(--s4);
+    transform: translateX(-50%);
+    width: min(560px, calc(100vw - var(--s8)));
+    height: 60px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    padding-bottom: 0;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  }
+  .nav-item {
+    flex-direction: row;
+    gap: var(--s2);
+    font-size: var(--t-sm);
+    min-height: var(--tap);
+    padding: 0 var(--s5);
+    border-radius: var(--r-pill);
+  }
+  .nav-item:hover { color: var(--text); background: var(--surface); }
+  .nav-item.active { background: rgba(66, 133, 244, 0.12); }
+  .nav-item svg { width: 20px; height: 20px; }
+}
 
 /* card */
 .card {
@@ -259,9 +289,9 @@ label:has(> input[type="radio"]) {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   box-shadow: 0 4px 24px rgba(0,0,0,0.3);
-  padding: 16px;
+  padding: var(--s4);
 }
 
 /* counter */
@@ -273,16 +303,18 @@ label:has(> input[type="radio"]) {
 /* toast */
 .toast {
   position: fixed;
-  top: 16px;
+  top: var(--s4);
   left: 50%;
   transform: translateX(-50%);
   background: var(--surface-el);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 20px;
+  border-radius: var(--r-md);
+  padding: var(--s3) var(--s5);
   z-index: 100;
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  max-width: calc(100vw - var(--s8));
+  text-align: center;
   animation: slideDown 250ms cubic-bezier(0.4,0,0.2,1);
 }
 @keyframes slideDown {
@@ -334,7 +366,7 @@ label:has(> input[type="radio"]) {
 .admin-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
   background: var(--surface);
 }
 /* Tables inside a scroll container keep a readable minimum width instead of
@@ -348,10 +380,10 @@ label:has(> input[type="radio"]) {
 .tap-link {
   display: inline-flex;
   align-items: center;
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 0 6px;
   margin: 0 -6px;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
 }
 
 /* focus rings for keyboard users */
@@ -372,8 +404,8 @@ a:focus-visible,
 
 /* stake chips (rendered dynamically into the bet slip, so this must be global) */
 .stake-chip {
-  min-height: 44px;
-  border-radius: 12px;
+  min-height: var(--tap);
+  border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -412,28 +444,71 @@ a:focus-visible,
 }
 
 /* ---------------------------------------------------------------------
-   Page frame — shared gutters so every route aligns on the same grid.
-   16px gutter on phones, 24px from 640px, content centred per page.
+   Page frame — every route shares one frame, so gutters and content width
+   line up from page to page.
+     phones      full width, 16px gutter, 720px cap
+     640px+      24px gutter
+     1024px+     32px gutter; two-column pages widen to 1120px
+   The bottom padding always clears the fixed nav (64px) plus one step.
    --------------------------------------------------------------------- */
 .page-frame {
   width: 100%;
-  padding: var(--s4) var(--s4) calc(var(--s6) + 72px + env(safe-area-inset-bottom));
+  max-width: 720px;
+  margin-inline: auto;
+  padding: var(--s4) var(--s4) calc(var(--s6) + 96px + env(safe-area-inset-bottom));
 }
 @media (min-width: 640px) {
   .page-frame { padding-inline: var(--s6); }
+}
+@media (min-width: 1024px) {
+  .page-frame { padding-inline: var(--s8); }
+  .page-frame-wide { max-width: 1120px; }
+}
+
+/* Auth screens: one narrow column, same gutters, optically centred. */
+.page-frame-narrow {
+  max-width: 440px;
+  padding-top: var(--s12);
 }
 
 /* Section rhythm: one rule for vertical spacing between blocks. */
 .section-gap > * + * { margin-top: var(--s6); }
 
+/* --- desktop split ---------------------------------------------------
+   Two-column layout for Home and History. Mobile stays a single column in
+   DOM order (aside first: trust record / personal record), which matches
+   the phone experience. From 1024px the aside becomes a sticky right rail
+   and the list takes the remaining width.
+   --------------------------------------------------------------------- */
+.page-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s4);
+}
+.page-split > * { min-width: 0; }
+@media (min-width: 1024px) {
+  .page-split {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-areas: "main aside";
+    gap: var(--s6);
+    align-items: start;
+  }
+  .page-split-main { grid-area: main; }
+  .page-split-aside {
+    grid-area: aside;
+    position: sticky;
+    top: var(--s6);
+  }
+}
+
 /* guardrail banners */
 .nudge {
   position: fixed;
-  left: 12px;
-  right: 12px;
+  left: var(--s4);
+  right: var(--s4);
   bottom: calc(76px + env(safe-area-inset-bottom));
   z-index: 80;
-  max-width: 456px;
+  max-width: 480px;
   margin: 0 auto;
   background: #10161d;
   border: 1px solid var(--border);
@@ -445,11 +520,15 @@ a:focus-visible,
 @media (min-width: 640px) {
   .nudge { bottom: 88px; }
 }
+@media (min-width: 1024px) {
+  /* Clears the floating nav pill (60px + 16px offset) with one 16px step. */
+  .nudge { bottom: calc(60px + var(--s8)); }
+}
 
 /* community media */
 .post-media {
   width: 100%;
-  border-radius: 12px;
+  border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: #000;
   display: block;

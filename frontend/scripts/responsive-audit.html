@@ -86,27 +86,38 @@
         }
       }
 
-      // buttons in the same row should share a baseline / height
-      const rows = new Map();
+      // buttons in the same row should share a baseline / height.
+      // Group by parent first: buttons from different components can sit at
+      // the same vertical offset (e.g. a feed card and the break banner) and
+      // must never be compared with each other.
+      const parents = new Map();
       for (const b of doc.querySelectorAll('button, a.btn')) {
         const r = b.getBoundingClientRect();
         if (!r.width) continue;
-        const key = Math.round(r.top / 4);
-        if (!rows.has(key)) rows.set(key, []);
-        rows.get(key).push({ el: b, h: r.height, top: r.top, w: r.width });
+        const p = b.parentElement || doc.body;
+        if (!parents.has(p)) parents.set(p, []);
+        parents.get(p).push({ el: b, h: r.height, top: r.top, w: r.width });
       }
-      for (const [, items] of rows) {
-        if (items.length < 2) continue;
-        const heights = items.map((i) => Math.round(i.h));
-        const tops = items.map((i) => Math.round(i.top));
-        const uniqH = new Set(heights);
-        const uniqT = new Set(tops);
-        if (uniqH.size > 1 || uniqT.size > 1) {
-          out.misaligned.push({
-            heights,
-            tops,
-            labels: items.map((i) => (i.el.innerText || '').trim().slice(0, 16)),
-          });
+      for (const [, siblings] of parents) {
+        const rows = new Map();
+        for (const item of siblings) {
+          const key = Math.round(item.top / 4);
+          if (!rows.has(key)) rows.set(key, []);
+          rows.get(key).push(item);
+        }
+        for (const [, items] of rows) {
+          if (items.length < 2) continue;
+          const heights = items.map((i) => Math.round(i.h));
+          const tops = items.map((i) => Math.round(i.top));
+          const uniqH = new Set(heights);
+          const uniqT = new Set(tops);
+          if (uniqH.size > 1 || uniqT.size > 1) {
+            out.misaligned.push({
+              heights,
+              tops,
+              labels: items.map((i) => (i.el.innerText || '').trim().slice(0, 16)),
+            });
+          }
         }
       }
 

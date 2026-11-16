@@ -528,12 +528,29 @@ A product that only shows wins is a scam waiting to be exposed. A product that s
 ### Frames & Cards
 
 - **Glass surface:** `backdrop-blur-md` + translucent background + 1px border. This is the signature look.
-- **Radius 16px** for cards, **12px** for inputs, **999px** for pills/badges.
+- **Radius ladder:** 8px chips/cells → 12px buttons/inputs → 16px cards → 20px sheets → 999px pills/badges. Every value is a token (`--r-sm`, `--r-md`, `--r-lg`, `--r-xl`, `--r-pill`), never a literal.
 - **Elevation via shadow, not borders:** `0 4px 24px rgba(0,0,0,0.3)`. No harsh outlines.
-- **Spacing system:** 4 / 8 / 12 / 16 / 24 / 32 / 48. Never invent a value.
+- **Spacing system:** 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48 (`--s1`…`--s12`). Never invent a value.
 - **Cards never touch each other** — minimum 12px gap, so the screen breathes.
 - **Dividers are 1px, low-contrast, and used sparingly.** Whitespace does the work.
 - **Inputs:** glass surface, 12px radius, 16px padding, focus ring in brand glow. Label above, error below, never floating.
+
+### Layout Frame & Breakpoints
+
+Every user route renders inside one shared frame, so gutters and content width line up page to page.
+
+| Token / class | Phones (<640px) | Tablet (640–1023px) | Desktop (≥1024px) |
+| --- | --- | --- | --- |
+| `.page-frame` | full width, 16px gutter | 24px gutter, 720px cap | 32px gutter, 720px cap |
+| `.page-frame-wide` (Home, History) | as above | as above | **1120px cap, two columns** |
+| `.page-frame-narrow` (login, register) | 440px cap, centred | same | same |
+| `.bottom-nav` | full-width bar, 64px | same | **centred floating pill, 560×60, 16px from bottom** |
+| Bet slip | bottom sheet, full width | centred dialog (≥640px) | centred dialog |
+
+- **Two-column split** (`.page-split`): mobile keeps a single column in DOM order — trust record / personal record first, then the list. From 1024px the aside becomes a **sticky right rail** (360px, 24px gap) and the list takes the remaining 672px. Home's rail also carries a desktop-only "How Betva works" card.
+- **Team names wrap, never clip.** Match and history rows use `grid-template-columns: minmax(0,1fr) auto minmax(0,1fr)`, so the score stays optically centred and long names wrap to a second line instead of being truncated.
+- **Control heights are tokens:** `--tap: 44px` (every touch target) and `--control: 48px` (form controls). Buttons set height, not padding, so labels centre exactly.
+- **Section rhythm:** `.section-gap` (24px) between major blocks; `space-y-4` (16px) inside a page frame.
 
 ### Feeds
 
@@ -1532,11 +1549,11 @@ Admin app: `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `AD
 
 The UI is verified against real measurements, not eyeballing:
 
-- **Responsive audit** — `frontend/scripts/responsive-audit.html` loads every route inside same-origin iframes at fixed widths (320, 360, 414, 768, 1280) and reports horizontal overflow, elements pushed past the viewport, tap targets under 44 px, and buttons in a row with mismatched heights. To run it: copy the file into `frontend/public/`, open `/_audit.html`, and call `window.__audit(routes, widths)` in the console. It is kept out of `public/` so it never ships.
+- **Responsive audit** — `frontend/scripts/responsive-audit.html` loads every route inside same-origin iframes at fixed widths (320, 360, 768, 1024, 1280, 1440) and reports horizontal overflow, elements pushed past the viewport, tap targets under 44 px, text clipped by a fixed height, and buttons in a row with mismatched heights. Rows are compared **per parent element**, so buttons from different components at the same vertical offset are never treated as one row. To run it: copy the file into `frontend/public/`, open `/_responsive-audit.html`, and call `window.__audit(routes, widths)` in the console. It is kept out of `public/` so it never ships.
 - **Dynamic overlays** — `window.__auditOverlay(route, width, selector)` opens the bet slip, report sheet, or settle modal and measures them the same way.
 - **Lighthouse** — every page scores 1.0 on accessibility, best practices, and SEO on the production build.
 
-Rules the audit enforces: **no horizontal overflow at 320 px**, every control at least **44 × 44 px**, buttons in the same row aligned to the same height, and tables scroll horizontally inside their own container instead of crushing cells.
+Rules the audit enforces: **no horizontal overflow at 320 px**, every control at least **44 × 44 px**, no clipped text, buttons in the same row aligned to the same height, and tables scroll horizontally inside their own container instead of crushing cells.
 
 > **Astro scoping trap.** Styles declared in a page's `<style>` block are scoped with a `data-astro-*` attribute. Any markup injected through `innerHTML` does not carry that attribute, so scoped selectors never match it. Classes used by dynamically rendered markup (`.stake-chip`, `.admin-select`, `.admin-table-mid`, `.line-clamp-2`) live in `global.css` for that reason.
 

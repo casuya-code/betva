@@ -2,50 +2,62 @@
 import Layout from '../layouts/Layout.astro';
 ---
 <Layout title="Betva — History" description="Your settled Betva results: every win, every loss, and every wallet movement." active="history">
-  <div class="px-4 pt-4 space-y-4">
-    <div>
+  <div class="page-frame page-frame-wide">
+    <header class="mb-4">
       <h1 class="text-2xl font-bold">History</h1>
       <p class="text-sm text-[var(--text-2)]">Your bets from the last 6 months. Nothing is hidden — wins and losses both stay here.</p>
-    </div>
+    </header>
 
-    <!-- Personal record -->
-    <div class="glass p-4">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-sm text-[var(--text-2)]">Your record</span>
-        <span class="text-xs text-[var(--text-3)]" id="h-range">—</span>
-      </div>
-      <div class="grid grid-cols-4 gap-2 text-center">
-        <div>
-          <div class="text-xl font-bold counter" id="h-settled">—</div>
-          <div class="text-[11px] text-[var(--text-3)]">Settled</div>
+    <div class="page-split">
+      <aside class="page-split-aside space-y-4">
+        <!-- Personal record -->
+        <div class="glass p-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm text-[var(--text-2)]">Your record</span>
+            <span class="text-xs text-[var(--text-3)]" id="h-range">—</span>
+          </div>
+          <div class="grid grid-cols-4 gap-2 text-center">
+            <div>
+              <div class="text-xl font-bold counter" id="h-settled">—</div>
+              <div class="text-[11px] text-[var(--text-3)]">Settled</div>
+            </div>
+            <div>
+              <div class="text-xl font-bold counter text-green-400" id="h-wins">—</div>
+              <div class="text-[11px] text-[var(--text-3)]">Wins</div>
+            </div>
+            <div>
+              <div class="text-xl font-bold counter text-red-400" id="h-losses">—</div>
+              <div class="text-[11px] text-[var(--text-3)]">Losses</div>
+            </div>
+            <div>
+              <div class="text-xl font-bold counter" id="h-rate">—</div>
+              <div class="text-[11px] text-[var(--text-3)]">Win rate</div>
+            </div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between text-sm">
+            <span class="text-[var(--text-2)]">Net return</span>
+            <span class="counter" id="h-net">—</span>
+          </div>
         </div>
-        <div>
-          <div class="text-xl font-bold counter text-green-400" id="h-wins">—</div>
-          <div class="text-[11px] text-[var(--text-3)]">Wins</div>
-        </div>
-        <div>
-          <div class="text-xl font-bold counter text-red-400" id="h-losses">—</div>
-          <div class="text-[11px] text-[var(--text-3)]">Losses</div>
-        </div>
-        <div>
-          <div class="text-xl font-bold counter" id="h-rate">—</div>
-          <div class="text-[11px] text-[var(--text-3)]">Win rate</div>
-        </div>
-      </div>
-      <div class="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between text-sm">
-        <span class="text-[var(--text-2)]">Net return</span>
-        <span class="counter" id="h-net">—</span>
-      </div>
-    </div>
 
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold">All bets</h2>
-      <span class="text-xs text-[var(--text-3)]" id="h-count"></span>
-    </div>
+        <section class="card hidden lg:block space-y-2 text-sm text-[var(--text-2)]" aria-labelledby="about-record">
+          <h2 class="font-semibold text-[var(--text)]" id="about-record">About this record</h2>
+          <p>Six months of bets, newest first. A correction is added as a new reversing entry — the original result and payout stay visible.</p>
+          <a href="/" class="btn btn-secondary w-full">Back to matches</a>
+        </section>
+      </aside>
 
-    <div id="list" class="space-y-3">
-      <div class="card"><div class="skeleton h-24"></div></div>
-      <div class="card"><div class="skeleton h-24"></div></div>
+      <div class="page-split-main">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <h2 class="text-lg font-semibold">All bets</h2>
+          <span class="text-xs text-[var(--text-3)]" id="h-count"></span>
+        </div>
+
+        <div id="list" class="space-y-3">
+          <div class="card"><div class="skeleton h-24"></div></div>
+          <div class="card"><div class="skeleton h-24"></div></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -110,16 +122,16 @@ import Layout from '../layouts/Layout.astro';
           return `
             <div class="card">
               <div class="flex items-start justify-between gap-2 mb-2">
-                <span class="text-xs text-[var(--text-3)] truncate">
+                <span class="text-xs text-[var(--text-3)] leading-snug break-words">
                   ${esc(b.league || 'Match')} · ${esc(b.match_date)} ${esc(b.kickoff)}
                 </span>
                 <span class="badge ${st.cls} shrink-0">${st.label}</span>
               </div>
 
-              <div class="flex items-center justify-between gap-3">
-                <div class="font-semibold truncate">${esc(b.home_team)}</div>
-                <div class="counter text-sm shrink-0">${score(b)}</div>
-                <div class="font-semibold truncate text-right">${esc(b.away_team)}</div>
+              <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                <div class="font-semibold leading-tight break-words">${esc(b.home_team)}</div>
+                <div class="counter text-sm">${score(b)}</div>
+                <div class="font-semibold leading-tight break-words text-right">${esc(b.away_team)}</div>
               </div>
 
               <div class="mt-2 flex items-center justify-between gap-2 text-sm">

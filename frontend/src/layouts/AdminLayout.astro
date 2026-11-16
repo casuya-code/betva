@@ -76,32 +76,38 @@ const links = [
   .admin-header-inner {
     max-width: 1120px;
     margin: 0 auto;
-    padding: 10px 16px;
+    padding: var(--s2) var(--s4);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px 16px;
+    gap: var(--s2) var(--s4);
     flex-wrap: wrap;
+  }
+  @media (min-width: 640px) {
+    .admin-header-inner { padding-inline: var(--s6); }
+  }
+  @media (min-width: 1024px) {
+    .admin-header-inner { padding-inline: var(--s8); }
   }
   .admin-brand {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--s2);
     color: var(--text);
     text-decoration: none;
     font-weight: 700;
-    font-size: 16px;
-    min-height: 44px;
+    font-size: var(--t-md);
+    min-height: var(--tap);
   }
   .admin-logo {
     width: 30px;
     height: 30px;
-    border-radius: 9px;
+    border-radius: var(--r-sm);
     display: block;
     flex: none;
   }
   .admin-tag {
-    font-size: 11px;
+    font-size: var(--t-xs);
     font-weight: 600;
     color: var(--text-3);
     text-transform: uppercase;
@@ -110,21 +116,21 @@ const links = [
   .admin-nav {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--s1);
     /* Wrap instead of scrolling off-screen: every section must stay reachable
        on a 320px phone without a hidden horizontal scroll. */
     flex-wrap: wrap;
     justify-content: flex-end;
   }
   .admin-nav-link {
-    min-height: 44px;
+    min-height: var(--tap);
     display: inline-flex;
     align-items: center;
-    padding: 8px 14px;
-    border-radius: 10px;
+    padding: var(--s2) var(--s4);
+    border-radius: var(--r-md);
     color: var(--text-2);
     text-decoration: none;
-    font-size: 14px;
+    font-size: var(--t-sm);
     font-weight: 600;
     background: none;
     border: none;
@@ -137,6 +143,12 @@ const links = [
   .admin-main {
     max-width: 1120px;
     margin: 0 auto;
-    padding: 20px 16px 64px;
+    padding: var(--s5) var(--s4) var(--s8);
+  }
+  @media (min-width: 640px) {
+    .admin-main { padding-inline: var(--s6); }
+  }
+  @media (min-width: 1024px) {
+    .admin-main { padding-inline: var(--s8); }
   }
 </style>

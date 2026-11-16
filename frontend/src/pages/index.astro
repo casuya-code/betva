@@ -4,36 +4,57 @@ import TrackRecord from '../components/TrackRecord.astro';
 import BrandName from '../components/BrandName.astro';
 ---
 <Layout title="Betva — Home" description="Today’s and tomorrow’s football matches. Fixed stakes, fast settlement, honest records." active="home">
-  <div class="px-4 pt-4 space-y-4">
+  <div class="page-frame page-frame-wide">
     <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <img src="/favicon.svg" alt="" class="w-8 h-8 rounded-lg" width="32" height="32" />
+    <header class="flex items-center justify-between gap-2 mb-4">
+      <div class="flex items-center gap-2 min-w-0">
+        <img src="/favicon.svg" alt="" class="w-8 h-8 rounded-lg shrink-0" width="32" height="32" />
         <h1 class="text-2xl font-bold tracking-tight"><BrandName /></h1>
       </div>
-      <a href="/profile" class="tap-link text-sm text-[var(--text-2)]">Profile</a>
-    </div>
+      <a href="/profile" class="tap-link text-sm text-[var(--text-2)] shrink-0">Profile</a>
+    </header>
 
-    <!-- Trust counter -->
-    <TrackRecord />
+    <div class="page-split">
+      <!-- Trust counter, plus the desktop-only rules rail -->
+      <aside class="page-split-aside space-y-4">
+        <TrackRecord />
 
-    <!-- Matches -->
-    <div>
-      <h2 class="text-lg font-semibold mb-3">Matches</h2>
-      <div class="day-tabs" id="day-tabs" role="tablist" aria-label="Match day">
-        <button type="button" class="day-tab active" id="tab-today" role="tab" aria-selected="true" aria-controls="matches" data-day="today">
-          <span class="dt-label">Today</span>
-          <span class="dt-sub" id="tab-today-sub">—</span>
-        </button>
-        <button type="button" class="day-tab" id="tab-tomorrow" role="tab" aria-selected="false" aria-controls="matches" data-day="tomorrow">
-          <span class="dt-label">Tomorrow</span>
-          <span class="dt-sub" id="tab-tomorrow-sub">—</span>
-        </button>
-      </div>
-      <div id="matches" class="mt-3 space-y-3" role="tabpanel" aria-label="Match list">
-        <div class="card"><div class="skeleton h-24"></div></div>
-        <div class="card"><div class="skeleton h-24"></div></div>
-        <div class="card"><div class="skeleton h-24"></div></div>
+        <section class="card hidden lg:block space-y-3" aria-labelledby="rules-title">
+          <h2 class="font-semibold" id="rules-title">How Betva works</h2>
+          <ul class="space-y-2 text-sm text-[var(--text-2)]">
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">1.</span><span>Two markets only: <strong class="text-[var(--text)]">Full Time Over 0.5</strong> and <strong class="text-[var(--text)]">Half Time Over 0.5</strong>.</span></li>
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">2.</span><span>Fixed stake tiers only — you pick a tier, never type an amount.</span></li>
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">3.</span><span>Betting closes at kickoff. Results settle after full time.</span></li>
+            <li class="flex gap-2"><span class="text-[var(--brand)] font-semibold" aria-hidden="true">4.</span><span>Every win <em>and</em> every loss stays in your History for 6 months.</span></li>
+          </ul>
+          <div class="pt-3 border-t border-[var(--border)] flex flex-col gap-2">
+            <a href="/history" class="btn btn-secondary w-full">View your record</a>
+            <a href="/profile" class="btn btn-ghost w-full text-sm">Take a break or set limits</a>
+          </div>
+        </section>
+      </aside>
+
+      <!-- Matches -->
+      <div class="page-split-main">
+        <div class="flex items-baseline justify-between gap-2 mb-3">
+          <h2 class="text-lg font-semibold">Matches</h2>
+          <span class="text-xs text-[var(--text-3)]">Bets close at kickoff</span>
+        </div>
+        <div class="day-tabs" id="day-tabs" role="tablist" aria-label="Match day">
+          <button type="button" class="day-tab active" id="tab-today" role="tab" aria-selected="true" aria-controls="matches" data-day="today">
+            <span class="dt-label">Today</span>
+            <span class="dt-sub" id="tab-today-sub">—</span>
+          </button>
+          <button type="button" class="day-tab" id="tab-tomorrow" role="tab" aria-selected="false" aria-controls="matches" data-day="tomorrow">
+            <span class="dt-label">Tomorrow</span>
+            <span class="dt-sub" id="tab-tomorrow-sub">—</span>
+          </button>
+        </div>
+        <div id="matches" class="mt-3 space-y-3" role="tabpanel" aria-label="Match list">
+          <div class="card"><div class="skeleton h-24"></div></div>
+          <div class="card"><div class="skeleton h-24"></div></div>
+          <div class="card"><div class="skeleton h-24"></div></div>
+        </div>
       </div>
     </div>
   </div>
@@ -276,15 +297,15 @@ import BrandName from '../components/BrandName.astro';
       return `
               <div class="card">
                 <div class="flex items-center justify-between mb-2 gap-2">
-                  <span class="text-xs text-[var(--text-3)] truncate">
+                  <span class="text-xs text-[var(--text-3)] leading-snug break-words">
                     ${esc(m.league || '')}${m.league ? ' · ' : ''}${esc(m.match_date)} ${esc(m.kickoff)}
                   </span>
-                  <span class="badge ${conf}">${esc((m.confidence || 'medium').toUpperCase())}</span>
+                  <span class="badge ${conf} shrink-0">${esc((m.confidence || 'medium').toUpperCase())}</span>
                 </div>
-                <div class="flex items-center justify-between gap-3">
-                  <div class="font-semibold truncate">${esc(m.home_team)}</div>
-                  <div class="text-[var(--text-3)] text-sm shrink-0">vs</div>
-                  <div class="font-semibold truncate text-right">${esc(m.away_team)}</div>
+                <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                  <div class="font-semibold leading-tight break-words">${esc(m.home_team)}</div>
+                  <div class="text-[var(--text-3)] text-sm">vs</div>
+                  <div class="font-semibold leading-tight break-words text-right">${esc(m.away_team)}</div>
                 </div>
                 <div class="mt-2 flex items-center justify-between gap-2">
                   <span class="badge ${st.cls}">${st.dot ? '<span class="dot"></span> ' : ''}${st.label}</span>
@@ -411,6 +432,20 @@ import BrandName from '../components/BrandName.astro';
     @keyframes sheetUp {
       from { transform: translateY(24px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
+    }
+    /* From 640px the sheet becomes a centred dialog: a full-width bottom
+       sheet on a large screen reads like a bug, not a choice. */
+    @media (min-width: 640px) {
+      .slip-overlay {
+        align-items: center;
+        padding: var(--s4);
+      }
+      .slip-sheet {
+        border-radius: var(--r-xl);
+        border-bottom: 1px solid var(--border);
+        padding-bottom: var(--s5);
+      }
+      .slip-grip { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
       .slip-sheet { animation: none; }
