@@ -1015,7 +1015,8 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 ### Restore Discipline
 
 - **Documented runbook** — step-by-step restore procedure, stored outside the production environment, including the manual-backup restore path.
-- **Quarterly restore drill** — actually restore a backup into a staging database and verify row counts, wallet totals, and the last 7 days of bets. A backup that has never been restored is a wish.
+- **Quarterly restore drill** - actually restore a backup into a staging database and verify row counts, wallet totals, and the last 7 days of bets. A backup that has never been restored is a wish.
+  - Automated: `backend/scripts/restore_test.ps1` dumps the live database into a throwaway database, compares row counts for `users`, `bets`, `ledger`, `matches`, and `notifications`, checks the ledger sum, and confirms the restored schema is complete. It exits non-zero on any mismatch, and **fails closed** if the throwaway database was never created - a drill can never report success without a real restore. The role needs `CREATEDB` (`ALTER ROLE betva CREATEDB;`); the staging and production `postgres` roles already have it.
 - **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate.
 - **Targets:** RTO ≤ 1 hour for critical data, RPO ≤ 1 minute for wallets.
 - **No single point of failure:** backups are verified by a different person than the one who configured them.
