@@ -1,0 +1,25 @@
+# Off-site Postgres backup job.
+#
+# Build context is backend/. Runs as a Railway cron service, not as the API.
+# The base image ships pg_dump/pg_restore 18, matching the Postgres 18 service.
+
+FROM golang:1.27-alpine AS build
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/backup ./cmd/backup
+
+FROM postgres:18-alpine
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=build /out/backup /usr/local/bin/backup
+
+USER postgres
+
+ENTRYPOINT ["/usr/local/bin/backup"]

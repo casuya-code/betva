@@ -20,7 +20,9 @@
 | AI review | `result_suggestions` | Medium |
 | Media files | `MEDIA_DIR` on disk | Medium |
 
-**Targets:** RTO ≤ 1 hour for critical data; RPO ≤ 1 minute for wallets (requires continuous archiving / PITR — not configured yet).
+**Targets:** RTO ≤ 1 hour for critical data. RPO is **≤ 24 hours** today, from the daily
+off-site dump. RPO ≤ 1 minute for wallets needs continuous archiving/PITR, which is
+Pro-only on Railway and not enabled.
 
 ---
 
@@ -137,22 +139,58 @@ A drill that has never failed is not evidence. Verify the failing path once (rem
 
 ---
 
-## 5. Drill log
+## 5. Restoring from the off-site bucket
+
+Production recovery starts from the newest verified object in the `betva-backups` bucket,
+not from the live database.
+
+1. **List what exists.**
+   ```bash
+   cd backend
+   go run ./cmd/backup -list
+   ```
+2. **Download and verify.**
+   ```bash
+   go run ./cmd/backup -download db/YYYY/MM/DD/betva-YYYYMMDDTHHMMSSZ.dump -out ./restore.dump
+   ```
+   The job compares the downloaded size and SHA-256 with the `.dump.json` manifest and
+   aborts on a mismatch, so a corrupt download never reaches the restore step.
+3. **Restore into a throwaway database first.** Follow section 3.2 steps 2–8 using the
+   downloaded file; the restore command becomes:
+   ```bash
+   pg_restore --no-owner --no-privileges --exit-on-error -d betva_restore_test ./restore.dump
+   ```
+4. **Compare with the manifest.** The manifest's `tables` count must match
+   `pg_restore --list` table-data entries, and the ledger sum must match the source or the
+   last known value.
+5. **Promote** only after the verification in section 3.3 passes. Record the object key,
+   manifest SHA-256, restore time, and verification values in the drill log.
+
+The dump already passed `pg_restore --list` when it was created; the download check and the
+throwaway restore are what prove it survived storage. The bucket and cron service are
+described in [`DEPLOYMENT.md`](DEPLOYMENT.md#4-off-site-backups).
+
+---
+
+## 6. Drill log
 
 | Date | Environment | Result | Users | Bets | Ledger rows | Ledger sum (cents) | Tables | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-16 | Local Postgres 18, throwaway DB | **Pass** | 5 | 6 | 17 | 4,750,000 | 18 | Failing path also verified: without `CREATEDB` the script exits `1` and prints `RESTORE DRILL FAILED`. |
 | 2026-11-16 | Staging (Railway Postgres 18 → throwaway DB) | **Pass** | 1 | 1 | 3 | 225,000 | 19 | `pg_dump -Fc` over a temporary TCP proxy, `pg_restore --exit-on-error` into `betva_restore_test`, counts and ledger sum matched, temp DB dropped, proxy deleted. |
+| 2026-11-16 | Off-site bucket → download only | **Pass (integrity)** | — | — | — | — | 19 | `backup -download` of `db/2026/11/16/betva-20261116T103504Z.dump` verified 44,353 bytes against the manifest SHA-256; `pg_restore --list` showed 19 table-data entries. Full restore from the bucket still to be run. |
 
-Staging drill details and the current topology are in [`DEPLOYMENT.md`](DEPLOYMENT.md#6-restore-drill).
+Staging drill details and the current topology are in [`DEPLOYMENT.md`](DEPLOYMENT.md#7-restore-drill).
 
 ---
 
-## 6. Known gaps after the staging drill
+## 7. Known gaps after the staging drill
 
 - [ ] `restore_test.ps1` is local-only (hardcoded binary path, role, and database). Parameterise it so the staging drill is one command.
-- [ ] No automated daily backups or PITR configured (Railway managed backups are ⬜).
-- [ ] No off-site copy in Cloudflare R2 (⬜).
-- [ ] Media files live on the Railway volume `media` (`/data`) and are **not** covered by the Postgres dump (🟡). Back up the volume separately or move media to R2.
+- [x] Daily off-site backups: Railway cron `backup` writes verified dumps to the `betva-backups` bucket with GFS retention (`DEPLOYMENT.md#4-off-site-backups`).
+- [ ] Managed PITR (near-zero RPO): Pro-only on Railway, not enabled.
+- [ ] A second off-site copy on a different provider (Cloudflare R2) for account-level isolation (⬜).
+- [ ] Media files live on the Railway volume `media` (`/data`) and are **not** covered by the Postgres dump (🟡). Back up the volume manually or move media to R2.
+- [ ] No full restore from an off-site bucket object yet — only download + integrity verification.
 - [ ] No second person has independently verified a restore (⬜).
-- [ ] The staging drill used test-sized data. Repeat on production-sized data after managed backups are enabled.
+- [ ] The staging drill used test-sized data. Repeat on production-sized data once real data exists.

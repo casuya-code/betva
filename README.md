@@ -755,7 +755,7 @@ Every mismatch resolution lands here, never auto-approved.
 **Practical notes:**
 
 - Store results with the **Africa/Dar_es_Salaam (EAT)** timezone so a "day" means the same thing to admin and users. ✅
-- 6-month retention with no deletion means **scheduled backups** are mandatory — retention is only real if the data is recoverable. ⬜
+- 6-month retention with no deletion means **scheduled backups** are mandatory — retention is only real if the data is recoverable. ✅ Daily off-site dumps with GFS retention cover the archive window.
 
 ### Admin Profile ⬜
 
@@ -1134,13 +1134,30 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
 
 ### Backup Layers
 
-> **Status: 🟡 staging data exists, backup layers are not configured.** The API and Postgres are deployed on Railway and a restore drill has passed against staging. Automated Railway backups, off-site copies, and media backup are still launch work.
+> **Status: ✅ database backups run daily and off-site.** A Railway cron service dumps
+> Postgres, verifies the archive, uploads it to a storage bucket outside the database
+> service, and prunes with grandfather-father-son retention. Railway's managed volume
+> backups/PITR are Pro-only (this workspace is Hobby), and media backup is still manual.
 
-1. **Railway managed Postgres backups** — must be enabled and confirmed on the staging/production Postgres service. ⬜
-2. **Off-site copies to Cloudflare R2** — a second copy outside Railway, so a Railway account compromise or outage cannot take the data with it. Encrypted at rest, lifecycle-retained for the 6-month archive window. ⬜
-3. **Redis persistence** — RDB snapshots + AOF. Redis is connected at startup but **currently unused** by the application, so it holds no data worth backing up. ⬜
-4. **Code & config in Git** — the database schema is versioned (`001`–`006`), so a fresh database can be rebuilt from scratch. ✅
-5. **Media storage** — uploads live on the Railway volume `media` mounted at `/data`. It is **not** included in a Postgres dump and has no off-site copy yet. R2/S3 remains the target. 🟡
+1. **Daily off-site Postgres dumps** — Railway cron service `backup` runs
+   `backend/cmd/backup` at `0 1 * * *` (04:00 EAT). It takes a custom-format `pg_dump`,
+   verifies the archive with `pg_restore --list` (refuses to upload a dump with no table
+   data), records size + SHA-256 in a JSON manifest, uploads both to the `betva-backups`
+   bucket, then prunes. ✅ `docs/DEPLOYMENT.md#4-off-site-backups`
+2. **Grandfather-father-son retention** — daily 14 days, Sunday 56 days, first-of-month
+   183 days. Nothing younger than 24 hours is deleted, so the 6-month archive window is
+   covered. ✅
+3. **Railway managed volume backups / PITR** — Pro-only. The Hobby workspace rejects the
+   schedule API with "Manual backups and backup schedules are only available for Pro
+   workspaces", so RPO is up to 24 hours until the workspace is upgraded. ⬜
+4. **Redis persistence** — Redis is connected at startup but **currently unused**, so it
+   holds no data worth backing up. ⬜
+5. **Code & config in Git** — the schema is versioned (`001`–`006`), so a fresh database
+   can be rebuilt from scratch. ✅
+6. **Media storage** — uploads live on the Railway volume `media` mounted at `/data` and
+   are **not** in a Postgres dump. A volume mounts to one service, so the cron cannot read
+   it; backup is manual (`railway volume files download /media ./media-backup`) until
+   media moves to R2. 🟡
 
 ### Manual Backup Creation ⬜
 
@@ -1174,8 +1191,9 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 - **Documented runbook** — step-by-step restore procedure, stored outside the production environment. ✅ `docs/RESTORE_RUNBOOK.md`
 - **Restore drill** — actually restore a backup into a staging database and verify row counts, wallet totals, and the last 7 days of bets. A backup that has never been restored is a wish. ✅ local, ✅ staging.
   - Automated: `backend/scripts/restore_test.ps1` dumps the live database into a throwaway database, compares row counts for `users`, `bets`, `ledger`, `matches`, and `notifications`, checks the ledger sum, and confirms the restored schema is complete. It exits non-zero on any mismatch, and **fails closed** if the throwaway database was never created — a drill can never report success without a real restore. The role needs `CREATEDB` (`ALTER ROLE betva CREATEDB;`); the staging and production `postgres` roles already have it.
-- **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate. ✅ staging run passed 2026-11-16; repeat after enabling managed backups.
-- **Targets:** RTO ≤ 1 hour for critical data, RPO ≤ 1 minute for wallets.
+- **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate. ✅ staging run passed 2026-11-16; repeat from an off-site bucket object before launch.
+- **Off-site restore path** — `go run ./cmd/backup -download <key> -out ./restore.dump` verifies size and SHA-256 against the manifest, then the dump is restored into a throwaway database and compared before promotion. ✅ documented; integrity verified 2026-11-16, full restore from the bucket ⬜.
+- **Targets:** RTO ≤ 1 hour for critical data, RPO ≤ 24 hours today (daily dump); RPO ≤ 1 minute for wallets needs PITR, which is Pro-only on Railway and not enabled.
 - **No single point of failure:** backups are verified by a different person than the one who configured them.
 
 #### Drill Log
@@ -1184,12 +1202,13 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 | --- | --- | --- | --- |
 | 2026-11-16 | Local Postgres 18, throwaway database | **Pass** | 5 users, 6 bets, 17 ledger rows, ledger sum 4,750,000 cents, 18 tables, schema check complete. Failing path also verified: with `CREATEDB` removed, the script exits `1` instead of reporting success. |
 | 2026-11-16 | Staging (Railway, restored into a throwaway DB) | **Pass** | 1 user, 1 match, 1 bet, 3 ledger rows, ledger sum 225,000 cents, 6 migrations, 19 tables. Public TCP proxy deleted immediately afterwards. See `docs/DEPLOYMENT.md`. |
+| 2026-11-16 | Off-site bucket, download only | **Pass (integrity)** | 44,353-byte dump matched its manifest SHA-256; `pg_restore --list` showed 19 table-data entries. Full restore from the bucket still to be run. |
 
 ### Retention
 
-- Results archive: **6 months, append-only, nothing deleted** — backups must cover the full 6 months, not just the last week.
+- Results archive: **6 months, append-only, nothing deleted** — backups must cover the full 6 months, not just the last week. GFS retention keeps a first-of-month dump for 183 days, which covers that window.
 - User financial records: **retained as long as the account exists**, plus a defined post-closure period for disputes and tax.
-- Backups inherit the retention policy; nothing is silently expired early.
+- Backups inherit the retention policy; nothing is silently expired early. The prune step never deletes anything under 24 hours old.
 
 ---
 
@@ -1501,7 +1520,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ### Reliability & Security
 
-- [x] ~~**Backup owner**~~ — resolved: the restore drill is a **hard launch blocker**, owned by the operator. Runbook: `docs/RESTORE_RUNBOOK.md`; staging drill passed 2026-11-16. A copy must also be stored off-site before launch. 🟡
+- [x] ~~**Backup owner**~~ — resolved: the restore drill is a **hard launch blocker**, owned by the operator. Runbook: `docs/RESTORE_RUNBOOK.md`; staging drill passed 2026-11-16; daily off-site dumps run to the `betva-backups` bucket. ✅
 - [ ] **Admin 2FA** — which provider (TOTP / WebAuthn) and is it mandatory before launch?
 - [ ] **Penetration test** — budget and vendor for the pre-launch test?
 - [ ] **Incident contact** — who is on call, and how are users notified?
@@ -1525,7 +1544,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Development Status
 
-**Phases 1–5 are complete and verified locally. Phase 6 (launch) is in progress: documentation, security checklist, restore runbook, staging deployment, and the staging restore drill are done. The penetration test, Cloudflare edge/media, managed backups, and real-device latency measurement remain.**
+**Phases 1–5 are complete and verified locally. Phase 6 (launch) is in progress: documentation, security checklist, restore runbook, staging deployment, the staging restore drill, and daily off-site backups are done. The penetration test, Cloudflare edge/media, managed PITR, and real-device latency measurement remain.**
 
 ### What exists now
 
@@ -1563,9 +1582,10 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Backend container image + migration runner | ✅ Working | `backend/Dockerfile`, `backend/cmd/migrate`, `backend/migrations/embed.go` |
 | Staging deployment (API + Postgres + frontend) | ✅ Live | <https://betva-two.vercel.app>, `docs/DEPLOYMENT.md` |
 | Staging restore drill | ✅ Passed 2026-11-16 | 225,000-cent ledger sum verified in a throwaway DB |
+| Daily off-site Postgres backup cron | ✅ Live | `backend/cmd/backup`, `backend/Dockerfile.backup`, `docs/DEPLOYMENT.md#4-off-site-backups` |
 | PNG/ICO app icons from the eagle-B mark | ✅ Working | `frontend/scripts/generate-icons.mjs` |
 | Penetration test and real-device latency measurement | ⬜ Later | Phase 6 |
-| Cloudflare edge, R2 media, managed off-site backups | ⬜ Later | Phase 6 |
+| Cloudflare edge, R2 media, managed PITR | ⬜ Later | Phase 6 |
 | Public landing page, KYC queue, admin profile, results archive page | ⬜ Later | Post-launch |
 
 ### Matches CSV format
@@ -1827,7 +1847,7 @@ Rules the audit enforces: **no horizontal overflow at 320 px**, every control at
 
 > **Astro scoping trap.** Styles declared in a page's `<style>` block are scoped with a `data-astro-*` attribute. Any markup injected through `innerHTML` does not carry that attribute, so scoped selectors never match it. Classes used by dynamically rendered markup (`.stake-chip`, `.admin-select`, `.admin-table-mid`, `.line-clamp-2`) live in `global.css` for that reason.
 
-**Next:** launch sign-off — run `docs/PEN_TEST_CHECKLIST.md` against staging, put Cloudflare in front of Vercel and media, enable Railway managed backups plus an off-site copy, measure real East-Africa latency on a mid-range Android over 3G, then go live.
+**Next:** launch sign-off — run `docs/PEN_TEST_CHECKLIST.md` against staging, put Cloudflare in front of Vercel and media, enable managed PITR if the workspace moves to Pro, run a full restore from an off-site bucket object, measure real East-Africa latency on a mid-range Android over 3G, then go live.
 
 **Decisions locked in:**
 - Frontend hosting: **Vercel**
@@ -1853,6 +1873,6 @@ Rules the audit enforces: **no horizontal overflow at 320 px**, every control at
 - Public landing page: **planned** (live match ticker + activity feed + signup wall at the point of action) ⬜
 - Notifications: **PWA Web Push** from admin, with in-app inbox authoritative and per-category mutes; SMS fallback is ⬜
 - Results extraction: **Groq parses a server-fetched page → validator → admin approval**; AI never settles bets
-- Data: **backups off-site to R2** and a restore drill are launch blockers; runbook and fail-closed script exist, hosting layers ⬜
+- Data: **daily off-site database dumps** run to the `betva-backups` bucket with verified manifests and GFS retention; the restore drill is a launch blocker. Managed PITR and a second-provider (R2) copy remain ⬜.
 - Security: **HTTPS + Cloudflare WAF**, parameterized queries, bcrypt, admin 2FA ⬜, audit trail, pen test before launch ⬜
 - Revenue: **access contribution** for running costs — explicitly **not** payment for predictions
