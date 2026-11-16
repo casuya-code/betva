@@ -3,10 +3,16 @@ import '../styles/global.css';
 
 interface Props {
   title?: string;
+  description?: string;
   active?: string;
   hideNav?: boolean;
 }
-const { title = 'Betva', active = '', hideNav = false } = Astro.props;
+const {
+  title = 'Betva',
+  description = 'Betva — football betting and community for Tanzania. Fixed stakes, fast results, honest records.',
+  active = '',
+  hideNav = false,
+} = Astro.props;
 const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 ---
 <!doctype html>
@@ -14,9 +20,13 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content={description} />
     <meta name="theme-color" content="#0b0f14" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>{title}</title>
   </head>

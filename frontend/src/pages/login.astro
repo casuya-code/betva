@@ -1,19 +1,19 @@
 ---
 import Layout from '../layouts/Layout.astro';
 ---
-<Layout title="Betva — Login">
+<Layout title="Betva — Login" description="Sign in to Betva with your phone number.">
   <div class="px-4 pt-12 max-w-md mx-auto">
     <h1 class="text-3xl font-bold mb-2">Welcome back</h1>
     <p class="text-[var(--text-2)] mb-6">Login with your phone number.</p>
 
     <form id="loginForm" class="space-y-4">
       <div>
-        <label class="text-sm text-[var(--text-2)] mb-1 block">Phone number</label>
-        <input class="input" name="phone" type="tel" placeholder="0712 345 678" required />
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="loginPhone">Phone number</label>
+        <input class="input" id="loginPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" required />
       </div>
       <div>
-        <label class="text-sm text-[var(--text-2)] mb-1 block">Password</label>
-        <input class="input" name="password" type="password" required />
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="loginPassword">Password</label>
+        <input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" required />
       </div>
       <button class="btn btn-primary w-full" type="submit">Login</button>
     </form>

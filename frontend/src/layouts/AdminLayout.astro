@@ -21,6 +21,7 @@ const links = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Betva administration: matches, users, community moderation, and notifications." />
     <meta name="theme-color" content="#0b0f14" />
     <meta name="robots" content="noindex, nofollow" />
     <title>{title}</title>
@@ -74,7 +75,8 @@ const links = [
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 8px 16px;
+    flex-wrap: wrap;
   }
   .admin-brand {
     display: flex;
@@ -84,6 +86,7 @@ const links = [
     text-decoration: none;
     font-weight: 700;
     font-size: 16px;
+    min-height: 44px;
   }
   .admin-logo {
     width: 30px;
@@ -106,10 +109,13 @@ const links = [
     display: flex;
     align-items: center;
     gap: 4px;
-    overflow-x: auto;
+    /* Wrap instead of scrolling off-screen: every section must stay reachable
+       on a 320px phone without a hidden horizontal scroll. */
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
   .admin-nav-link {
-    min-height: 40px;
+    min-height: 44px;
     display: inline-flex;
     align-items: center;
     padding: 8px 14px;

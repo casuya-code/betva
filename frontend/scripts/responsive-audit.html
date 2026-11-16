@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Responsive audit</title>
+  <style>
+    body { background:#0b0f14; color:#f3f4f6; font-family: system-ui, sans-serif; margin:0; padding:12px; }
+    iframe { border:1px solid #333; display:block; margin:8px 0; }
+    pre { font-size:12px; }
+  </style>
+</head>
+<body>
+  <h1>Responsive audit</h1>
+  <pre id="out">idle</pre>
+
+  <script>
+    const ROUTES = [
+      '/', '/community', '/history', '/profile', '/login', '/register',
+      '/admin', '/admin/matches', '/admin/users', '/admin/community',
+      '/admin/notifications', '/admin/ai',
+    ];
+
+    function measure(frame) {
+      const doc = frame.contentDocument;
+      const win = frame.contentWindow;
+      if (!doc) return { error: 'no document' };
+      const vw = doc.documentElement.clientWidth;
+      const out = {
+        vw,
+        scrollWidth: doc.documentElement.scrollWidth,
+        hOverflow: Math.max(0, doc.documentElement.scrollWidth - vw),
+        bodyOverflow: Math.max(0, doc.body.scrollWidth - vw),
+        wide: [],
+        smallTargets: [],
+        clipped: [],
+        misaligned: [],
+      };
+
+      const all = doc.querySelectorAll('body *');
+      for (const el of all) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        const style = win.getComputedStyle(el);
+        if (style.position === 'fixed') continue;
+
+        // horizontal overflow past the viewport
+        if (r.right > vw + 1 || r.left < -1) {
+          if (!el.closest('.overflow-x-auto, [data-overflow-ok]')) {
+            out.wide.push({
+              tag: el.tagName.toLowerCase(),
+              cls: (el.className || '').toString().slice(0, 60),
+              left: Math.round(r.left),
+              right: Math.round(r.right),
+            });
+          }
+        }
+
+        // tap targets
+        const tap = el.matches('button, a[href], select, input[type=checkbox], input[type=radio], [role=button]');
+        if (tap) {
+          const h = r.height;
+          const w = r.width;
+          // Inline text links inside prose are exempt; controls are not.
+          // A checkbox inside a 44px label inherits the label as its target.
+          const exempt = el.matches('a[href]') && el.closest('p, li, label, .prose');
+          const labelled = el.matches('input[type=checkbox], input[type=radio]') &&
+            el.closest('label') && el.closest('label').getBoundingClientRect().height >= 44;
+          if (!exempt && !labelled && (h < 44 || w < 44)) {
+            out.smallTargets.push({
+              tag: el.tagName.toLowerCase(),
+              cls: (el.className || '').toString().slice(0, 50),
+              text: (el.innerText || el.value || '').trim().slice(0, 24),
+              w: Math.round(w),
+              h: Math.round(h),
+            });
+          }
+        }
+
+        // text clipped by a fixed height
+        if (el.children.length === 0 && el.scrollWidth > el.clientWidth + 2 && style.overflowX === 'hidden') {
+          out.clipped.push({
+            tag: el.tagName.toLowerCase(),
+            cls: (el.className || '').toString().slice(0, 50),
+            text: (el.innerText || '').trim().slice(0, 30),
+          });
+        }
+      }
+
+      // buttons in the same row should share a baseline / height
+      const rows = new Map();
+      for (const b of doc.querySelectorAll('button, a.btn')) {
+        const r = b.getBoundingClientRect();
+        if (!r.width) continue;
+        const key = Math.round(r.top / 4);
+        if (!rows.has(key)) rows.set(key, []);
+        rows.get(key).push({ el: b, h: r.height, top: r.top, w: r.width });
+      }
+      for (const [, items] of rows) {
+        if (items.length < 2) continue;
+        const heights = items.map((i) => Math.round(i.h));
+        const tops = items.map((i) => Math.round(i.top));
+        const uniqH = new Set(heights);
+        const uniqT = new Set(tops);
+        if (uniqH.size > 1 || uniqT.size > 1) {
+          out.misaligned.push({
+            heights,
+            tops,
+            labels: items.map((i) => (i.el.innerText || '').trim().slice(0, 16)),
+          });
+        }
+      }
+
+      // dedupe
+      const seen = new Set();
+      out.wide = out.wide.filter((x) => {
+        const k = x.tag + x.cls + x.left + x.right;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).slice(0, 12);
+      seen.clear();
+      out.smallTargets = out.smallTargets.filter((x) => {
+        const k = x.tag + x.cls + x.text;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).slice(0, 12);
+      seen.clear();
+      out.clipped = out.clipped.filter((x) => {
+        const k = x.tag + x.cls + x.text;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).slice(0, 8);
+      out.misaligned = out.misaligned.slice(0, 6);
+      return out;
+    }
+
+    // Open a dynamic overlay (bet slip, report sheet, settle modal) and measure
+    // it at the given width.
+    window.__auditOverlay = async function (route, width, openSelector) {
+      const frame = document.createElement('iframe');
+      frame.width = width;
+      frame.height = 900;
+      frame.style.width = width + 'px';
+      frame.src = route;
+      document.body.appendChild(frame);
+      await new Promise((res) => {
+        frame.addEventListener('load', () => setTimeout(res, 900));
+        setTimeout(res, 4000);
+      });
+      const doc = frame.contentDocument;
+      const win = frame.contentWindow;
+      const opened = doc.querySelector(openSelector);
+      if (opened) opened.click();
+      await new Promise((r) => setTimeout(r, 500));
+
+      const vw = doc.documentElement.clientWidth;
+      const out = { route, width, opened: !!opened, wide: [], small: [], mis: [], overflow: 0 };
+      const all = doc.querySelectorAll('body *');
+      for (const el of all) {
+        const r = el.getBoundingClientRect();
+        if (!r.width && !r.height) continue;
+        const style = win.getComputedStyle(el);
+        if (style.position === 'fixed' && style.display === 'none') continue;
+        if (r.right > vw + 1 || r.left < -1) {
+          if (!el.closest('.overflow-x-auto')) {
+            out.wide.push({
+              tag: el.tagName.toLowerCase(),
+              cls: (el.className || '').toString().slice(0, 50),
+              left: Math.round(r.left),
+              right: Math.round(r.right),
+              text: (el.innerText || '').trim().slice(0, 20),
+            });
+          }
+        }
+        const tap = el.matches('button, a[href], select, input[type=checkbox], input[type=radio]');
+        if (tap && !el.closest('p, li, label')) {
+          if (r.height < 44 || r.width < 44) {
+            out.small.push({
+              tag: el.tagName.toLowerCase(),
+              cls: (el.className || '').toString().slice(0, 50),
+              text: (el.innerText || '').trim().slice(0, 20),
+              w: Math.round(r.width),
+              h: Math.round(r.height),
+            });
+          }
+        }
+      }
+      out.overflow = Math.max(0, doc.documentElement.scrollWidth - vw);
+      frame.remove();
+      return out;
+    };
+
+    window.__audit = async function (routes, widths, prepare) {
+      const results = [];
+      for (const route of routes) {
+        for (const width of widths) {
+          const frame = document.createElement('iframe');
+          frame.width = width;
+          frame.height = 900;
+          frame.style.width = width + 'px';
+          frame.src = route;
+          document.body.appendChild(frame);
+          await new Promise((res) => {
+            frame.addEventListener('load', () => setTimeout(res, 700));
+            setTimeout(res, 4000);
+          });
+          if (prepare) {
+            try { new Function('document', 'window', prepare)(frame.contentDocument, frame.contentWindow); } catch (e) {}
+            await new Promise((r) => setTimeout(r, 1500));
+          }
+          const m = measure(frame);
+          m.route = route;
+          m.width = width;
+          results.push(m);
+          frame.remove();
+        }
+      }
+      window.__results = results;
+      document.getElementById('out').textContent = 'done ' + results.length;
+      return results;
+    };
+  </script>
+</body>
+</html>

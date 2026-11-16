@@ -1504,6 +1504,18 @@ Admin app: `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `AD
 
 `GET /api/v1/config` reports `push_enabled`, the public key, the cap, and the quiet-hours window, so the client never hardcodes them.
 
+### Responsive and accessibility checks
+
+The UI is verified against real measurements, not eyeballing:
+
+- **Responsive audit** — `frontend/scripts/responsive-audit.html` loads every route inside same-origin iframes at fixed widths (320, 360, 414, 768, 1280) and reports horizontal overflow, elements pushed past the viewport, tap targets under 44 px, and buttons in a row with mismatched heights. To run it: copy the file into `frontend/public/`, open `/_audit.html`, and call `window.__audit(routes, widths)` in the console. It is kept out of `public/` so it never ships.
+- **Dynamic overlays** — `window.__auditOverlay(route, width, selector)` opens the bet slip, report sheet, or settle modal and measures them the same way.
+- **Lighthouse** — every page scores 1.0 on accessibility, best practices, and SEO on the production build.
+
+Rules the audit enforces: **no horizontal overflow at 320 px**, every control at least **44 × 44 px**, buttons in the same row aligned to the same height, and tables scroll horizontally inside their own container instead of crushing cells.
+
+> **Astro scoping trap.** Styles declared in a page's `<style>` block are scoped with a `data-astro-*` attribute. Any markup injected through `innerHTML` does not carry that attribute, so scoped selectors never match it. Classes used by dynamically rendered markup (`.stake-chip`, `.admin-select`, `.admin-table-mid`, `.line-clamp-2`) live in `global.css` for that reason.
+
 **Next:** Final polish pass and launch sign-off — run the restore drill and pen-test checklist against staging, then deploy.
 
 **Decisions locked in:**

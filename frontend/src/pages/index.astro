@@ -1,12 +1,12 @@
 ---
 import Layout from '../layouts/Layout.astro';
 ---
-<Layout title="Betva — Home" active="home">
+<Layout title="Betva — Home" description="Today’s and tomorrow’s football matches. Fixed stakes, fast settlement, honest records." active="home">
   <div class="px-4 pt-4 space-y-4">
     <!-- Header -->
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold">Betva</h1>
-      <a href="/profile" class="text-sm text-[var(--text-2)]">Profile</a>
+      <a href="/profile" class="tap-link text-sm text-[var(--text-2)]">Profile</a>
     </div>
 
     <!-- Trust counter -->
@@ -333,22 +333,6 @@ import Layout from '../layouts/Layout.astro';
       border-radius: 999px;
       background: var(--border);
       margin: 0 auto 12px;
-    }
-    .stake-chip {
-      min-height: 44px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text);
-      font-weight: 600;
-      font-size: 14px;
-      cursor: pointer;
-      transition: border-color 150ms, background 150ms;
-    }
-    .stake-chip.selected {
-      border-color: var(--brand);
-      background: rgba(34, 197, 94, 0.12);
-      color: var(--brand);
     }
   </style>
 </Layout>

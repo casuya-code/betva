@@ -176,7 +176,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         }
         el.innerHTML = `
           <div class="overflow-x-auto">
-            <table class="admin-table">
+            <table class="admin-table admin-table-mid">
               <thead>
                 <tr>
                   <th>Kickoff</th><th>League</th><th>Fixture</th><th>Markets</th>
@@ -572,33 +572,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
   </div>
 
   <style>
-    .admin-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    .admin-table th {
-      text-align: left;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-3);
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-    .admin-table td {
-      padding: 10px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-    }
-    .admin-table tr:last-child td { border-bottom: 0; }
-    .admin-select {
-      padding: 8px 10px;
-      font-size: 13px;
-      min-height: 40px;
-      width: auto;
-    }
+    /* Uses the shared .admin-table and .admin-select from global.css. */
     .modal-overlay {
       position: fixed;
       inset: 0;

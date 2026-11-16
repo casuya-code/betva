@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 ---
-<Layout title="Betva — Profile" active="profile">
+<Layout title="Betva — Profile" description="Your Betva wallet, notification settings, and self-exclusion controls." active="profile">
   <div class="px-4 pt-4 space-y-4">
     <h1 class="text-2xl font-bold">Profile</h1>
 
@@ -19,7 +19,7 @@ import Layout from '../layouts/Layout.astro';
     <!-- Wallet -->
     <div class="glass p-4">
       <div class="flex items-center justify-between mb-1">
-        <h3 class="font-semibold">Wallet</h3>
+        <h2 class="font-semibold">Wallet</h2>
         <span class="text-xs text-[var(--text-3)]">Balance</span>
       </div>
       <div class="text-3xl font-bold counter" id="p-balance">—</div>
@@ -40,7 +40,7 @@ import Layout from '../layouts/Layout.astro';
     <!-- Ledger -->
     <div class="glass p-4">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="font-semibold">Recent activity</h3>
+        <h2 class="font-semibold">Recent activity</h2>
         <span class="text-xs text-[var(--text-3)]">Last 50 entries</span>
       </div>
       <div id="ledger" class="text-sm text-[var(--text-2)]">Loading…</div>
@@ -49,7 +49,7 @@ import Layout from '../layouts/Layout.astro';
     <!-- Inbox -->
     <div class="glass p-4">
       <div class="flex items-center justify-between mb-3 gap-2">
-        <h3 class="font-semibold">Notifications</h3>
+        <h2 class="font-semibold">Notifications</h2>
         <div class="flex items-center gap-2">
           <span class="badge badge-pending" id="unreadBadge">0 UNREAD</span>
           <button class="btn btn-ghost text-xs" id="markAll" type="button">Mark all read</button>
@@ -60,7 +60,7 @@ import Layout from '../layouts/Layout.astro';
 
     <!-- Notification preferences -->
     <div class="glass p-4 space-y-3">
-      <h3 class="font-semibold">Notification settings</h3>
+      <h2 class="font-semibold">Notification settings</h2>
       <p class="text-xs text-[var(--text-3)]">
         Push is capped at 2 per day and stays silent 22:00–07:00 EAT. The inbox below always works, even if push is blocked.
       </p>
@@ -80,7 +80,7 @@ import Layout from '../layouts/Layout.astro';
     <!-- Self-exclusion -->
     <div class="glass p-4 space-y-3">
       <div class="flex items-center justify-between gap-2">
-        <h3 class="font-semibold">Take a break</h3>
+        <h2 class="font-semibold">Take a break</h2>
         <span class="badge badge-pending" id="exclusionBadge">NOT ACTIVE</span>
       </div>
       <p class="text-sm text-[var(--text-2)]">
@@ -96,7 +96,7 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div class="glass p-4">
-      <h3 class="font-semibold mb-3">Deposit &amp; activation</h3>
+      <h2 class="font-semibold mb-3">Deposit &amp; activation</h2>
       <p class="text-sm text-[var(--text-2)] mb-3">
         Pay via mobile money to the admin number below, then send your transaction reference.
         Deposits and access activation are applied manually by an admin.
@@ -109,7 +109,7 @@ import Layout from '../layouts/Layout.astro';
     </div>
 
     <div class="glass p-4 space-y-3">
-      <h3 class="font-semibold">Edit profile</h3>
+      <h2 class="font-semibold">Edit profile</h2>
       <form id="editForm" class="space-y-3">
         <div>
           <label class="text-sm text-[var(--text-2)] mb-1 block" for="pw">New password</label>

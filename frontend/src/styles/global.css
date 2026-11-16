@@ -13,6 +13,7 @@
   --brand-2: #16a34a;
   --brand-glow: rgba(34, 197, 94, 0.25);
   --danger: #ef4444;
+  --danger-strong: #dc2626; /* white text on this passes 4.5:1 */
   --warning: #f59e0b;
   --info: #3b82f6;
 }
@@ -93,7 +94,7 @@ body::before {
   border: 1px solid var(--border);
 }
 .btn-ghost { background: transparent; color: var(--brand); }
-.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger { background: var(--danger-strong); color: #fff; }
 .btn-secondary:hover { background: var(--surface-el); border-color: var(--brand); }
 .btn-ghost:hover { background: var(--surface); }
 .btn-danger:hover { filter: brightness(1.1); }
@@ -116,6 +117,22 @@ body::before {
   box-shadow: 0 0 0 3px var(--brand-glow);
 }
 .input::placeholder { color: var(--text-3); }
+
+/* Checkboxes and radios: small native control, but the label around them is
+   the real tap target, so both are sized up. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--brand);
+  flex: none;
+  cursor: pointer;
+}
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  min-height: 44px;
+  cursor: pointer;
+}
 
 /* status badges */
 .badge {
@@ -257,9 +274,6 @@ body::before {
   background: var(--surface-el);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
-  position: sticky;
-  top: 0;
-  z-index: 1;
 }
 .admin-table tbody td {
   border-bottom: 1px solid var(--border);
@@ -268,11 +282,34 @@ body::before {
 .admin-table tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
 .admin-table tbody tr:last-child td { border-bottom: 0; }
 .admin-table .admin-reason { padding: 8px 10px; font-size: 12px; min-height: 36px; }
+/* Fixed height keeps every action button in a row visually aligned. */
+.admin-table .btn {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 16px;
+}
+.admin-table .btn.text-xs { font-size: 12px; padding: 0 12px; }
 .admin-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
+}
+/* Tables inside a scroll container keep a readable minimum width instead of
+   crushing cells on a narrow phone. */
+.admin-table-wrap .admin-table,
+.overflow-x-auto > .admin-table {
+  min-width: 720px;
+}
+
+/* Inline text links that act as controls still need a 44px hit area. */
+.tap-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 6px;
+  margin: 0 -6px;
+  border-radius: 8px;
 }
 
 /* focus rings for keyboard users */
@@ -291,12 +328,45 @@ a:focus-visible,
 /* filter chips */
 .filter.active { color: var(--brand); border-color: var(--brand); background: var(--brand-glow); }
 
+/* stake chips (rendered dynamically into the bet slip, so this must be global) */
+.stake-chip {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 150ms, background 150ms;
+}
+.stake-chip.selected {
+  border-color: var(--brand);
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--brand);
+}
+.stake-chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* Table variant for rows that hold selects and buttons: centre the cell
+   content vertically. Declared globally because these tables are rendered
+   from JavaScript, where an Astro scoped selector would not match. */
+.admin-table-mid td { vertical-align: middle; }
+
+/* Compact select used inside admin tables. */
+.admin-select {
+  padding: 8px 10px;
+  font-size: 13px;
+  min-height: 44px;
+  width: auto;
+}
+
 /* line clamp utility */
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  max-width: 420px;
 }
 
 /* guardrail banners */

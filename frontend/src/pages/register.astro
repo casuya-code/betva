@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 ---
-<Layout title="Betva — Register">
+<Layout title="Betva — Register" description="Create a Betva account with your phone number and a nickname.">
   <div class="px-4 pt-8 max-w-md mx-auto">
     <h1 class="text-3xl font-bold mb-2">Create account</h1>
     <p class="text-[var(--text-2)] mb-6">Register with your phone number.</p>
@@ -19,20 +19,20 @@ import Layout from '../layouts/Layout.astro';
 
     <form id="regForm" class="space-y-4">
       <div>
-        <label class="text-sm text-[var(--text-2)] mb-1 block">Nickname</label>
-        <input class="input" name="nickname" required />
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="regNick">Nickname</label>
+        <input class="input" id="regNick" name="nickname" required />
       </div>
       <div>
-        <label class="text-sm text-[var(--text-2)] mb-1 block">Phone number</label>
-        <input class="input" name="phone" type="tel" placeholder="0712 345 678" required />
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="regPhone">Phone number</label>
+        <input class="input" id="regPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="0712 345 678" type="tel" placeholder="0712 345 678" required />
       </div>
       <div>
-        <label class="text-sm text-[var(--text-2)] mb-1 block">Official name (phone owner)</label>
-        <input class="input" name="official_name" required />
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="regOfficial">Official name (phone owner)</label>
+        <input class="input" id="regOfficial" name="official_name" autocomplete="name" required />
       </div>
       <div>
-        <label class="text-sm text-[var(--text-2)] mb-1 block">Password</label>
-        <input class="input" name="password" type="password" minlength="6" required />
+        <label class="text-sm text-[var(--text-2)] mb-1 block" for="regPassword">Password</label>
+        <input class="input" id="regPassword" name="password" type="password" autocomplete="new-password" type="password" minlength="6" required />
       </div>
       <label class="flex items-start gap-2 text-sm text-[var(--text-2)]">
         <input type="checkbox" name="accepted_terms" class="mt-1" required />
