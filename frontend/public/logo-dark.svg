@@ -1,30 +1,67 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 128" width="460" height="128" role="img" aria-labelledby="betvaLogoDarkTitle">
   <title id="betvaLogoDarkTitle">BETVA Logo</title>
   <defs>
-    <linearGradient id="betvaEmeraldDark" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#34D399" />
-      <stop offset="50%" stop-color="#10B981" />
-      <stop offset="100%" stop-color="#059669" />
+    <linearGradient id="betvaBodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4285F4" />
+      <stop offset="33%" stop-color="#EA4335" />
+      <stop offset="66%" stop-color="#FBBC05" />
+      <stop offset="100%" stop-color="#34A853" />
     </linearGradient>
   </defs>
 
   <!-- Rounded Square Emblem Badge -->
   <rect x="8" y="8" width="112" height="112" rx="26" fill="#1E293B" stroke="#334155" stroke-width="2" />
 
-  <!-- Eagle-Cutout 'B' Monogram -->
+  <!-- Eagle-Cutout 'B' Monogram (Google-coloured) -->
   <g transform="translate(8, 8) scale(0.21875)">
     <path fill-rule="evenodd" d="
-      M136 108 H292 C352 108 386 138 386 186 C386 218 364 240 332 250 C372 260 396 288 396 328 C396 378 354 408 288 408 H136 Z
-      M202 158 L274 158 C304 158 324 174 326 200 L296 193 L278 218 L264 195 L232 218 L202 218 Z
-      M202 266 L282 266 L330 288 L294 303 L332 321 L290 336 L320 354 L202 354 Z
-    " fill="url(#betvaEmeraldDark)" />
+      M136 108
+      H292
+      C352 108 386 138 386 186
+      C386 218 364 240 332 250
+      C372 260 396 288 396 328
+      C396 378 354 408 288 408
+      H136
+      Z
+
+      M202 160
+      L266 160
+      C296 160 314 170 322 184
+      L338 190
+      L320 198
+      L326 206
+      L300 202
+      L282 222
+      L246 210
+      L222 222
+      L202 222
+      Z
+      M246 176
+      a7 7 0 1 0 14 0
+      a7 7 0 1 0 -14 0
+
+      M202 268
+      L276 268
+      C302 268 322 278 338 290
+      L304 302
+      L332 316
+      L300 328
+      L324 344
+      L282 354
+      L202 354
+      Z
+    " fill="url(#betvaBodyGrad)" />
   </g>
 
-  <!-- White BETVA Wordmark -->
-  <text x="142" y="82" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="60" font-weight="900" letter-spacing="4" fill="#FFFFFF">
-    BETVA
-  </text>
+  <!-- BETVA Wordmark (Google-coloured letters) -->
+  <g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="60" font-weight="900" aria-label="BETVA">
+    <text x="142" y="82" fill="#4285F4">B</text>
+    <text x="186" y="82" fill="#EA4335">E</text>
+    <text x="228" y="82" fill="#FBBC05">T</text>
+    <text x="270" y="82" fill="#34A853">V</text>
+    <text x="318" y="82" fill="#EA4335">A</text>
+  </g>
 
   <!-- Accent Bar -->
-  <rect x="144" y="94" width="64" height="5" rx="2.5" fill="url(#betvaEmeraldDark)" />
+  <rect x="144" y="94" width="64" height="5" rx="2.5" fill="url(#betvaBodyGrad)" />
 </svg>

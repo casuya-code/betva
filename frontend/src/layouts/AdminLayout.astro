@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import BrandName from '../components/BrandName.astro';
 
 interface Props {
   title?: string;
@@ -34,7 +35,7 @@ const links = [
       <div class="admin-header-inner">
         <a href="/admin" class="admin-brand">
           <img src="/favicon.svg" alt="" class="admin-logo" width="30" height="30" />
-          <span>Betva <span class="admin-tag">Admin</span></span>
+          <span><BrandName /> <span class="admin-tag">Admin</span></span>
         </a>
         <nav class="admin-nav">
           {links.map((l) => (
@@ -130,7 +131,7 @@ const links = [
     white-space: nowrap;
   }
   .admin-nav-link:hover { color: var(--text); background: var(--surface); }
-  .admin-nav-link.active { color: var(--brand); background: rgba(16, 185, 129, 0.12); }
+  .admin-nav-link.active { color: var(--brand); background: rgba(66, 133, 244, 0.12); }
   .admin-logout { color: var(--danger); }
   .admin-main {
     max-width: 1120px;
