@@ -2,54 +2,103 @@
 
 Hard launch gate: every box must be ticked and dated by the tester before go-live. Run against a staging copy of production, never against live money.
 
+Scope: Go API (`/api/v1`), Astro frontend, Postgres, local media storage, Web Push, and the admin app. The tester is not the developer.
+
 ## Authentication & authorization
 
 - [ ] Admin login rejects wrong username / wrong password with constant-time compare (no timing leak).
 - [ ] Admin JWT with `is_admin=false` cannot reach `/api/v1/admin/*`.
 - [ ] User JWT cannot reach admin endpoints (401/403).
-- [ ] Expired JWT is rejected; no refresh-token reuse.
-- [ ] Phone normalization rejects malformed input (`+255…` only).
+- [ ] Expired JWT is rejected; tampered signature is rejected.
+- [ ] **Stateless logout:** an old token still works after `/auth/logout` — confirm this is accepted risk, or require a denylist before launch.
+- [ ] Phone normalization rejects malformed input; `0712…`, `712…`, `+255712…` resolve to one account.
+- [ ] Duplicate phone registration returns `409`, not a second account.
 - [ ] bcrypt cost is adequate; passwords are never logged.
+- [ ] Registration requires `official_name` and `accepted_terms`; a missing checkbox returns `400`.
+- [ ] `consent_log` receives one row per registration with `notice_version` and timestamp.
+- [ ] `PUT /me` cannot change `nickname`, `phone`, `official_name`, `status`, `balance_cents`, or `access_expires_at`.
+- [ ] **Known gap:** `PUT /me` accepts an arbitrary `profile_pic` string with no server-side size, MIME, or URL validation. Confirm it cannot be used for stored XSS or tracking pixels.
+- [ ] Admin and user tokens are not interchangeable (claims checked, not just signature).
 
 ## Money integrity
 
 - [ ] Double-tap placement cannot overspend (row lock verified).
-- [ ] Stake is validated against `STAKE_TIERS_CENTS`; free-form rejected.
+- [ ] Stake is validated against `STAKE_TIERS_CENTS`; free-form and negative values rejected.
 - [ ] Daily cap enforced server-side, not just client.
 - [ ] One bet per user per match per market enforced by `idx_bets_one_per_market`.
+- [ ] Betting is rejected when the account is inactive, access has expired, or a self-exclusion is active.
+- [ ] Betting is rejected after kickoff (server-side, `Africa/Dar_es_Salaam`) and for a market not offered on the match.
 - [ ] Settlement is idempotent: re-running does not double-pay.
-- [ ] Correction reverses with negative ledger rows; nothing edited in place.
-- [ ] Postponed match refunds every pending bet exactly once.
-- [ ] Admin credit requires a reason and writes a ledger row.
+- [ ] Correction reverses with negative ledger rows; nothing edited in place; original result stays visible.
+- [ ] Postponed/cancelled match refunds every pending bet exactly once.
+- [ ] Admin credit requires a reason and writes a ledger row; negative balances require the explicit flag.
+- [ ] Ledger sum equals wallet balances after a scripted sequence of place / settle / correct / refund.
+- [ ] `payout_multiplier_bp` and `confidence_at_placement` are snapshotted on the bet, not read live at settlement.
+
+## Admin-only data
+
+- [ ] `GET /api/v1/config` never returns `ACCESS_FEE_DAU_TARGET`, `MONTHLY_OPERATING_COST_CENTS`, the suggested fee, or any secret.
+- [ ] `GET /api/v1/admin/analytics` is admin-only and returns `fee_plan` only to an admin token.
+- [ ] `activity_days` cannot be written or read by a user token; one row per user per EAT day under concurrent requests.
+- [ ] Analytics `days` outside 7–90 falls back to 30; a negative or huge value cannot widen the query.
+- [ ] Official names appear only in admin user responses and the user's own `/me`; never in community, matches, stats, or public responses.
+- [ ] Admin broadcast rejects a non-in-app `link`, an unknown `category`, and an over-length title/body.
 
 ## Input & injection
 
 - [ ] SQL injection attempts on every query param and JSON field return 400/404, never 500.
-- [ ] XSS payloads in nickname, post body, media alt text are escaped on render.
+- [ ] XSS payloads in nickname, post body, and media alt text are escaped on render.
 - [ ] Media upload rejects non-image/non-video bytes and oversized files.
 - [ ] Only `/media/*` URLs accepted in posts (no SSRF / remote embed).
+- [ ] Uploaded filename is ignored; stored name is a content hash plus a sniffed extension.
+- [ ] `/media/*` cannot traverse outside `MEDIA_DIR` (`../`, encoded variants, Windows `..\`).
 - [ ] CSV upload rejects malformed rows with line numbers; no path traversal in file name.
+- [ ] CSV `replace` is refused when bets exist for that date.
+- [ ] **AI source URL:** `/admin/ai/suggest` only accepts `http`/`https`, but it does **not** block private/link-local addresses. Attempt SSRF to `127.0.0.1`, `169.254.169.254`, `localhost`, and an internal hostname; fix with an allow-list or DNS/IP guard before launch.
+- [ ] AI fetch enforces the 20s timeout and 1MB read cap; a slow-loris or huge page cannot exhaust the server.
+- [ ] AI response is validated (both goals present, 0–30, confidence enum) and stored as `pending`; nothing auto-settles.
+- [ ] Rejecting an AI suggestion without a reason returns `400`; an already-reviewed suggestion returns `409`.
 
 ## Rate limits & abuse
 
+- [ ] **Known gap:** there is no rate limiting on login, registration, or any endpoint. Attempt credential stuffing and bulk registration; document the result and fix before launch.
+- [ ] **Known gap:** there is no account lockout after repeated failures.
 - [ ] Push cap (2/day) and quiet hours cannot be bypassed by repeated calls.
-- [ ] Self-exclusion cannot be shortened or cancelled early.
+- [ ] A muted category still writes the inbox row but sends no push.
+- [ ] Self-exclusion cannot be shortened or cancelled early; a second active period is refused.
 - [ ] Report spamming: one report per user per post enforced.
 - [ ] Auto-hide triggers at exactly 3 distinct reports.
+- [ ] A user cannot mark another user's notification as read or unsubscribe another user's push endpoint.
+- [ ] A deleted/hidden post cannot be fetched through the public feed.
+
+## Transport, headers & browser
+
+- [ ] HTTPS only; HTTP redirects; HSTS present.
+- [ ] `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` present on every response (currently **not set** — expected to fail until added).
+- [ ] No inline script executes under the deployed CSP.
+- [ ] CORS origins are explicit in production; wildcard is absent; credentials are not allowed from unknown origins.
+- [ ] Error responses do not leak stack traces, SQL, file paths, or secrets.
+- [ ] Admin and user tokens in `localStorage` are accepted risk, documented, and mitigated by CSP.
 
 ## Data & privacy
 
-- [ ] `.env` and `media/` are not served or committed.
+- [ ] `.env`, `backend/media/`, and `frontend/scripts/` are not served or committed.
 - [ ] Admin credentials come only from environment variables, never the database.
-- [ ] No PII in logs or error responses.
-- [ ] CORS origins are explicit in production.
+- [ ] No PII in logs or error responses (phone numbers, official names, tokens).
+- [ ] Database backup files, if any, are encrypted and not publicly reachable.
+- [ ] A user cannot read another user's wallet, history, notifications, or bets by changing an ID.
+- [ ] Delete/export paths for personal data are either implemented or documented as a launch exception.
 
 ## Availability
 
-- [ ] Restore drill (`backend/scripts/restore_test.ps1`) passes on a fresh database.
+- [ ] Restore drill (`backend/scripts/restore_test.ps1`) passes on a fresh database **and fails closed** when the throwaway database cannot be created (exit code `1`, no success message).
+- [ ] Restore verification checks row counts, ledger sum, and schema completeness — not just that `pg_restore` exited `0`.
 - [ ] Health endpoint `/health` returns 200.
-- [ ] Graceful handling of Postgres/Redis downtime (no panic, clear error).
+- [ ] Graceful handling of Postgres downtime (clear 5xx, no panic) and Redis downtime (API still starts and serves).
+- [ ] Gzip is applied to JSON responses; media is served with immutable cache headers.
 
 ## Sign-off
 
 Tester: ____________  Date: ____________  Environment: ____________
+
+Known gaps accepted for launch (list each with owner and date): ____________________________________________

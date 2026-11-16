@@ -4,6 +4,26 @@ A fast, scalable betting and community media platform built for budget smartphon
 
 **Core priorities:** low data usage · minimal device processing · ultra-fast server responses.
 
+**Last updated:** 16 November 2026.
+
+> **How to read this document.** It is both the product specification and the implementation record. Every claim that could drift carries a status marker:
+>
+> - **✅ implemented** — built, wired to the API, and verified locally.
+> - **🟡 partial** — the data layer or API exists, but the UI or an edge case is still missing.
+> - **⬜ planned** — approved design, not built yet. Nothing marked ⬜ should be treated as working.
+>
+> Sections that mix states mark each claim individually. Where a spec decision and the shipped behaviour differ, the shipped behaviour is stated first and the gap is called out.
+
+### Documentation map
+
+| File | What it covers |
+| --- | --- |
+| `README.md` | Product spec, architecture, API reference, environment variables, development status |
+| `docs/PEN_TEST_CHECKLIST.md` | Pre-launch security gate, run against staging |
+| `docs/RESTORE_RUNBOOK.md` | Backup/restore procedure and the drill record |
+| `frontend/README.md` | Frontend setup, scripts, and project structure |
+| `frontend/AGENTS.md` | Working conventions for agents and contributors in the frontend |
+
 ---
 
 ## Table of Contents
@@ -17,7 +37,7 @@ A fast, scalable betting and community media platform built for budget smartphon
 7. [Design System & UI](#design-system--ui)
 8. [Admin Dashboard](#admin-dashboard)
 9. [AI Results Assistant (Groq)](#ai-results-assistant-groq)
-10. [Community & Media](#community)
+10. [Community](#community)
 11. [Push Notifications](#push-notifications)
 12. [Business Model & Monetization](#business-model--monetization)
 13. [Database Backup & Recovery](#database-backup--recovery)
@@ -31,6 +51,11 @@ A fast, scalable betting and community media platform built for budget smartphon
 21. [5. Cloud Deployment (Vercel + Railway)](#5-cloud-deployment-vercel--railway)
 22. [Crucial Design Tips for Low-Data Users](#crucial-design-tips-for-low-data-users)
 23. [Open Questions](#open-questions)
+24. [Development Status](#development-status)
+25. [API Reference](#api-reference)
+26. [Running Locally](#running-locally)
+27. [Environment Variables](#environment-variables)
+28. [Responsive & Accessibility Checks](#responsive--accessibility-checks)
 
 ---
 
@@ -46,6 +71,8 @@ Deliver a betting site with community features (uploads, feeds) that:
 ---
 
 ## Public Landing Page
+
+> **Status: ⬜ planned — not built.** There is no public landing page yet. An unauthenticated visitor who opens any app route is redirected to `/login`, which links to `/register`. The design below is the approved build target, not a description of current behaviour.
 
 The first page a visitor sees, before any account exists. Its job is to convert a stranger into a registered user — and to give them a reason to keep scrolling rather than bounce.
 
@@ -97,6 +124,8 @@ This is the position I recommend holding. The mechanics are what make the page w
 | Claims | No guaranteed wins; advertising follows Tanzanian betting rules |
 | Disclosure | Clear statement that this is betting, not prediction |
 
+**Status:** the in-product guardrails are enforced (push cap and quiet hours server-side, self-exclusion append-only, mutes, 60-minute reminder, no autoplay, no fake data). The advertising/claims policy and a standalone disclosure page are ⬜ — registration carries a terms/ownership checkbox, but there is no policy page yet.
+
 **Why each one exists:**
 
 - **No fake proof** — fabricated activity is the fastest route to a regulator's attention, and it is trivial to disprove.
@@ -115,23 +144,26 @@ Two roles exist: **Admin** and **User**. There is no public admin registration.
 
 ### Admin
 
-- **Credentials:** username and password supplied through environment variables (set variables) at deploy time — never stored in the database.
-- **Purpose:** manages matches, betting options, results, users, payments, and community content.
-- **Access:** configuration is controlled by the operator, not created through the app.
+- **Credentials:** username and password supplied through environment variables at deploy time — never stored in the database. ✅
+- **Purpose:** manages matches, betting options, results, users, payments, and community content. ✅
+- **Access:** configuration is controlled by the operator, not created through the app. ✅
+- **Token:** admin JWT with `is_admin=true`, 30-day expiry, no refresh token. ✅
 
 ### User
 
-- **Registration:** nickname, phone number, **official name of the phone owner**, and a simple password.
-- **Login:** phone number + password.
-- **Profile editing:** change password, change profile picture.
-- **Session:** login and logout.
-- **Profile picture limit:** under **10 KB**.
+- **Registration:** nickname, phone number, **official name of the phone owner**, password, and an explicit terms/ownership checkbox. The acceptance is written to `consent_log` with a notice version and timestamp. ✅
+- **Login:** phone number + password. ✅
+- **Session:** stateless JWT, 30-day expiry. Logout discards the token on the client; there is no server-side denylist yet. 🟡
+- **Profile editing:** password change ✅. Profile picture is accepted by `PUT /api/v1/me` but has **no upload UI** and **no server-side size check** — the 10 KB rule is client-side only. 🟡
+- **Nickname editing:** not supported; the nickname is fixed at registration. ⬜
+- **KYC mismatch flow** (7-day notice, appeal, phone/name change, review queue): **not built**. ⬜
 
-| Action | Required fields |
-| --- | --- |
-| Register | Nickname, phone number, official name of phone owner, password |
-| Login | Phone number, password |
-| Edit profile | Password (optional), profile picture (< 10 KB) |
+| Action | Required fields | Status |
+| --- | --- | --- |
+| Register | Nickname, phone number, official name of phone owner, password, terms acceptance | ✅ |
+| Login | Phone number, password | ✅ |
+| Edit profile | Password | ✅ |
+| Profile picture | ≤ 10 KB image | 🟡 API only, no UI, no server-side limit |
 
 #### Registration Disclosure
 
@@ -146,7 +178,9 @@ At registration the user must be shown, and must accept, the following before th
 - Acceptance is **recorded** (timestamp + version of the notice) so the ban decision is auditable.
 - The official name is **never displayed** in the Community feed, leaderboards, or to other users.
 
-#### Name Mismatch & 7-Day Appeal Flow
+#### Name Mismatch & 7-Day Appeal Flow ⬜
+
+> **Status: designed, not built.** There is no mismatch detection, notice banner, appeal form, phone/name change, or review queue in the app. The flow below is the approved target.
 
 A mismatch is never an instant ban. The user gets a **7-day window** to fix or appeal, and the account stays usable during it.
 
@@ -193,7 +227,9 @@ Mismatch detected (admin review)
 | Suspended (repeat) | Login blocked, funds frozen | No | Yes, 48h |
 | Banned | Login blocked | No | Via support only |
 
-#### Repeat Mismatches — Decision
+#### Repeat Mismatches — Decision ⬜
+
+> **Status: designed, not built.** Escalation states (`suspended`, `banned`) exist and are enforced, but nothing in the app detects a repeat mismatch or starts the 48-hour review.
 
 **Decision: a second mismatch does not get another 7-day window. It gets immediate suspension and a 48-hour priority review.**
 
@@ -213,31 +249,37 @@ So the escalation is deliberate and graded:
 
 ### Auth Rules
 
-- **Passwords are hashed** (bcrypt or Argon2) — never stored in plain text, even for "simple" passwords.
-- **Phone numbers are normalized** to the Tanzanian format (`+255…`) so `0712…`, `712…`, and `+255712…` resolve to one account.
-- **Admin credentials live in environment variables**, so rotating them is a redeploy, not a database migration.
-- **Login is phone-based**, which means the phone number is the unique account identifier.
-- **The official name is sensitive personal data** — restricted to admin views only, encrypted at rest, and never included in public API responses.
+- **Passwords are hashed** with bcrypt (default cost) — never stored in plain text, even for "simple" passwords. ✅
+- **Phone numbers are normalized** to `+255XXXXXXXXX`, so `0712…`, `712…`, and `+255712…` resolve to one account. ✅
+- **Admin credentials live in environment variables**, so rotating them is a redeploy, not a database migration. ✅
+- **Login is phone-based**, which means the phone number is the unique account identifier. ✅
+- **The official name is sensitive personal data** — returned only to the user and to admins, never in public or community responses. ✅ Encryption at rest and a separate PII store are still ⬜.
+- **Password floor:** 6 characters, enforced server-side. A stronger policy (common-password rejection, length rules) is still an open question. 🟡
+- **Rate limiting and lockout** on login/registration are ⬜ — see [Security & Anti-Hacking](#security--anti-hacking).
 
 ---
 
 ## Navigation & Pages
 
-After login, the user lands on **Home**. The layout uses a **top navigation bar** plus a **bottom navigation bar** on small screens, in the style Google uses on mobile.
+After login, the user lands on **Home**. There is **no top navigation bar**; each page carries its own header, and a persistent **bottom navigation** holds the four destinations. From 1024px the bottom bar becomes a centred floating pill. Auth pages (`/login`, `/register`) hide the nav. The admin area uses a separate shell with its own sidebar.
 
-**Bottom navigation order:**
+**Bottom navigation order (implemented):**
 
-1. Home
-2. Community
-3. History
-4. Profile
+1. Home (`/`)
+2. Community (`/community`)
+3. History (`/history`)
+4. Profile (`/profile`)
+
+A **60-minute session reminder** appears as a dismissible banner with a one-tap 24-hour break option. ✅
 
 ### Home
 
-- The landing page immediately after login.
-- Shows **today's and tomorrow's matches only**, with their betting options.
-- Anything older or further ahead is **not shown on Home**.
-- Match and option data is configured by the admin — the exact option types are defined later.
+- The landing page immediately after login. ✅
+- Shows **today's and tomorrow's matches only**, split into **Today** and **Tomorrow** buttons that fit the device width. Each button shows the match count for that day; the tab switches without a reload. ✅
+- The page opens on Tomorrow automatically when Today has no matches but Tomorrow does. ✅
+- Anything older or further ahead is **not shown on Home**. ✅
+- Market buttons for a settled match show a **green tick** for a win and a **red cross** for a loss, so the outcome is readable without opening History. ✅
+- The desktop layout puts the **Track record** and a "How Betva works" card in a sticky right rail. ✅
 
 ### Bet Markets
 
@@ -304,38 +346,43 @@ On phones the composer sits directly above the feed. From 1024px it moves into t
 
 ### History
 
-- The user's past activity — bet history and transaction records.
-- Shows the **last 6 months**, matching the results archive retention.
-- Nothing older is displayed, because nothing older is retained.
+- The user's past bets, newest first, capped at the **last 6 months** and 200 rows. ✅
+- Every settled bet shows the final score (and half-time score where available), the stake, the status, and the payout. Losses appear in the same list with the same weight as wins. ✅
+- A **personal record** card summarises settled / wins / losses / win rate / net return. On desktop it sits in a sticky right rail with an "About this record" card. ✅
+- Wallet movements live on **Profile**, not History — History is bets only. ✅
 
 ### Profile
 
-- View account details.
-- Change password.
-- Change profile picture (< 10 KB).
+Implemented sections, in page order:
+
+- **Identity:** nickname, phone, access expiry. ✅
+- **Wallet:** balance and the last 50 ledger entries, in cents rendered as TZS. ✅
+- **Deposit & activation:** plain-language note that deposits and activation are applied manually by an admin. ✅
+- **Monthly access rate:** the flat rate from `ACCESS_FEE_CENTS`, shown as "per month · contribution to running costs"; falls back to "Ask the admin" when unset. ✅
+- **Notifications:** in-app inbox (newest 20), mark-one/mark-all read, and five category mutes. ✅
+- **Take a break:** self-exclusion for 24h / 7d / 30d. ✅
+- **Edit profile:** password change only. ✅
 
 #### Account Status (Financial)
 
-The Profile page is where the user sees their **money and account state**, clearly and honestly:
-
-- **Account status:** `Active` or `Inactive`.
-- **If inactive:** the reason and what to do next, in plain language.
-- **Balance**, **deposits**, and **withdrawals** for the period.
-- **Activation date** and **expiry / end date** of the access period.
+- **Balance** and **access expiry** are shown. ✅
+- **Account status:** `active`, `inactive`, `suspended`, or `banned`, with the effect explained in plain language. ✅
+- **Deposits and withdrawals for the period:** the ledger list shows them individually; a period total is ⬜.
+- **Activation date:** ⬜ (only the expiry date is returned by `/me`).
 
 #### Payment & Activation
 
-- The user pays to **activate** (or renew) access. Payment is a **contribution to running costs**, not a prediction fee.
-- The Profile shows the **admin's payment number** and the exact steps to pay (mobile money, amount, reference).
-- After payment, the user waits for the admin to mark them **active** manually; the new status appears here.
-- Every payment leaves a **reference number** the user can screenshot and keep.
+- The user pays to **activate** (or renew) access. Payment is a **contribution to running costs**, not a prediction fee. ✅
+- After payment, the admin marks the user **active** manually (with a number of days) and the new expiry appears on Profile. ✅
+- The **admin's payment number and exact payment steps** are not shown in-app yet. ⬜
+- Payment reference capture and receipts are ⬜ — the admin credit endpoint records a reason, but there is no deposit queue UI.
 
 #### Account End & Terms
 
-- **Expiry date** of the current access period, shown prominently.
-- **What happens when access ends:** betting pauses, balance is safe, re-activation restores everything.
-- Link to **terms of use** and **privacy policy** (simple text, low data).
-- **Self-exclusion** and **mute controls**, as defined in the Engagement Policy.
+- **Expiry date** of the current access period. ✅
+- **What happens when access ends:** betting is blocked while the balance stays safe; re-activation restores access. ✅ (enforced server-side)
+- Links to **terms of use** and **privacy policy**: ⬜ (the registration checkbox records consent, but there are no policy pages yet).
+- **Self-exclusion** and **mute controls**: ✅ (below).
 
 #### Self-Exclusion & Mute Controls
 
@@ -368,7 +415,7 @@ Two kinds of thing carry a status: **bets** (settled outcomes) and **matches** (
 | **LOSS** | Bet | Settled and lost | Red |
 | **PENDING** | Bet | Waiting for the result | Slate grey |
 | **LIVE** | Match | In play right now | Orange, pulsing |
-| **POSTPONED** | Match | Delayed or rescheduled | Violet |
+| **POSTPONED** | Match, and a refunded bet | Delayed, rescheduled, or voided | Violet |
 
 ### Colour Tokens
 
@@ -396,10 +443,11 @@ The five hues are deliberately far apart — green, red, neutral grey, orange, v
 
   This is required for colour-blind users and for screens where colour washes out in sunlight.
 
-- **LIVE pulses** with a soft dot — and the pulse is disabled under `prefers-reduced-motion`.
-- **Solid mid-tone backgrounds**, not pastels, so contrast survives cheap LCD panels.
-- **Same badge everywhere** — a WIN in History looks identical to a WIN in the admin table.
-- **Status text is never truncated** to fit a narrow card; the badge wraps instead.
+- **LIVE pulses** with a soft dot — and the pulse is disabled under `prefers-reduced-motion`. ✅
+- **Fixed light-on-dark badge tokens:** each status has one background, text, and border value in `global.css` (`.badge-win`, `.badge-loss`, `.badge-pending`, `.badge-live`, `.badge-postponed`). Light backgrounds with dark text keep contrast high on the dark glass UI. ✅
+- **Same badge everywhere** — a WIN in History looks identical to a WIN in the admin table. ✅
+- **Status text is never truncated** to fit a narrow card; the badge wraps instead. ✅
+- **Settled market buttons** on Home carry a **✓** for a win and **✕** for a loss, in addition to the badge. ✅
 
 ### Status Flow
 
@@ -412,7 +460,7 @@ Bet:    PENDING ──► WIN
                  └► refunded if the match is POSTPONED / CANCELLED
 ```
 
-**Postponed bets are refunded, not left pending.** A postponed match returns the stake and the bet shows `POSTPONED` rather than a win or loss — this is the single most common source of user complaints, so it must be explicit.
+**Postponed bets are refunded, not left pending.** A postponed or cancelled match returns the stake; the bet row is stored as `refunded` and the UI renders the **POSTPONED** badge with the void reason. This is the single most common source of user complaints, so it must be explicit. ✅
 
 ---
 
@@ -426,10 +474,10 @@ A persistent, compact counter shown on Home and in Profile:
 
 | Stat | Meaning |
 | --- | --- |
-| **Total matches** | Tips published |
+| **Total matches** | Settled tips — one per published market on a settled match |
 | **Wins** | Settled as WIN |
 | **Losses** | Settled as LOSS |
-| **Win rate** | Wins ÷ total, as a percentage |
+| **Win rate** | Wins ÷ total settled tips, as a percentage |
 | **Current streak** | Consecutive wins (or losses) |
 | **Best streak** | Longest winning run |
 
@@ -470,7 +518,7 @@ A product that only shows wins is a scam waiting to be exposed. A product that s
 
 ### Design Philosophy
 
-- **Dark mode is the default.** Light mode is a toggle. Dark surfaces reduce eye strain over long sessions and look premium on cheap OLED screens.
+- **Dark mode is the default — and the only mode in v1.** Light mode is ⬜. Dark surfaces reduce eye strain over long sessions and look premium on cheap OLED screens.
 - **Glass and depth, not flatness.** Translucent surfaces, soft borders, and subtle elevation — the app should feel layered, not like a web page.
 - **Motion rewards, it does not distract.** Transitions are short and purposeful; nothing animates for its own sake.
 - **One thumb, one hand.** Every primary action is reachable in the bottom third of the screen.
@@ -488,50 +536,55 @@ A product that only shows wins is a scam waiting to be exposed. A product that s
 | **Text primary** | `#F3F4F6` (off-white) | Body text — never pure white |
 | **Text secondary** | `#9CA3AF` | Labels, captions |
 | **Text muted** | `#6B7280` | Placeholders, hints |
-| **Brand accent** | `#22C55E` → `#16A34A` | Primary buttons, active states |
-| **Brand glow** | `rgba(34,197,94,0.25)` | Focus rings, subtle glows |
+| **Brand accent** | `#4285F4` → `#1A73E8` | Primary buttons, links, active states (Google blue) |
+| **Brand glow** | `rgba(66,133,244,0.25)` | Focus rings, subtle glows |
 | **Danger** | `#EF4444` | Errors, loss accents |
+| **Danger strong** | `#DC2626` | Destructive buttons (white text passes 4.5:1) |
 | **Warning** | `#F59E0B` | Pending, caution |
 | **Info** | `#3B82F6` | Links, informational |
 
-- **No pure black or pure white** — they cause halation on OLED and feel harsh.
-- **Grain overlay** at 2–3% opacity on the background adds depth without a single extra image request.
-- Status colours (WIN/LOSS/PENDING/LIVE/POSTPONED) are defined in **Statuses & Colours** and never overridden.
+The brand moved from green to **Google blue** when the wordmark was finalized. The wordmark itself uses the five Google colours — B `#4285F4`, e `#EA4335`, t `#FBBC05`, v `#34A853`, a `#EA4335` — and the same blue drives buttons and focus rings. The favicon/logo is the eagle-cutout "B" emblem; see [Branding](#branding).
+
+- **No pure black or pure white** — they cause halation on OLED and feel harsh. ✅
+- **Grain overlay** at 2.5% opacity on the background adds depth without a single extra image request. ✅
+- Status colours (WIN/LOSS/PENDING/LIVE/POSTPONED) are defined in **Statuses & Colours** and never overridden. ✅
+- **Light mode** is ⬜: the app is dark-only today. The palette below is the dark theme.
 
 ### Typography
 
-- **Font stack:** system fonts only — `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto`. Zero network cost, instant render, native feel.
-- **Scale (mobile):** 12 / 14 / 16 / 18 / 22 / 28 / 36 px. Body is 16px minimum — never smaller.
-- **Weights:** 400 (body), 500 (labels), 600 (headings), 700 (hero numbers).
-- **Line height:** 1.4 for body, 1.1 for large numbers.
-- **Numbers are tabular** (`font-variant-numeric: tabular-nums`) so counters and balances never jump width when they change.
-- **Money is always bold and larger** than surrounding text — it is the most important thing on the screen.
+- **Font stack:** system fonts only — `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto`. Zero network cost, instant render, native feel. ✅
+- **Scale:** `11 / 13 / 16 / 20 / 24 / 30 px` (`--t-xs` … `--t-2xl`), a 1.25 modular ratio rounded to the 4-pt grid. Body is 16px minimum — never smaller, and 16px inputs stop iOS zoom. ✅
+- **Weights:** 400 (body), 500 (labels), 600 (headings), 700 (hero numbers). ✅
+- **Line height:** 1.4 for body, 1.1 for large numbers. ✅
+- **Numbers are tabular** (`font-variant-numeric: tabular-nums`) so counters and balances never jump width when they change. ✅
+- **Money is always bold and larger** than surrounding text — it is the most important thing on the screen. ✅
 
 ### Buttons
 
 | Variant | Look | Use |
 | --- | --- | --- |
-| **Primary** | Solid brand green, white text, soft shadow | Place bet, activate, submit |
+| **Primary** | Solid Google-blue gradient, white text, soft glow | Place bet, activate, submit |
 | **Secondary** | Glass surface + brand border | Secondary actions |
 | **Ghost** | Transparent, brand text | Tertiary, inline actions |
 | **Danger** | Solid red | Ban, delete, destructive |
 | **Disabled** | 40% opacity, no shadow | Unavailable |
 
-**Rules:**
+**Rules (implemented):**
 
 - **Minimum height 44px**, minimum width 44px — thumb-friendly, accessible.
-- **Radius 12px** consistently. One radius for the whole app.
-- **Padding:** 12px vertical, 20px horizontal. Generous, never cramped.
-- **States:** default → hover (slight lift + glow) → active (scale 0.98) → disabled (dimmed, no interaction).
-- **Loading state:** button keeps its size, shows a small spinner, text stays. No layout shift.
+- **Height is set, not padded:** `min-height: var(--tap)` with 20px horizontal padding. Multi-line labels still centre exactly, and buttons in the same row line up.
+- **Radius 12px** for buttons and inputs, from the radius ladder (`--r-md`), not a one-off.
+- **One internal gap token** (8px) between icon and label.
+- **States:** default → hover (slight lift + glow) → active (scale 0.98) → disabled (40% opacity, no interaction).
+- **Loading state:** button keeps its size and swaps its label, so there is no layout shift.
 - **One primary button per screen.** If two look primary, the hierarchy is broken.
-- **Micro-interaction:** a soft scale (0.98) + haptic on press. Subtle enough to feel native, not a toy.
+- **Micro-interaction:** a soft scale (0.98) on press. Subtle enough to feel native, not a toy. Haptic feedback is ⬜ (web vibration is inconsistent).
 
 ### Frames & Cards
 
 - **Glass surface:** `backdrop-blur-md` + translucent background + 1px border. This is the signature look.
 - **Radius ladder:** 8px chips/cells → 12px buttons/inputs → 16px cards → 20px sheets → 999px pills/badges. Every value is a token (`--r-sm`, `--r-md`, `--r-lg`, `--r-xl`, `--r-pill`), never a literal.
-- **Elevation via shadow, not borders:** `0 4px 24px rgba(0,0,0,0.3)`. No harsh outlines.
+- **Elevation via shadow:** `0 4px 24px rgba(0,0,0,0.3)`, with a 1px hairline border on the glass surface. No harsh outlines.
 - **Spacing system:** 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48 (`--s1`…`--s12`). Never invent a value.
 - **Cards never touch each other** — minimum 12px gap, so the screen breathes.
 - **Dividers are 1px, low-contrast, and used sparingly.** Whitespace does the work.
@@ -556,46 +609,76 @@ Every user route renders inside one shared frame, so gutters and content width l
 
 ### Feeds
 
-- **Skeleton loaders** instead of spinners — they feel faster and keep layout stable.
-- **Blur-up images:** tiny placeholder → full image, so the feed never shows empty boxes.
-- **Infinite scroll** with a "loading more" indicator at the bottom, never a "load more" button.
-- **Pull to refresh** on Home and Community, with a subtle spinner.
-- **Spacing between feed items: 12px.** Dense enough to scroll, loose enough to read.
-- **No autoplay on first paint** — honours Data Saver Mode. Tap to play.
-- **Smooth scroll** with momentum; no janky jumps.
+What the community feed does today:
+
+- **Auto-loading pages of 10** posts, stopping at the end with "That is the start of the feed." ✅
+- **12px spacing** between feed items — dense enough to scroll, loose enough to read. ✅
+- **No autoplay on first paint** — images are lazy, video is `preload="none"` with native controls. ✅
+- **Smooth, momentum-based scrolling** — native browser behaviour, no scroll-jacking. ✅
+
+Still planned:
+
+- Skeleton loaders instead of a "Loading…" line. ⬜
+- Blur-up image placeholders (a few hundred bytes per post). ⬜
+- Pull-to-refresh on Home and Community. ⬜
 
 ### Background
 
-- **Layered, never flat:** base colour → subtle gradient → grain overlay. Three layers, zero extra requests.
-- **No background images** — they cost data and fight with content.
-- **Fixed background** so content scrolls over it; the depth stays constant.
-- **OLED option:** a true `#000000` mode for maximum battery saving on OLED screens, toggled in settings.
+- **Layered, never flat:** base colour → subtle gradient → grain overlay. Three layers, zero extra requests. ✅
+- **No background images** — they cost data and fight with content. ✅
+- **Fixed gradient** so content scrolls over it and the depth stays constant. ✅
+- **OLED true-black mode** for maximum battery saving — ⬜, not built. The app ships dark-only.
 
 ### Long-Hour Comfort
 
-- **Dark mode default**, light mode available — the user chooses, and the choice persists.
-- **Reduced motion respected** — all animations disabled under `prefers-reduced-motion`.
-- **Font size control** in settings: small / default / large, applied app-wide.
-- **High contrast toggle** for accessibility.
-- **Break reminders** after 60 minutes of continuous use, with a one-tap cool-off (from the Engagement Policy).
-- **No flashing or strobing elements.** Status pulses are slow (2s cycle) and subtle.
-- **Glare-friendly:** sufficient contrast for outdoor use in sunlight.
+- **Dark mode only today.** Light mode and a persisted theme choice are ⬜.
+- **Reduced motion respected** — the LIVE pulse and transitions stop under `prefers-reduced-motion`. ✅
+- **Break reminders** after 60 minutes of continuous use, with a one-tap 24-hour cool-off. ✅
+- **No flashing or strobing elements.** Status pulses are slow and subtle. ✅
+- **Font size control** (small / default / large) in settings — ⬜.
+- **High contrast toggle** — ⬜.
+- **Glare-friendly contrast** — body text targets 4.5:1 on the dark surface; verified per component, not per page. 🟡
 
 ### Micro-Interactions
 
-- **Haptic feedback** on bet placement and payment confirmation — light, 10ms.
-- **Transitions:** 150ms for small elements, 250ms for sheets and modals. Easing: `cubic-bezier(0.4, 0, 0.2, 1)`.
-- **Toast notifications:** slide in from top, auto-dismiss in 3s, swipe to dismiss.
-- **Success states** are green and quiet, not celebratory. **Errors are red and clear**, with a next step.
-- **Loading states** never block the whole screen — they are local to the component.
+- **Transitions:** 150ms for small elements, 250ms for sheets and modals, `cubic-bezier(0.4, 0, 0.2, 1)`. ✅
+- **Press feedback:** a soft scale (0.98) on buttons. ✅
+- **Success and error states** are written in plain language next to the action that caused them; no full-screen blocking spinner. ✅
+- **Toast notifications** — inline `toast()` helper: top-centre, auto-dismiss after ~3.2s, red border for errors. ✅
+- **Haptic feedback** — ⬜. Web vibration is inconsistent, so it is not relied on.
 
 ### Accessibility
 
-- **Contrast ratio ≥ 4.5:1** for body text, ≥ 3:1 for large text (WCAG AA).
-- **Touch targets ≥ 44×44px.**
-- **Focus rings visible** on every interactive element, in brand glow.
-- **Screen reader labels** on all icons and status badges.
-- **Colour is never the only signal** — status badges carry text and marks (from Statuses & Colours).
+- **Contrast ratio ≥ 4.5:1** for body text, ≥ 3:1 for large text (WCAG AA). 🟡 Verified per component during the design pass, not yet audited with an automated contrast checker across every state.
+- **Touch targets ≥ 44×44px** — enforced by the responsive audit (0 failures across 84 route/width checks). ✅
+- **Focus rings visible** on every interactive element, in brand glow. ✅
+- **Screen reader labels** on icons, tabs, and status badges (`aria-label`, `role="tab"`, `aria-selected`). ✅
+- **Colour is never the only signal** — status badges carry text and marks, and settled market buttons carry ✓ / ✕. ✅
+
+### Branding
+
+**Wordmark.** "Betva" is set in the five Google colours, one letter each:
+
+| Letter | Colour |
+| --- | --- |
+| **B** | `#4285F4` (blue) |
+| **e** | `#EA4335` (red) |
+| **t** | `#FBBC05` (yellow) |
+| **v** | `#34A853` (green) |
+| **a** | `#EA4335` (red) |
+
+The wordmark is a logo, not body text: it never inherits surrounding text colour, and it is not used below 16px where the individual hues stop being distinguishable.
+
+**App mark.** The logo is an **eagle-cutout "B"** — a letter B whose counters are cut into a stylised eagle head, eye, beak, and wing-feather openings, coloured with the same Google palette. It doubles as the favicon, so the browser tab, the home-screen icon, and the in-app header all show the same mark.
+
+| Asset | Path | Use |
+| --- | --- | --- |
+| Eagle-B favicon | `frontend/public/favicon.svg` | `<link rel="icon">`, `apple-touch-icon`, PWA manifest |
+| Horizontal logo | `frontend/public/logo-dark.svg` | Headers and auth screens on the dark surface |
+| Manifest | `frontend/public/manifest.webmanifest` | `name`, `theme_color` `#0b0f14`, SVG icon (`sizes: any`) |
+| Legacy icon | `frontend/public/favicon.ico` | Still the old generated icon — regenerate before launch ⬜ |
+
+**Known gaps:** the `.ico` fallback and the PNG touch icons have not been regenerated from the final eagle-B artwork, and there is no maskable PNG icon for Android launchers. Both are launch polish, not blockers for local use. 🟡
 
 ### What This Achieves
 
@@ -605,9 +688,9 @@ A user who opens the app at 6pm and is still there at 11pm should feel comfortab
 
 ## Admin Dashboard
 
-The admin area is separate from the user app and is reached by the credentials set in environment variables. It is built around four centres.
+The admin area is separate from the user app and is reached with the credentials set in environment variables. It opens on an **Overview** page (today/tomorrow match counts, user totals, active users, and shortcuts) and is built around six centres: **Matches**, **Users**, **Analytics**, **AI Results**, **Community**, and **Notifications**. Two further pages — a browsable Results Archive and an Admin Profile — are designed but not built. 🟡
 
-### 1. Matches (CSV Upload)
+### Matches (CSV Upload) ✅
 
 The **Matches** centre is the single source of matches shown to users.
 
@@ -620,25 +703,29 @@ The **Matches** centre is the single source of matches shown to users.
 
 **CSV handling requirements:**
 
-- A fixed template (columns such as date, kickoff time, league, home team, away team, and option/odds fields).
-- **Validation before import** — bad rows are rejected with a readable error, not silently dropped.
-- **Duplicate detection** — re-uploading the same date warns before overwriting.
-- **Import log** — who uploaded, when, which date, how many rows, how many failed.
-- **Match state** — open for betting → closed at kickoff → settled once results arrive.
+- A fixed template (`frontend/public/matches-template.csv`). ✅
+- **Validation before import** — bad rows are rejected with their line number and a readable error; good rows still import. ✅
+- **Duplicate detection** — re-uploading the same date warns before overwriting; replace is blocked when bets already exist. ✅
+- **Import log** — who uploaded, when, which date, how many rows, how many failed, whether it replaced. ✅
+- **Match state** — open for betting → closed automatically at kickoff → settled once results arrive. ✅
 
-### 2. Users & Financial Status
+### Users & Financial Status ✅
 
 A single place to see every user clearly.
 
-- **User list** with nickname, phone number, official name, registration date, and status.
-- **Financial status** per user — balance, deposits, withdrawals, and whether they are active.
-- **Manual activation** — early stage, the admin marks a user **active** or **not active** by hand once payment is confirmed.
-- **KYC review queue** — appeals, phone-number changes, and official-name corrections waiting for a decision.
-- **Ban action** — used only after the 7-day notice expires or an appeal is rejected; the reason is recorded.
-- **Search and filter** by phone, nickname, status, or date.
-- **Clear user detail view** — one screen showing account, KYC name, money, and activity.
+- **User list** with nickname, phone number, official name, registration date, and status. ✅
+- **Financial status** per user — balance, access expiry, and whether they are active. ✅
+- **Manual activation** — the admin marks a user **active** for a number of days once payment is confirmed. ✅
+- **Credit / withdrawal adjustment** with a required reason and an append-only ledger row. ✅
+- **Suspend / ban / deactivate** with the reason recorded. ✅
+- **Search and filter** by phone, nickname, or status. ✅
+- **KYC review queue** — appeals, phone-number changes, and official-name corrections waiting for a decision. ⬜
+- **Deposit / withdrawal queue** with mobile-money references. ⬜
+- **CSV export** of users and finances. ⬜
 
-#### KYC Review Queue
+#### KYC Review Queue ⬜
+
+> **Not built.** There is no appeal, phone-change, or name-correction queue yet. The table below is the approved design for when it is.
 
 Every mismatch resolution lands here, never auto-approved.
 
@@ -652,27 +739,32 @@ Every mismatch resolution lands here, never auto-approved.
 - A rejection **immediately issues the ban**; the user is notified through the same channel.
 - The queue shows **days remaining** on each 7-day window so nothing expires unseen.
 
-### 3. Results Archive
+### Results Archive 🟡
 
-- Match results are **accumulated daily**.
-- **Retained for 6 months**, day by day.
-- **Nothing is deleted** — the archive is append-only.
-- Users see the same **6-month window** in History.
-- Results feed the settlement of bets and the user's History page.
+> **Data layer built, admin page not built.** Results are written to `results_archive` at settlement and retained; there is no browsable archive screen in the admin app yet.
+
+- Match results are **accumulated daily** at settlement. ✅
+- **Retained for 6 months**, day by day. ✅ (the table is never pruned by application code)
+- **Nothing is deleted** — the archive is append-only; corrections add a new row linked by `corrects_id`. ✅
+- Users see the same **6-month window** in History. ✅
+- Results feed the settlement of bets and the user's History page. ✅
+- **Browsable archive page** with filters by date, league, and settlement state. ⬜
 
 **Practical notes:**
 
-- Store results with the **Africa/Dar_es_Salaam (EAT)** timezone so a "day" means the same thing to admin and users.
-- 6-month retention with no deletion means **scheduled backups** are mandatory — retention is only real if the data is recoverable.
+- Store results with the **Africa/Dar_es_Salaam (EAT)** timezone so a "day" means the same thing to admin and users. ✅
+- 6-month retention with no deletion means **scheduled backups** are mandatory — retention is only real if the data is recoverable. ⬜
 
-### 4. Admin Profile
+### Admin Profile ⬜
 
-- Shows the admin identity and current configuration state.
-- Because credentials come from environment variables, **changing them is a redeploy** — the profile page reflects, but does not store, them.
+> **Not built.** There is no admin profile page.
 
-### 5. Analytics (Daily Active Users & Access-Fee Planner)
+- Would show the admin identity and current configuration state (push configured, AI configured, fee planner configured) without ever exposing secret values.
+- Because credentials come from environment variables, **changing them is a redeploy** — the page would reflect, but never store, them.
 
-The record of **daily active users (DAU)** used for the monthly access-fee decision.
+### Analytics (Daily Active Users & Access-Fee Planner)
+
+The record of **daily active users (DAU)** used for the monthly access-fee decision. ✅
 
 - **How it is counted:** every signed-in user is recorded once per EAT day (`Africa/Dar_es_Salaam`), on their first authenticated request of that day. Nothing is recorded for the admin token.
 - **Storage:** the append-only `activity_days` table (`user_id`, `day`, `first_seen`, `last_seen`). It is a business record backing financial decisions — rows are never edited or deleted.
@@ -692,20 +784,28 @@ The record of **daily active users (DAU)** used for the monthly access-fee decis
 - If it is `0` (not set), the Profile shows *"Ask the admin"* instead of an invented number.
 - When the planner suggests a new rate, the admin updates `ACCESS_FEE_CENTS` and redeploys — one variable, one source of truth.
 
+### AI Results, Community, and Notifications ✅
+
+The remaining three centres each have a dedicated section:
+
+- **AI Results** (`/admin/ai`) — paste a source URL, review the extracted score, approve or reject. See [AI Results Assistant (Groq)](#ai-results-assistant-groq).
+- **Community** (`/admin/community`) — reported/visible/hidden/deleted queues with hide, restore, and delete reasons. See [Community](#community).
+- **Notifications** (`/admin/notifications`) — compose a broadcast to all or active users, with the in-app inbox written first and push attempted second. See [Push Notifications](#push-notifications).
+
 ### Suggested Additions (Gaps Worth Filling)
 
 These were not in the brief but the product will need them:
 
 - **Bet slip & settlement** — ✅ implemented in Phase 3.
-- **Deposit / withdrawal queue** — a manual approval list with mobile money transaction references, matching the "manual" phase you described. *(Admin credit endpoint exists; a dedicated queue UI is still pending.)*
+- **Deposit / withdrawal queue** — a manual approval list with mobile money transaction references. *(Admin credit endpoint exists; the queue UI is ⬜.)*
 - **Append-only ledger** — ✅ implemented in Phase 3.
 - **Ban & audit log** — ✅ implemented in Phase 2.
-- **Community moderation** — report, hide, and delete posts; mute or ban repeat offenders.
+- **Community moderation** — ✅ report, hide, and delete posts; auto-hide at three distinct reports.
 - **Match locking** — ✅ implemented: betting closes automatically at kickoff.
-- **Announcements** — a lightweight notice pushed to all users (text-only, low data).
+- **Announcements** — 🟡 text-only broadcast exists; scheduled announcements are ⬜.
 - **Payout / commission rules** — ✅ payout maths implemented; final commercial margin still open.
-- **Export** — CSV export of users and finances for accounting and tax.
-- **A second, limited admin** — support staff who can view but not change money.
+- **Export** — CSV export of users and finances for accounting and tax. ⬜
+- **A second, limited admin** — support staff who can view but not change money. ⬜ (one admin identity from env vars today)
 
 ---
 
@@ -713,37 +813,62 @@ These were not in the brief but the product will need them:
 
 > A Groq-hosted model reads football result pages and turns them into structured rows. It is an **assistant that fills a form**, never the final authority on money.
 
+> **Status: 🟡 partially built.** The fetch → extract → validate → admin review pipeline works end to end. The scheduler, automatic source discovery, two-source agreement, `DISPUTED` state, and one-click settlement from an approved suggestion are **not built**. An approved suggestion only marks the row `approved`; the admin still settles the match from the Matches centre.
+
 ### Correction Before Anything Else
 
 **Groq is an inference API, not a browser.** It has no internet access. It cannot open Forebet or PassionPredict, and if you ask it to "look up" a score it will invent a plausible one.
 
 The pipeline must **fetch the page first**, then pass the text to Groq for extraction. That misunderstanding is the single biggest source of wrong results in systems built like this.
 
-### Pipeline
+### Pipeline (implemented)
 
 ```
-Daily scheduler (Railway cron)
+Admin opens a match in Matches, pastes a source URL
         │
         ▼
-Fetcher (server-side) ──► Forebet / PassionPredict HTML
+POST /api/v1/admin/ai/suggest {match_id, source_url}
         │
         ▼
-Cleaner ──► plain text (strip nav, ads, scripts)
+Server fetches the page (20s timeout, 1 MB cap, http/https only)
         │
         ▼
-Groq extraction ──► strict JSON, one object per match
+cleanHTML strips scripts, styles, and markup ──► ≤ 8,000 chars of text
         │
         ▼
-Validator ──► schema + range + cross-source agreement
+Groq (temperature 0, JSON object response format, 256 tokens)
         │
         ▼
-Admin review queue ──► APPROVE
+Validator ──► strict JSON, both goals present, goals 0–30,
+              half-time goals 0–30, confidence high/medium/low
+        │
+        ├── pass  → result_suggestions (status = pending)
+        └── fail  → result_suggestions (status = failed, reason stored)
         │
         ▼
-Results table (append-only, 6 months)
+Admin approves or rejects in /admin/ai
+        │
+        ├── approved → suggestion is marked approved (no wallet moves)
+        └── rejected → reason required
+        │
+        ▼
+Admin settles the match manually in Matches (payouts happen there)
 ```
+
+**Planned automation (⬜):**
+
+```
+Daily scheduler (Railway cron) → fetch a fixed list of sources
+        → two independent sources must agree
+        → disagreement = DISPUTED, settlement blocked
+        → approved row pre-fills the settle modal
+```
+
+No cron job, queue, or scheduler exists in the codebase today. Nothing runs unless an admin triggers it.
 
 ### Sources
+
+The admin supplies the URL; the server does not know these sites by name.
 
 | Source | Example URL | Use |
 | --- | --- | --- |
@@ -751,11 +876,11 @@ Results table (append-only, 6 months)
 | PassionPredict | `passionpredict.com/over-0-5-half-time` | Over 0.5 half-time predictions |
 | Manual CSV | Admin Dashboard → Matches | Always available fallback |
 
-The date in the Forebet URL is `YYYY-MM-DD`, so the scheduler builds the URL from the target date in **EAT**.
+Building the Forebet URL from the target date in **EAT** is ⬜ — today the admin pastes the full URL.
 
-### Free Result Sources (No Paid API)
+### Free Result Sources (No Paid API) ⬜
 
-When scraping is blocked or the free path is needed:
+None of these are integrated. They are options if scraping is blocked or a licensed feed is preferred:
 
 - **football-data.org** — free tier, real results, limited competitions.
 - **API-Football (api-sports.io)** — small free daily quota, good coverage.
@@ -770,27 +895,36 @@ Check current limits before relying on any of them — free tiers change without
 **Prompt rules given to Groq:**
 
 1. Return **only facts present in the supplied text**. Never infer a score from team strength.
-2. If a field is missing, return `null`. **Never guess.**
-3. Echo back the **source URL and fetch timestamp** with every row.
-4. Output **strict JSON** matching the agreed schema — no prose, no markdown.
-5. One row per match. **Never invent a fixture** that is not in the text.
-6. Set a `confidence` of `low`, `medium`, or `high`.
-7. If the page is a captcha, a block page, or empty, return `{"status":"UNPARSEABLE"}` instead of a result.
+2. If the half-time score is missing, return `null`. **Never guess.**
+3. Output **strict JSON** matching the schema — no prose, no markdown, no code fences.
+4. `confidence` reflects how clearly the source states the result (`high`, `medium`, `low`).
+5. `notes` is one short sentence, max 120 characters.
+6. Temperature is `0`, and the request asks for a JSON object, so the model has little room to embellish.
 
-**Validation rules applied after Groq responds:**
+**Validation rules applied after Groq responds (implemented):**
 
-- **Schema check** — reject anything that does not parse.
-- **Score range** — goals must be 0–20; anything else is rejected.
-- **Team match** — both teams must exist in the uploaded match list (fuzzy match, admin confirms).
-- **Date match** — the result date must equal the requested date.
-- **Two-source agreement** — a result is only eligible for settlement when two independent sources agree.
-- **Confidence gate** — `low` confidence always forces manual entry, no exceptions.
+- **JSON parse** — code fences are stripped, then the outermost object is parsed. A parse failure is stored as a `failed` suggestion with the raw response.
+- **Both goals present** — `home_goals` and `away_goals` are required.
+- **Score range** — every goal value must be **0–30**; anything else is rejected and stored as `failed`.
+- **Half-time range** — `home_goals_ht` / `away_goals_ht` must be 0–30 or `null`.
+- **Confidence enum** — must be `high`, `medium`, or `low`; anything else falls back to `low`.
+- **Source echoed** — the URL, page excerpt, model name, and raw model output are stored with the suggestion for audit.
+
+**Not implemented (⬜):**
+
+- **Team match** — fuzzy-matching extracted team names against the fixture.
+- **Date match** — rejecting a result whose date differs from the match date.
+- **Two-source agreement** — a second independent source confirming the score.
+- **Confidence gate** — blocking `low` confidence from reaching the review queue. Today it reaches the admin with the badge visible.
+- **Automatic settlement** — never, by design; the admin settles manually.
 
 ### Why AI Must Never Settle Bets Alone
 
 A hallucinated score pays the wrong users and takes money from the right ones. That is a financial loss **and** a legal exposure, and it is unrecoverable once payouts have gone out. Groq may fill the form; **an admin approves the row** before any wallet moves.
 
-### Source Disagreement & Settlement Authority — Decision
+### Source Disagreement & Settlement Authority — Decision ⬜
+
+> **Designed, not built.** The app currently accepts one source at a time and has no `DISPUTED` state. The rule below is the approved target for the automated pipeline.
 
 **Decision: no website wins a disagreement. Disagreement means "do not settle" — the row enters a `DISPUTED` state and waits for a human.**
 
@@ -826,40 +960,45 @@ This is the only defensible position, because **neither Forebet nor PassionPredi
 - Every correction records **reviewer, reason, and timestamp**.
 - A corrected result triggers a **notification** to the affected users — silently changing a payout destroys trust faster than the mistake itself.
 
-### Prompt Template
+### Prompt Template (as implemented)
+
+System prompt sent to Groq:
 
 ```
-You extract football results. You have no internet access.
-
-From the text below, output a JSON array. For each match return:
-{ "date": "YYYY-MM-DD", "league": string|null,
-  "home_team": string|null, "away_team": string|null,
-  "home_goals": int|null, "away_goals": int|null,
-  "status": "finished"|"upcoming"|"unknown",
-  "confidence": "low"|"medium"|"high",
-  "source_url": string, "fetched_at": ISO8601 }
-
+You extract football match results from page text.
+Return ONLY a single JSON object. No markdown, no code fences, no prose.
+Schema:
+{"home_goals":integer,"away_goals":integer,"home_goals_ht":integer or null,
+ "away_goals_ht":integer or null,"confidence":"high" or "medium" or "low","notes":string}
 Rules:
-- Use only what is written in the text. Never infer.
-- Missing field → null. Do not guess.
-- If the text is not a results page → {"status":"UNPARSEABLE"}.
-
-TEXT:
-<<<fetched page text>>>
+- home_goals and away_goals are required non-negative integers (full-time score).
+- home_goals_ht / away_goals_ht are the half-time score, or null if not stated.
+- confidence reflects how clearly the source states the result.
+- notes is one short sentence, max 120 characters.
+- Output the JSON object and nothing else.
 ```
+
+User message:
+
+```
+Page text:
+<<<cleaned page text, max 8,000 characters>>>
+```
+
+Request settings: `temperature: 0`, `response_format: {"type":"json_object"}`, `max_tokens: 256`, model from `GROQ_MODEL` (default `openai/gpt-oss-20b`).
 
 ### Legal & Practical Warning
 
-- **Scraping may violate Forebet's or PassionPredict's terms and robots.txt.** Check before going live; a blocked IP or a legal notice is a real outcome.
-- **Prefer official or licensed feeds** for anything that settles money.
-- **Store only what you need** — team names, score, date, source URL. Do not mirror their content.
-- Keep the **manual CSV path working** so the platform never depends on a scraped page being up.
+- **Scraping may violate Forebet's or PassionPredict's terms and robots.txt.** Check before going live; a blocked IP or a legal notice is a real outcome. ⬜ (not yet reviewed)
+- **Prefer official or licensed feeds** for anything that settles money. ⬜
+- **Store only what you need** — score, source URL, a short page excerpt, and the raw model response. The server does not mirror the page. ✅
+- Keep the **manual CSV path working** so the platform never depends on a scraped page being up. ✅
 
 ---
 
 ## Push Notifications
 
-Admin-to-user notifications are delivered as **Web Push** through the PWA service worker — no Play Store app, no SMS cost.
+Admin-to-user notifications are delivered as **Web Push** through the PWA service worker — no Play Store app, no SMS cost. The **in-app inbox is authoritative**; push is a best-effort extra. ✅
 
 ### How It Works
 
@@ -889,13 +1028,21 @@ Browser service worker ──► notification on the user's phone
 
 iOS is the real constraint: on iPhone, push only works once the user installs the PWA. On Android — the majority in Tanzania — it works immediately.
 
-### What the Admin Can Send
+### What Gets Sent
 
-- **Match starting soon** — the highest-value trigger
-- **Results published**
-- **Account activated** — payment confirmed
-- **Announcement** — general notice
-- **Community activity** — replies, mentions
+**Automatic, event-driven (implemented):**
+
+- **Results published** — each settled bet writes a WIN or LOSS inbox row; a correction writes "Corrected result". ✅
+- **Refunds** — postponed/cancelled bets write a refund notice. ✅
+- **Account activated** — payment confirmed by the admin. ✅
+
+**Admin broadcast (implemented):** the Notifications centre sends a title (≤ 120 chars), body (≤ 500 chars), optional in-app link, and a category, to **all** non-banned users or **active** users only. The five categories are `match_start`, `results`, `account`, `announcements`, and `community`, and each has its own mute switch. ✅
+
+**Planned (⬜):**
+
+- **Match starting soon** — needs a scheduler; none exists.
+- **Community replies / mentions** — no per-post reply model yet.
+- **SMS for payment-critical events** — not integrated; there is no SMS provider.
 
 ### Guardrails (Enforced Server-Side)
 
@@ -920,12 +1067,12 @@ The inbox is authoritative. Push is a best-effort extra: a failed push never los
 
 ### Opt-In Strategy
 
-Ask **after the user's first meaningful action**, never on page load. The app shows its own banner ("Get told when your match starts") after the first placed bet or first published post; the browser permission prompt only fires when the user taps **Turn on**. A denied prompt is hard to reverse, so "Not now" is remembered.
+Ask **after the user's first meaningful action**, never on page load. The app shows its own banner ("Get told when your match starts") after the first placed bet or first published post; the browser permission prompt only fires when the user taps **Turn on**. A denied prompt is hard to reverse, so "Not now" is remembered. ✅ (`maybeAskPush` is called only after a bet is placed or a post is published.)
 
 ### Fallbacks
 
-- **In-app notification inbox** — always available, works even if push is blocked. Every category lands there first.
-- **SMS for payment-critical events** — activation and withdrawal confirmations, where missing the message costs money.
+- **In-app notification inbox** — always available, works even if push is blocked. Every category lands there first. ✅
+- **SMS for payment-critical events** — activation and withdrawal confirmations, where missing the message costs money. ⬜ Not integrated; there is no SMS provider yet.
 
 ### Generating VAPID Keys
 
@@ -952,9 +1099,13 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
 
 ### How It Fits the Build
 
-- **Manual activation:** after payment is confirmed, the admin flips the user from **not active** to **active** in the Admin Dashboard. This is the early-stage flow.
-- **Small and transparent:** the fee covers running costs, so it should be modest and clearly stated.
-- **Separate from stakes:** the access contribution is not the bet stake and should never be described as one.
+- **One flat monthly rate, visible to users.** `ACCESS_FEE_CENTS` is served by `GET /api/v1/config` and shown on Profile as "Monthly access rate — per month · contribution to running costs". If unset, Profile says "Ask the admin" rather than inventing a number. ✅
+- **Manual activation:** after payment is confirmed, the admin marks the user **active** for a number of days. This is the early-stage flow. ✅
+- **Planning figures stay admin-only:** the DAU target, monthly running cost, and suggested fee live only in the admin Analytics centre. Users never see targets, costs, or shortfalls. ✅
+- **Small and transparent:** the fee covers running costs, so it should be modest and clearly stated. ✅
+- **Separate from stakes:** the access contribution is not the bet stake and should never be described as one. ✅
+
+> The planner and the flat rate are described in [Analytics (Daily Active Users & Access-Fee Planner)](#analytics-daily-active-users--access-fee-planner).
 
 ### Why the Wording Matters
 
@@ -981,13 +1132,17 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
 
 ### Backup Layers
 
-1. **Railway managed Postgres backups** — automated daily, point-in-time recovery where available.
-2. **Off-site copies to Cloudflare R2** — a second copy outside Railway, so a Railway account compromise or outage cannot take the data with it. Encrypted at rest, lifecycle-retained for the 6-month archive window.
-3. **Redis persistence** — RDB snapshots + AOF for the wallet-adjacent cache; live odds are rebuildable, so Redis is treated as recoverable, not authoritative.
-4. **Code & config in Git** — the database schema is versioned (migrations), so a fresh database can be rebuilt from scratch.
-5. **Media in R2/S3** — already durable, multi-region by default.
+> **Status: ⬜ not configured in production.** Nothing below is running yet. The restore procedure and drill script exist and have been exercised locally; the hosting layers are launch work.
 
-### Manual Backup Creation
+1. **Railway managed Postgres backups** — automated daily, point-in-time recovery where available. ⬜
+2. **Off-site copies to Cloudflare R2** — a second copy outside Railway, so a Railway account compromise or outage cannot take the data with it. Encrypted at rest, lifecycle-retained for the 6-month archive window. ⬜
+3. **Redis persistence** — RDB snapshots + AOF. Redis is connected at startup but **currently unused** by the application, so it holds no data worth backing up. ⬜
+4. **Code & config in Git** — the database schema is versioned (`001`–`006`), so a fresh database can be rebuilt from scratch. ✅
+5. **Media in R2/S3** — not in use; uploads live on local disk (`MEDIA_DIR`). ⬜
+
+### Manual Backup Creation ⬜
+
+> **Not built.** There is no backup button, no backup endpoint, and no `backups/manual/` prefix yet. The design below is the target.
 
 The admin can create a backup **on demand**, at any time, with one click. This is not only for disasters — it is used before anything risky.
 
@@ -1014,12 +1169,19 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 
 ### Restore Discipline
 
-- **Documented runbook** — step-by-step restore procedure, stored outside the production environment, including the manual-backup restore path.
-- **Quarterly restore drill** - actually restore a backup into a staging database and verify row counts, wallet totals, and the last 7 days of bets. A backup that has never been restored is a wish.
-  - Automated: `backend/scripts/restore_test.ps1` dumps the live database into a throwaway database, compares row counts for `users`, `bets`, `ledger`, `matches`, and `notifications`, checks the ledger sum, and confirms the restored schema is complete. It exits non-zero on any mismatch, and **fails closed** if the throwaway database was never created - a drill can never report success without a real restore. The role needs `CREATEDB` (`ALTER ROLE betva CREATEDB;`); the staging and production `postgres` roles already have it.
-- **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate.
+- **Documented runbook** — step-by-step restore procedure, stored outside the production environment. ✅ `docs/RESTORE_RUNBOOK.md`
+- **Restore drill** — actually restore a backup into a staging database and verify row counts, wallet totals, and the last 7 days of bets. A backup that has never been restored is a wish. ✅ local, ⬜ staging.
+  - Automated: `backend/scripts/restore_test.ps1` dumps the live database into a throwaway database, compares row counts for `users`, `bets`, `ledger`, `matches`, and `notifications`, checks the ledger sum, and confirms the restored schema is complete. It exits non-zero on any mismatch, and **fails closed** if the throwaway database was never created — a drill can never report success without a real restore. The role needs `CREATEDB` (`ALTER ROLE betva CREATEDB;`); the staging and production `postgres` roles already have it.
+- **Pre-launch restore test is a hard launch blocker.** The platform does not go live until a full restore has been performed and verified end-to-end. This sits alongside the penetration test as a non-negotiable gate. ⬜ staging run pending.
 - **Targets:** RTO ≤ 1 hour for critical data, RPO ≤ 1 minute for wallets.
 - **No single point of failure:** backups are verified by a different person than the one who configured them.
+
+#### Drill Log
+
+| Date | Environment | Result | Evidence |
+| --- | --- | --- | --- |
+| 2026-11-16 | Local Postgres 18, throwaway database | **Pass** | 5 users, 6 bets, 17 ledger rows, ledger sum 4,750,000 cents, 18 tables, schema check complete. Failing path also verified: with `CREATEDB` removed, the script exits `1` instead of reporting success. |
+| Before launch | Staging (Railway) | **Pending** | Run against a restored staging copy and record counts and ledger sum here. |
 
 ### Retention
 
@@ -1035,30 +1197,32 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 
 ### Handling Pressure
 
-- **Stateless Go API** behind Railway's load balancer — scale horizontally by adding instances; no session state in the process.
-- **Redis for live odds & feeds** — served from memory in milliseconds, never hitting Postgres on a read.
-- **Connection pooling** (PgBouncer or Railway's) — Postgres never sees more connections than it can handle.
-- **Read/write split** — heavy reads (history, results, community) go to a read replica; writes (bets, wallet) go to the primary.
-- **SSE/WebSocket at scale** — a Redis pub/sub layer means any API instance can push an update to any user; connections are not pinned to one box.
-- **Cloudflare absorbs the edge** — static assets, media, and cached pages never reach the origin.
-- **Queue-based writes for bets** — a bet is accepted into a queue and settled against the wallet in a controlled order, so a kickoff spike becomes a queue, not a DB crash.
-- **Rate limiting** at Cloudflare and the API — per-IP and per-user, with stricter limits on login, registration, and payment endpoints.
-- **Graceful degradation** — if the DB is slow, serve cached data and queue writes; if push fails, the in-app inbox still works.
+> **Status: designed for scale, currently a single instance.** The API is stateless and can run multiple copies, but the other layers are not wired yet.
+
+- **Stateless Go API** — no session state in the process, so it can run behind a load balancer. ✅ (single instance today)
+- **Redis for live odds & feeds** — connected at startup but **unused**; every read and write goes to Postgres. ⬜
+- **Connection pooling** — pgx pool inside the API. PgBouncer or a managed pooler is ⬜.
+- **Read/write split** — heavy reads go to a replica; writes go to the primary. ⬜
+- **SSE/WebSocket at scale** — Redis pub/sub so any API instance can reach any user. ⬜ (no SSE endpoint exists)
+- **Cloudflare absorbs the edge** — static assets, media, and cached pages never reach the origin. ⬜ (not deployed)
+- **Queue-based writes for bets** — a kickoff spike becomes a queue, not a DB crash. ⬜ (bets are written synchronously inside one transaction)
+- **Rate limiting** at Cloudflare and the API — per-IP and per-user, stricter on login, registration, and payment endpoints. ⬜ **Known gap** — see the pen-test checklist.
+- **Graceful degradation** — if push fails, the in-app inbox still works. ✅ (DB slowness and write queueing are ⬜)
 
 ### Never Losing Data Under Load
 
-- **Transactions are atomic** — a bet either fully commits (slip + wallet debit + ledger entry) or fully rolls back. No half-written bets.
-- **Idempotency keys** on every write — a retried request cannot double-charge or double-pay.
-- **Append-only ledger** — balance changes are never overwritten, only appended; reconciliation is always possible.
-- **Backups run continuously**, not only at night, so a failure at peak loses minutes, not hours.
-- **Migrations are versioned and reversible** — schema changes deploy without downtime and can be rolled back.
+- **Transactions are atomic** — a bet either fully commits (slip + wallet debit + ledger entry) or fully rolls back. No half-written bets. ✅
+- **Idempotency keys** on every write — a retried request cannot double-charge or double-pay. ⬜ Not implemented; duplicate placement is currently blocked by the one-bet-per-market constraint and the row lock, not by request keys.
+- **Append-only ledger** — balance changes are never overwritten, only appended; reconciliation is always possible. ✅
+- **Backups run continuously**, not only at night, so a failure at peak loses minutes, not hours. ⬜
+- **Migrations are versioned** — `001`–`006`, applied in order. They are forward-only; automatic rollback is ⬜. 🟡
 
 ### Capacity Planning
 
 - Start small on Railway, **scale vertically first** (more CPU/RAM per instance), then horizontally.
-- Monitor: CPU, memory, DB connections, queue depth, SSE connection count, p95 latency.
-- **Alerts** on queue depth and p95 before users feel it.
-- Load test before every major launch with a kickoff-scale traffic profile.
+- Monitor: CPU, memory, DB connections, queue depth, SSE connection count, p95 latency. ⬜ (only request logging today)
+- **Alerts** on queue depth and p95 before users feel it. ⬜
+- Load test before every major launch with a kickoff-scale traffic profile. ⬜
 
 ---
 
@@ -1068,42 +1232,44 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 
 ### Transport & Edge
 
-- **HTTPS everywhere**, HSTS preloaded, TLS 1.2 minimum — Cloudflare enforces this at the edge.
-- **Cloudflare WAF** with managed rulesets, bot protection, and DDoS mitigation.
-- **Security headers** on every response: `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`.
-- **Strict CSP** — no inline scripts; Astro's output is already CSP-friendly.
+> **Status: ⬜ production edge not configured.** Locally the API runs plain HTTP; the items below are launch requirements.
+
+- **HTTPS everywhere**, HSTS preloaded, TLS 1.2 minimum — Cloudflare enforces this at the edge. ⬜
+- **Cloudflare WAF** with managed rulesets, bot protection, and DDoS mitigation. ⬜
+- **Security headers** on every response: `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`. ⬜ Not set by the Go server yet.
+- **Strict CSP** — no inline scripts. Astro's output is CSP-friendly, but the current pages use inline scripts, so a nonce or hash strategy is required first. ⬜
 
 ### Application
 
-- **Parameterized queries only** — no string-built SQL. SQL injection is the #1 way betting sites get robbed.
-- **Input validation** on every endpoint, server-side, with allow-lists not block-lists.
-- **XSS prevention** — framework escaping plus CSP; user content is never rendered as HTML.
-- **CSRF protection** on all state-changing requests.
-- **Authentication:** phone + hashed password (Argon2/bcrypt), normalized phone numbers, session tokens with expiry and rotation.
-- **Admin 2FA** — username/password from env vars is not enough for the person who can move money.
-- **Rate limiting** on login and registration — brute force protection, with progressive lockout.
-- **Account lockout** after repeated failures, with a safe unlock path.
-- **Least privilege in the database** — the API user cannot DROP, TRUNCATE, or alter schema; migrations run under a separate admin role.
-- **Secrets in environment variables only** — never in the repo, never in client bundles. Rotate on any suspicion.
+- **Parameterized queries only** — every query uses pgx placeholders; no string-built SQL. ✅
+- **Input validation** on every endpoint, server-side, with allow-lists (stake tiers, markets, statuses, media MIME and size). ✅ Core paths; a full per-field audit is ⬜.
+- **XSS prevention** — user content is escaped before rendering, and post media is restricted to `/media/...`. A CSP is still ⬜.
+- **CSRF protection** — the API authenticates with a bearer token in `Authorization`, not an ambient cookie, so classic CSRF does not apply. Any future cookie-based auth must add tokens. ✅/⬜
+- **Authentication:** phone + bcrypt-hashed password, normalized phone numbers, JWT with 30-day expiry. **Argon2 is not used** — bcrypt at the library default cost. ✅
+- **Admin 2FA** — username/password from env vars is not enough for the person who can move money. ⬜
+- **Rate limiting** on login and registration — brute force protection, with progressive lockout. ⬜ **Known gap.**
+- **Account lockout** after repeated failures, with a safe unlock path. ⬜
+- **Least privilege in the database** — the API role currently owns the schema locally; production should split migration and runtime roles. 🟡
+- **Secrets in environment variables only** — never in the repo, never in client bundles. ✅
 
 ### Data Protection
 
-- **Encryption at rest** for Postgres and backups; **TLS in transit** everywhere, including service-to-service.
-- **PII minimization** — official names stored encrypted, admin-only, never in public responses or logs.
-- **Audit trail** — every money movement, ban, and admin action is logged with who, when, and why.
-- **Access control** — admin roles with least privilege; a support admin can view, not move money.
-- **Data retention policy** — defined and enforced, not improvised.
-- **User rights** — export and deletion paths, consistent with Tanzania's Personal Data Protection Act 2022.
+- **Encryption at rest** for Postgres and backups; **TLS in transit** everywhere, including service-to-service. ⬜ (depends on hosting configuration)
+- **PII minimization** — official names are returned only to the user and admins, never in public or community responses. Stored in plaintext today; encryption at rest / a separate PII store is ⬜. 🟡
+- **Audit trail** — money movements (ledger), bans and status changes, imports, moderation, AI reviews, and corrections record who/when/why. ✅
+- **Access control** — a single admin role from env vars. Support roles with view-only money access are ⬜.
+- **Data retention policy** — results are append-only; account-deletion and PII-retention rules are ⬜.
+- **User rights** — export and deletion paths, consistent with Tanzania's Personal Data Protection Act 2022. ⬜
 
 ### Supply Chain & Operations
 
-- **Dependency scanning** (Dependabot / Snyk) with a review process before merging updates.
-- **Pinned versions** in production; updates tested in staging first.
-- **No secrets in Git history** — if one leaks, rotate immediately, do not just delete the commit.
-- **Logging & monitoring** — centralised logs, alerts on anomalies (failed logins, payout spikes, error rates).
-- **Incident response plan** — who is called, what is shut down first, how users are notified.
-- **Pre-launch penetration test** — by someone who is not the developer.
-- **Backups of backups** — the restore drill is the proof that recovery works.
+- **Dependency scanning** (Dependabot / Snyk) with a review process before merging updates. ⬜
+- **Pinned versions** — Go modules and `package-lock.json` are committed; automated update testing is ⬜. 🟡
+- **No secrets in Git history** — `.env` is ignored; if a secret leaks, rotate immediately, do not just delete the commit. ✅
+- **Logging & monitoring** — chi request logging is on; centralised logs and anomaly alerts (failed logins, payout spikes, error rates) are ⬜. 🟡
+- **Incident response plan** — who is called, what is shut down first, how users are notified. ⬜
+- **Pre-launch penetration test** — by someone who is not the developer. ⬜ Checklist ready at `docs/PEN_TEST_CHECKLIST.md`.
+- **Backups of backups** — the restore drill is the proof that recovery works. ✅ locally, ⬜ staging.
 
 ---
 
@@ -1111,7 +1277,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 
 | Layer | Recommended Tech | Main Benefit for Your Goal |
 | --- | --- | --- |
-| **Frontend** | Astro or SvelteKit + Tailwind | Tiny file sizes; won't freeze cheap Android phones |
+| **Frontend** | Astro + Tailwind | Tiny file sizes; won't freeze cheap Android phones |
 | **Backend** | Go (Golang) | Handles thousands of simultaneous bets easily |
 | **Database** | PostgreSQL + Redis | Safe wallet transactions + instant feed/odds loading |
 | **Media** | Cloudflare Stream / Bunny.net | Auto-compresses photos & adapts video quality to network speed |
@@ -1121,9 +1287,23 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 | **Results extraction** | Groq (LLM) | Turns fetched match pages into structured JSON |
 | **Payments** | AzamPay / Selcom | Fast USSD mobile money deposits and payouts |
 
+### What is actually running
+
+| Layer | Shipped today | Status |
+| --- | --- | --- |
+| Frontend | Astro 7 + Tailwind v4, static output, PWA manifest + service worker | ✅ |
+| Backend | Go 1.x, chi, pgx | ✅ |
+| Database | PostgreSQL 18 locally; migrations `001`–`006` | ✅ |
+| Cache / queues | Redis client connected at startup, no reads or writes yet | 🟡 |
+| Media | Local `MEDIA_DIR`, served from `/media/*` with immutable cache headers | 🟡 |
+| Results extraction | Groq `openai/gpt-oss-20b`, admin-triggered, manual approval | ✅ |
+| Payments | Manual admin credit only; no mobile-money integration | ⬜ |
+| Hosting | Nothing deployed; local `:8080` API and `:4321` frontend | ⬜ |
+| Edge | No Cloudflare, no Vercel, no Railway project yet | ⬜ |
+
 ### How the pieces fit together
 
-- **Vercel** serves the frontend only (the Astro/SvelteKit build output).
+- **Vercel** serves the frontend only (the Astro build output).
 - **Railway** runs the backend API plus PostgreSQL and Redis.
 - **Cloudflare** sits in front for media (Images/Stream), storage (R2), and the East African CDN edge.
 
@@ -1137,20 +1317,23 @@ These are complementary, not competing — Vercel handles app code, Railway hand
 
 Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze low-RAM smartphones. The stack below sends minimal code to the browser.
 
-### Framework: Astro or SvelteKit
+### Framework: Astro (chosen) ✅
 
-- **Why:** Both compile code into tiny, fast HTML and CSS files.
-- **Astro advantage:** Ships almost zero JavaScript by default, so pages load instantly on 3G/4G.
+- **Why:** It compiles pages into tiny HTML and CSS files and ships almost zero JavaScript by default, so pages load instantly on 3G/4G. SvelteKit was the alternative; Astro won because the app is mostly static pages with small islands of interactivity.
+- **Status:** Astro 7 with Tailwind v4, static output. ✅
 
-### Styling: Tailwind CSS
+### Styling: Tailwind CSS ✅
 
 - **Why:** Generates a single, tiny CSS file that caches well on users' phones, saving mobile data on repeat visits.
+- **Status:** Tailwind v4 via `@tailwindcss/vite`, with the design tokens in `src/styles/global.css`. ✅
 
-### Progressive Web App (PWA)
+### Progressive Web App (PWA) 🟡
 
 - **Why:** Users can add the site to their home screen like an app — no 50 MB Play Store download.
-- **Offline:** Caches basic layout files so the site opens immediately even on weak connections.
-- **Push:** The same service worker that enables offline caching also receives admin push notifications — see [Push Notifications](#push-notifications).
+- **Manifest:** `manifest.webmanifest` with `display: standalone`, dark theme colour, and the eagle-B SVG icon. ✅
+- **Service worker:** registered for Web Push and notification clicks. ✅
+- **Offline caching:** ⬜ — the service worker does not cache pages or assets yet, so the app needs a connection.
+- **Push:** The same service worker that enables push notifications also handles notification clicks — see [Push Notifications](#push-notifications). ✅
 
 ---
 
@@ -1158,20 +1341,22 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 
 > Betting requires instant odds updates and rock-solid reliability for financial transactions.
 
-### Language & Framework: Go (Golang) or Node.js (Fastify)
+### Language & Framework: Go (chosen) ✅
 
 - **Why:** Go is built for high concurrency — thousands of users can place bets and upload content simultaneously without the server crashing or lagging.
+- **Status:** chi router, pgx, and a Redis client (connected but unused). Node.js/Fastify was the alternative and was not used. ✅
 
-### Real-Time Odds: Server-Sent Events (SSE) or Lightweight WebSockets
+### Real-Time Odds: Server-Sent Events (SSE) or Lightweight WebSockets ⬜
 
 - **Why:** Instead of forcing the phone to constantly refresh for live odds, SSE pushes tiny text updates (a few bytes) only when an odd changes.
+- **Status:** Not built. There are only two fixed markets and no live odds feed, so this is deferred until a live-pricing source exists.
 
-### Database: PostgreSQL + Redis
+### Database: PostgreSQL + Redis 🟡
 
-| Component | Role |
-| --- | --- |
-| **PostgreSQL** | User accounts, wallet balances, and betting slips with strict financial accuracy |
-| **Redis** | Live odds and community feeds in ultra-fast memory — data loads in milliseconds |
+| Component | Role | Status |
+| --- | --- | --- |
+| **PostgreSQL** | User accounts, wallet balances, betting slips, matches, community, notifications, analytics | ✅ Authoritative store |
+| **Redis** | Intended for live odds, feeds, rate limits, and pub/sub | 🟡 Connected at startup; no application reads or writes yet |
 
 ---
 
@@ -1179,16 +1364,18 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 
 > User-uploaded images and videos are the biggest threat to site speed and user data bundles. All media must be processed before it reaches other users.
 
-### Delivery & Compression: Cloudflare Stream & Cloudflare Images (or Bunny.net)
+### Delivery & Compression: local today, Cloudflare later 🟡
 
-- **Images:** Auto-convert every upload to WebP or AVIF — up to 70% smaller files while staying sharp. Load blurry placeholders first (lazy loading) so text and betting buttons appear immediately.
-- **Profile pictures:** capped at **10 KB** per user, so avatars are resized to a small square (roughly 96–128 px) and served as WebP. This keeps the Community feed cheap to render even with many avatars.
-- **Videos:** Never serve raw MP4 files from the server. Use **Adaptive Bitrate Streaming (HLS)** — automatically serves low-data 240p/360p to slow connections and 1080p to fast Wi-Fi.
+- **Images:** uploads are stored as received, capped at **400 KB**, and served from `/media/*`. Server-side MIME sniffing prevents a renamed executable from being served as an image. Auto-conversion to WebP/AVIF and blur-up placeholders are ⬜.
+- **Profile pictures:** the API accepts a `profile_pic` string with **no server-side size check** (the 10 KB rule is client-side only) and there is no upload UI. ⬜
+- **Videos:** uploads are capped at **3 MB**, served as a single file with `preload="none"` and native controls. No autoplay. HLS adaptive bitrate is ⬜.
+- **Storage:** local `MEDIA_DIR` with random 24-character hex filenames and `Cache-Control: public, max-age=31536000, immutable`. Production moves to R2/Images/Stream behind the same upload endpoint. ⬜
 
-### Storage: Cloudflare R2 or AWS S3
+### Storage: Cloudflare R2 or AWS S3 ⬜
 
 - **Why:** Cheap, scalable storage for community uploads.
 - **Cloudflare R2 advantage:** Zero bandwidth/egress fees.
+- **Status:** Not in use. Uploads live on the API host's disk, which does not survive a redeploy without a mounted volume.
 
 ---
 
@@ -1200,19 +1387,22 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 
 - **Why:** Cloudflare has edge servers directly in **Dar es Salaam** and **Mombasa**. Static files and cached pages are served locally in milliseconds instead of traveling to Europe or the US.
 
-### Mobile Money: Selcom, AzamPay, or Pesapal
+### Mobile Money: Selcom, AzamPay, or Pesapal ⬜
 
 - **Why:** These APIs support fast, direct push-USSD prompts for **M-Pesa**, **Tigo Pesa**, **Airtel Money**, and **HaloPesa** — no slow redirect to external payment pages.
+- **Status:** Not integrated. Deposits are recorded by the admin with a required reason and a ledger row; there is no provider callback, receipt, or automatic activation.
 
 ---
 
 ## 5. Cloud Deployment (Vercel + Railway)
 
+> **Status: not deployed.** Everything below is the approved hosting plan. Today the app runs locally: Go API on `:8080`, Astro dev server on `:4321`, Postgres on `localhost`.
+
 > Vercel hosts the frontend. Railway hosts the backend and its data stores. Cloudflare handles media and edge delivery in East Africa.
 
 ### Vercel — Frontend Hosting
 
-- **Serves:** Astro / SvelteKit build output.
+- **Serves:** Astro build output.
 - **Why:** Zero-config builds, automatic preview deployments per branch, and global edge caching with Brotli/Gzip enabled by default.
 - **Fits the plan because:** Astro's mostly-static output is exactly what Vercel optimizes for — near-zero JS shipped, cached at the edge.
 
@@ -1268,9 +1458,9 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Crucial Design Tips for Low-Data Users
 
-- **Data Saver Mode toggle** — let users disable auto-playing videos and load lower-resolution images with one tap.
-- **Keep betting slips lightweight** — avoid heavy animations or complex graphics on the main betting interface.
-- **Compress API responses** — enable Brotli or Gzip on the server to shrink text data by up to 80% before it hits the network.
+- **Data Saver Mode toggle** — let users disable auto-playing videos and load lower-resolution images with one tap. ⬜ (video never autoplays anyway)
+- **Keep betting slips lightweight** — avoid heavy animations or complex graphics on the main betting interface. ✅
+- **Compress API responses** — Brotli or Gzip on the server shrinks text data by up to 80% before it hits the network. ✅ `middleware.Compress(5)`
 
 ---
 
@@ -1290,35 +1480,35 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 - [x] ~~**Settlement rules**~~ — resolved: official source decides, admin approves, corrections are reversing ledger entries.
 - [x] ~~**History contents**~~ — resolved: History shows bets only; the wallet ledger lives on Profile.
 - [ ] **Commission** — the payout multiplier is configurable (`PAYOUT_MULTIPLIER_BP`, default 1.50×), but the final commercial margin and whether a separate commission line is shown still need sign-off.
-- [ ] **Access fee** — how much, how often (one-time or monthly), and what happens to a user who stops paying.
+- [x] ~~**Access fee**~~ — resolved: one **flat monthly rate** (`ACCESS_FEE_CENTS`), shown to users on Profile; planning figures (DAU target, running cost, suggested fee) are admin-only. The amount itself is set by the operator.
 - [x] ~~**Notification policy**~~ — resolved: max 2/day, quiet hours 22:00–07:00 EAT, per-category mute.
 
 ### AI & Results
 
-- [x] ~~**Authoritative source**~~ — resolved: disagreement = `DISPUTED`, official league source settles, Forebet is default manual reference.
+- [x] ~~**Authoritative source**~~ — decided: disagreement = `DISPUTED`, official league source settles, Forebet is the default manual reference. ⬜ the `DISPUTED` state and automated two-source check are not built.
 - [ ] **Scraping permission** — have Forebet and PassionPredict terms/robots.txt been checked?
 - [ ] **Free API choice** — football-data.org, API-Football, or TheSportsDB as the primary fallback?
-- [ ] **Groq model** — which model and context size, and what is the per-day token cost?
-- [ ] **Confidence threshold** — minimum confidence for a Groq-extracted row to reach the review queue at all?
+- [x] ~~**Groq model**~~ — resolved: default `openai/gpt-oss-20b`, configurable via `GROQ_MODEL`. Per-day token cost still unmeasured.
+- [ ] **Confidence threshold** — minimum confidence for a Groq-extracted row to reach the review queue at all? (Today every valid row reaches the queue with its badge.)
 
 ### Design & Brand
 
-- [ ] **Brand colour** — confirm the green accent (`#22C55E`) or pick a different brand colour before launch.
-- [ ] **Logo & app icon** — final assets, including the PWA home-screen icon sizes.
-- [ ] **Light mode depth** — full light theme at launch, or dark-only for v1? (Design System already commits to dark default + toggle.)
+- [x] ~~**Brand colour**~~ — resolved: Google blue `#4285F4` → `#1A73E8`; the wordmark uses the five Google colours.
+- [x] ~~**Logo & app icon**~~ — resolved: eagle-cutout "B" emblem used as favicon/logo, plus a horizontal wordmark. Legacy `.ico` and PNG touch icons still need regenerating. 🟡
+- [x] ~~**Light mode depth**~~ — resolved: **dark-only for v1**. A light theme is deferred.
 
 ### Reliability & Security
 
-- [x] ~~**Backup owner**~~ — resolved: quarterly restore drill is a **hard launch blocker**, owned by the operator, runbook stored off-site in R2 plus a printed copy. Backups that have never been restored are a wish, not a backup.
+- [x] ~~**Backup owner**~~ — resolved: the restore drill is a **hard launch blocker**, owned by the operator. Runbook: `docs/RESTORE_RUNBOOK.md`; a copy must also be stored off-site before launch. ⬜
 - [ ] **Admin 2FA** — which provider (TOTP / WebAuthn) and is it mandatory before launch?
 - [ ] **Penetration test** — budget and vendor for the pre-launch test?
 - [ ] **Incident contact** — who is on call, and how are users notified?
 
 ### Trust & Display
 
-- [ ] **Counter cadence** — does the win rate update after every settlement, or once per day at a fixed time?
-- [ ] **Counter reset** — does the counter ever reset, or does it run for the life of the product?
-- [ ] **Confidence rules** — what evidence must back a HIGH match-confidence rating, and can the admin override it?
+- [x] ~~**Counter cadence**~~ — resolved: the counter changes **at settlement**; `GET /api/v1/stats` is cached for 60 seconds.
+- [x] ~~**Counter reset**~~ — resolved: it runs for the life of the product, over the append-only results archive. No reset.
+- [x] ~~**Confidence rules**~~ — resolved: the admin sets HIGH / MEDIUM / LOW per match at import or edit time; it is displayed, not used in settlement maths, and snapshotted onto the bet at placement.
 
 ### Business & Infrastructure
 
@@ -1333,22 +1523,25 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 ## Development Status
 
-**Phase 5 complete — AI result suggestions (Groq, admin approval) plus launch-hardening artifacts (restore drill and pen-test checklist).** Phase 6 polish remains.
+**Phases 1–5 are complete and verified locally. Phase 6 (launch) is in progress: documentation, security checklist, and restore runbook are in place; staging deployment, the staging restore drill, the penetration test, and real-device latency measurement remain.**
 
 ### What exists now
 
 | Area | Status | Location |
 | --- | --- | --- |
 | Go API (chi router, pgx, Redis-ready) | ✅ Working | `backend/` |
-| Postgres schema and migrations | ✅ Working | `backend/migrations/` |
+| Postgres schema and migrations `001`–`006` | ✅ Working | `backend/migrations/` |
 | User register / login / profile | ✅ Working | `backend/internal/httpapi/auth.go` |
 | Admin login from environment variables | ✅ Working | `backend/internal/httpapi/admin.go` |
 | Matches CSV upload, validation, duplicate detection, import log | ✅ Working | `backend/internal/httpapi/matches.go` |
 | Admin day view, confidence and status editing | ✅ Working | `frontend/src/pages/admin/matches.astro` |
 | Users list, search, manual activation, suspend / ban, audit log | ✅ Working | `frontend/src/pages/admin/users.astro` |
+| Daily active users + access-fee planner | ✅ Working | `backend/internal/httpapi/analytics.go`, `frontend/src/pages/admin/analytics.astro` |
+| Flat access rate shown on Profile | ✅ Working | `GET /api/v1/config`, `frontend/src/pages/profile.astro` |
 | Astro + Tailwind user app (PWA shell) | ✅ Working | `frontend/` |
 | Admin app (separate layout) | ✅ Working | `frontend/src/pages/admin/` |
 | Bet slip with fixed stake tiers | ✅ Working | `frontend/src/pages/index.astro` |
+| Home Today / Tomorrow tabs with settled ✓ / ✕ | ✅ Working | `frontend/src/pages/index.astro` |
 | Wallet balance and append-only ledger | ✅ Working | `backend/internal/httpapi/bets.go` |
 | Bet placement (atomic debit + bet row + ledger) | ✅ Working | `backend/internal/httpapi/bets.go` |
 | Settlement, correction with reversal, postponed refunds | ✅ Working | `backend/internal/httpapi/settlement.go` |
@@ -1359,8 +1552,15 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | In-app notification inbox and per-category mutes | ✅ Working | `backend/internal/httpapi/notifications.go` |
 | Web Push with VAPID, daily cap, quiet hours | ✅ Working | `frontend/public/sw.js`, `frontend/src/lib/push.ts` |
 | Self-exclusion 24h / 7d / 30d, append-only | ✅ Working | `backend/internal/httpapi/notifications.go` |
-| AI results assistant | ✅ Working | Phase 5 |
-| Full launch hardening and restore test | ⬜ Later | Phase 6 |
+| AI result suggestions with admin approval | ✅ Working | `backend/internal/httpapi/ai.go`, `frontend/src/pages/admin/ai.astro` |
+| Trust counter (tips, wins, losses, rate, streak) | ✅ Working | `backend/internal/httpapi/stats.go`, `frontend/src/components/TrackRecord.astro` |
+| Responsive + accessibility audit harness | ✅ Working | `frontend/scripts/responsive-audit.html` |
+| Restore drill script (fail-closed) | ✅ Working | `backend/scripts/restore_test.ps1` |
+| Restore runbook | ✅ Written | `docs/RESTORE_RUNBOOK.md` |
+| Penetration-test checklist | ✅ Written | `docs/PEN_TEST_CHECKLIST.md` |
+| Staging deployment and restore drill | ⬜ Later | Phase 6 |
+| Penetration test and real-device latency measurement | ⬜ Later | Phase 6 |
+| Public landing page, KYC queue, admin profile, results archive page | ⬜ Later | Post-launch |
 
 ### Matches CSV format
 
@@ -1446,17 +1646,29 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 - Bet placement checks for an unexpired row inside the same transaction as the debit, so it cannot be raced.
 - There is no update or delete endpoint. An active period blocks starting another.
 
+## API Reference
+
+All routes are under `/api/v1`. User routes require `Authorization: Bearer <user JWT>`; admin routes require an admin JWT (`is_admin=true`). Errors are JSON `{"error": "..."}`. Money is always integer cents.
+
+### Public
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Liveness probe (outside `/api/v1`) |
+| `GET` | `/api/v1/ping` | Cheap connectivity check |
+| `GET` | `/api/v1/config` | Stake tiers, payout multiplier, markets, push settings, quiet hours, `access_fee_cents` |
+| `GET` | `/api/v1/stats` | Aggregate track record (60s cache) |
+
 ### User API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/auth/register` | Register with phone, nickname, password |
+| `POST` | `/api/v1/auth/register` | Register with nickname, phone, official name, password, `accepted_terms` |
 | `POST` | `/api/v1/auth/login` | Login → user JWT |
+| `POST` | `/api/v1/auth/logout` | Stateless: returns `logged out`; the client discards the token |
 | `GET` | `/api/v1/me` | Current profile |
-| `PUT` | `/api/v1/me` | Update password / nickname |
+| `PUT` | `/api/v1/me` | Update password and/or `profile_pic` (no nickname change) |
 | `GET` | `/api/v1/matches` | Today + tomorrow, with `is_open` and markets |
-| `GET` | `/api/v1/config` | Stake tiers, payout multiplier, markets |
-| `GET` | `/api/v1/stats` | Aggregate track record: tips, wins, losses, win rate, streak |
 | `POST` | `/api/v1/bets` | Place a slip: `match_id`, `market`, `stake_cents` |
 | `GET` | `/api/v1/wallet` | Balance + last 50 ledger entries |
 | `GET` | `/api/v1/history` | User bets for the last 6 months, with scores |
@@ -1491,37 +1703,79 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 | `GET` | `/api/v1/admin/users?q=&status=` | Search and filter users |
 | `PUT` | `/api/v1/admin/users/{id}/status` | Activate (with days), suspend, ban, deactivate |
 | `POST` | `/api/v1/admin/users/{id}/credit` | Manual deposit / withdrawal with a reason |
+| `GET` | `/api/v1/admin/analytics?days=7..90` | DAU series, summary counters, and the admin-only fee plan |
 | `GET` | `/api/v1/admin/community/posts?status=` | Moderation queue: `reported`, `visible`, `hidden`, `deleted`, or all |
 | `PUT` | `/api/v1/admin/community/posts/{id}/status` | `visible`, `hidden`, or `deleted`, with a reason |
 | `POST` | `/api/v1/admin/notifications/send` | Broadcast to `all` or `active`; writes inbox rows, then pushes |
 | `GET` | `/api/v1/admin/notifications` | Recent broadcasts grouped by minute |
+| `POST` | `/api/v1/admin/ai/suggest` | Fetch `source_url` and extract a score for `match_id` |
+| `GET` | `/api/v1/admin/ai/suggestions?match_id=&status=` | Suggestion queue (`pending`, `approved`, `rejected`, `failed`) |
+| `PUT` | `/api/v1/admin/ai/suggestions/{id}/review` | `approved` or `rejected`; rejection requires a reason |
 
-### Running locally
+> An approved suggestion does **not** settle a match or move money. Settlement is a separate admin action on `/admin/matches/{id}/settle`.
+
+## Running Locally
+
+Prerequisites: **Go 1.27+**, **Node 22.23+**, **PostgreSQL 16+**, and optionally Redis. Redis is not required — the API logs a non-fatal warning and continues without it.
 
 ```bash
-# 1. Database (PostgreSQL already installed)
+# 1. Database
 psql -U postgres -c "CREATE USER betva WITH PASSWORD 'betva';"
 psql -U postgres -c "CREATE DATABASE betva OWNER betva;"
+
+# 2. Schema — apply every migration in order
 psql -U betva -d betva -f backend/migrations/001_init.sql
 psql -U betva -d betva -f backend/migrations/002_matches_admin.sql
 psql -U betva -d betva -f backend/migrations/003_wallet_settlement.sql
 psql -U betva -d betva -f backend/migrations/004_community_notifications.sql
+psql -U betva -d betva -f backend/migrations/005_ai_results.sql
+psql -U betva -d betva -f backend/migrations/006_analytics.sql
 
-# 2. Backend
+# 3. Backend
 cd backend
-cp .env.example .env        # set JWT_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD
+cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
+# set JWT_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD; add GROQ_API_KEY to enable AI
 go run ./cmd/vapid          # paste the keys into .env as VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
 go run ./cmd/server         # http://localhost:8080
 
-# 3. Frontend
+# 4. Frontend (second terminal)
 cd frontend
 npm install
 npm run dev                 # http://localhost:4321
 ```
 
-Admin app: `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
+On Windows, the `psql` binary may not be on `PATH`; use the full path, for example `& "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U betva -d betva -f backend/migrations/001_init.sql`, and set `$env:PGPASSWORD='betva'` first.
 
-### Environment variables
+**Admin app:** `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `ADMIN_PASSWORD`. The user app redirects unauthenticated visitors to `/login`.
+
+**Checks:**
+
+```bash
+# Backend
+cd backend
+go vet ./...
+go build ./...
+go test ./...
+
+# DB integration tests (uses the local betva database; creates and rolls back its own rows)
+$env:BETVA_TEST_DATABASE_URL='postgres://betva:betva@localhost:5432/betva?sslmode=disable'
+go test ./internal/httpapi -run Integration -v
+
+# Frontend — strict typecheck + production build
+cd frontend
+npm run check
+```
+
+**Restore drill** (requires a role with `CREATEDB`):
+
+```powershell
+cd backend
+.\scripts\restore_test.ps1
+```
+
+The script exits `0` only when the throwaway database was created, restored, and verified. See `docs/RESTORE_RUNBOOK.md`.
+
+## Environment Variables
 
 | Variable | Required | Notes |
 | --- | --- | --- |
@@ -1545,22 +1799,29 @@ Admin app: `http://localhost:4321/admin` — sign in with `ADMIN_USERNAME` / `AD
 | `PUSH_DAILY_CAP` | No | Pushes per user per EAT day; default `2` |
 | `QUIET_START_HOUR` | No | Default `22` (EAT) |
 | `QUIET_END_HOUR` | No | Default `7` (EAT) |
+| `GROQ_API_KEY` | AI | Groq API key. Empty disables the AI Results centre (`503`) |
+| `GROQ_MODEL` | No | Default `openai/gpt-oss-20b` |
+| `ACCESS_FEE_CENTS` | No | Flat monthly access rate in cents; public via `/config`, shown on Profile. `0` shows "Ask the admin" |
+| `ACCESS_FEE_DAU_TARGET` | No | **Admin-only.** DAU at which the fee planner activates; `0` = unconfigured |
+| `MONTHLY_OPERATING_COST_CENTS` | No | **Admin-only.** Monthly running cost in cents, used to suggest a fee |
 
-`GET /api/v1/config` reports `push_enabled`, the public key, the cap, and the quiet-hours window, so the client never hardcodes them.
+`GET /api/v1/config` reports `stake_tiers_cents`, `payout_multiplier_bp`, `markets`, `push_enabled`, `vapid_public_key`, `push_daily_cap`, `quiet_hours`, and `access_fee_cents`. It never returns the DAU target, running cost, or suggested fee.
 
-### Responsive and accessibility checks
+## Responsive & Accessibility Checks
 
 The UI is verified against real measurements, not eyeballing:
 
-- **Responsive audit** — `frontend/scripts/responsive-audit.html` loads every route inside same-origin iframes at fixed widths (320, 360, 768, 1024, 1280, 1440) and reports horizontal overflow, elements pushed past the viewport, tap targets under 44 px, text clipped by a fixed height, and buttons in a row with mismatched heights. Rows are compared **per parent element**, so buttons from different components at the same vertical offset are never treated as one row. To run it: copy the file into `frontend/public/`, open `/_responsive-audit.html`, and call `window.__audit(routes, widths)` in the console. It is kept out of `public/` so it never ships.
+- **Responsive audit** — `frontend/scripts/responsive-audit.html` loads every route inside same-origin iframes at fixed widths (320, 360, 768, 1024, 1280, 1440) and reports horizontal overflow, elements pushed past the viewport, tap targets under 44 px, text clipped by a fixed height, and buttons in a row with mismatched heights. Rows are compared **per parent element**, so buttons from different components at the same vertical offset are never treated as one row.
+  - **How to run:** copy the file to `frontend/public/_responsive-audit.html`, open `http://localhost:4321/_responsive-audit.html`, set `localStorage.betva_token` to a user JWT for protected routes (and `localStorage.betva_admin_token` for admin routes), then call `window.__audit(routes, widths)` in the console. Audit at most **4 routes × 6 widths** per batch. Delete the temp file when done so it never ships.
+  - **Last run:** 16 November 2026 — 14 routes × 6 widths = **84 checks, 0 failures** (no overflow, no sub-44px targets, no clipped text, no misaligned rows).
 - **Dynamic overlays** — `window.__auditOverlay(route, width, selector)` opens the bet slip, report sheet, or settle modal and measures them the same way.
-- **Lighthouse** — every page scores 1.0 on accessibility, best practices, and SEO on the production build.
+- **Lighthouse** — ⬜ not yet run on a production build. The earlier 1.0 claim was aspirational and has been removed until measured.
 
 Rules the audit enforces: **no horizontal overflow at 320 px**, every control at least **44 × 44 px**, no clipped text, buttons in the same row aligned to the same height, and tables scroll horizontally inside their own container instead of crushing cells.
 
 > **Astro scoping trap.** Styles declared in a page's `<style>` block are scoped with a `data-astro-*` attribute. Any markup injected through `innerHTML` does not carry that attribute, so scoped selectors never match it. Classes used by dynamically rendered markup (`.stake-chip`, `.admin-select`, `.admin-table-mid`, `.line-clamp-2`) live in `global.css` for that reason.
 
-**Next:** Final polish pass and launch sign-off — run the restore drill and pen-test checklist against staging, then deploy.
+**Next:** launch sign-off — deploy staging (Railway + Vercel + Cloudflare), run the restore drill and `docs/PEN_TEST_CHECKLIST.md` against staging, measure real East-Africa latency on a mid-range Android over 3G, regenerate the `.ico`/PNG icons, then go live.
 
 **Decisions locked in:**
 - Frontend hosting: **Vercel**
@@ -1570,20 +1831,22 @@ Rules the audit enforces: **no horizontal overflow at 320 px**, every control at
 - Roles: **Admin** (env-var credentials) and **User** (nickname, phone, official phone-owner name, password)
 - Post-login navigation: **Home → Community → History → Profile**
 - KYC: **official name of the phone owner** collected at registration, admin-only
-- KYC mismatch: **7-day notice → appeal / phone change / name correction → admin review queue**, ban only if unresolved
-- Repeat KYC mismatch: **2nd = suspension + 48h review, 3rd = ban**; phone-only change is routine re-verification
-- Settlement: **disagreement = `DISPUTED`**, official league source decides, corrections are reversing entries
+- KYC mismatch: **7-day notice → appeal / phone change / name correction → admin review queue**, ban only if unresolved ⬜ (not built)
+- Repeat KYC mismatch: **2nd = suspension + 48h review, 3rd = ban**; phone-only change is routine re-verification ⬜ (not built)
+- Settlement: **official league source decides**, admin enters and approves, corrections are reversing entries. Two-source `DISPUTED` automation is ⬜
 - Statuses: **WIN / LOSS / PENDING / LIVE / POSTPONED** — fixed colour tokens, text + icon on every badge
 - Markets: **Full Time Over 0.5 Goals**, **Over 0.5 Half Time** only
-- Trust counter: **aggregate wins/losses/rate/streak**, confidence badge per match, losses never hidden
-- Visibility: **Home = today + tomorrow**, **History = last 6 months**
-- Design: **dark mode default**, glass surfaces, system fonts, 44px tap targets, 12/16px radius
+- Trust counter: **aggregate wins/losses/rate/streak**, confidence badge per match, losses never hidden, updates at settlement, never resets
+- Visibility: **Home = today + tomorrow** (separate Today/Tomorrow buttons), **History = last 6 months**
+- Design: **dark-only v1**, glass surfaces, system fonts, 44px tap targets, 12/16px radius, Google-blue brand, eagle-B mark
 - Engagement: **mechanics approved**, guardrails enforced as release blockers (see Engagement Policy)
-- Admin centres: **Matches (CSV)**, **Users & Financial Status**, **Results Archive (6 months)**, **Admin Profile**
+- Admin centres: **Overview + Matches (CSV), Users, Analytics, AI Results, Community, Notifications**; Results Archive page and Admin Profile are ⬜
+- Analytics: **append-only `activity_days`**, one row per user per EAT day, admin-only DAU series and fee planner
+- Access fee: **one flat monthly rate** (`ACCESS_FEE_CENTS`) shown to users; DAU target, running cost, and suggested fee are **admin-only**; shortfalls are covered by the admin
 - User activation: **manual** (admin marks active after payment) until automated
-- Public landing page: **live match ticker + activity feed + infinite scroll**, signup wall only at point of action
-- Notifications: **PWA Web Push** from admin, with in-app inbox and SMS fallback for payments
-- Results extraction: **Groq parses fetched pages → validator → admin approval**; AI never settles bets
-- Data: **backups off-site to R2**, manual on-demand backups, quarterly restore drill is a **hard launch blocker**, RTO ≤ 1h / RPO ≤ 1min for wallets
-- Security: **HTTPS + Cloudflare WAF**, parameterized queries, Argon2, admin 2FA, audit trail, pen test before launch
+- Public landing page: **planned** (live match ticker + activity feed + signup wall at the point of action) ⬜
+- Notifications: **PWA Web Push** from admin, with in-app inbox authoritative and per-category mutes; SMS fallback is ⬜
+- Results extraction: **Groq parses a server-fetched page → validator → admin approval**; AI never settles bets
+- Data: **backups off-site to R2** and a restore drill are launch blockers; runbook and fail-closed script exist, hosting layers ⬜
+- Security: **HTTPS + Cloudflare WAF**, parameterized queries, bcrypt, admin 2FA ⬜, audit trail, pen test before launch ⬜
 - Revenue: **access contribution** for running costs — explicitly **not** payment for predictions
