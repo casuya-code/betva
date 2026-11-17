@@ -51,6 +51,12 @@ type Config struct {
 	AutoSettleGraceMinutes    int // minutes after kickoff before a match is a candidate
 	AutoSettleIntervalMinutes int // how often the sweep runs
 
+	// Deterministic web result discovery (no AI/Groq). ESPN scoreboard JSON is
+	// the primary source; 100Tip is a cross-check. Found scores are stored as
+	// approved result suggestions so the settlement sweep settles them.
+	AutoResultFetchEnabled  bool
+	AutoResultFetchMaxDates int // most recent match dates to scan per pass
+
 	// Push notifications.
 	VAPIDPublicKey  string
 	VAPIDPrivateKey string
@@ -120,6 +126,8 @@ func Load() *Config {
 		AutoSettleEnabled:         getEnv("AUTO_SETTLE_ENABLED", "1") != "0",
 		AutoSettleGraceMinutes:    Atoi(getEnv("AUTO_SETTLE_GRACE_MINUTES", "120"), 120),
 		AutoSettleIntervalMinutes: Atoi(getEnv("AUTO_SETTLE_INTERVAL_MINUTES", "15"), 15),
+		AutoResultFetchEnabled:    getEnv("AUTO_RESULT_FETCH_ENABLED", "1") != "0",
+		AutoResultFetchMaxDates:   Atoi(getEnv("AUTO_RESULT_FETCH_MAX_DATES", "7"), 7),
 
 		VAPIDPublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
 		VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
@@ -143,6 +151,9 @@ func Load() *Config {
 	}
 	if c.AutoSettleIntervalMinutes < 1 {
 		c.AutoSettleIntervalMinutes = 15
+	}
+	if c.AutoResultFetchMaxDates < 1 {
+		c.AutoResultFetchMaxDates = 7
 	}
 
 	// Bad push settings must not take the whole app down. Clamp them to sane

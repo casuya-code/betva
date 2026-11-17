@@ -128,6 +128,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			adm.Get("/matches/{id}/bets", s.handleAdminMatchBets)
 			adm.Post("/matches/{id}/settle", s.handleAdminSettleMatch)
 			adm.Post("/matches/{id}/refund", s.handleAdminRefundMatch)
+			adm.Post("/results/scan", s.handleAdminScanResults)
 			adm.Get("/imports", s.handleImportLog)
 
 			adm.Get("/users", s.handleAdminListUsers)

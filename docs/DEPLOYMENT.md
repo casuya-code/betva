@@ -269,7 +269,9 @@ every name.
 | `PUSH_DAILY_CAP` | `2` | Enforced server-side |
 | `QUIET_START_HOUR` / `QUIET_END_HOUR` | `22` / `7` | EAT |
 | `PUSH_RETRY_ENABLED` | unset (on) | Five-minute retry scheduler for deferred/failed pushes; `0` disables it |
-| `AUTO_SETTLE_ENABLED` | unset (on) | 15-minute settlement sweep; `0` disables it. Never uses raw AI output — only stored scores or admin-approved suggestions |
+| `AUTO_SETTLE_ENABLED` | unset (on) | 15-minute settlement sweep; `0` disables it. Never uses raw AI output — only stored scores or approved suggestions |
+| `AUTO_RESULT_FETCH_ENABLED` | unset (on) | Non-AI ESPN/100Tip discovery inside the sweep; `0` disables it. Found scores become approved suggestions, never direct match writes |
+| `AUTO_RESULT_FETCH_MAX_DATES` | unset (7) | Most recent match dates scanned per sweep |
 | `GROQ_API_KEY` | set 2026-11-16 | AI suggestions enabled; never logged or returned to clients |
 | `ACCESS_FEE_DAU_TARGET` / `MONTHLY_OPERATING_COST_CENTS` | **not set** | Fee planner shows unconfigured |
 
@@ -371,7 +373,7 @@ Launch blockers or follow-ups, in order:
 7. **Config-as-Code deprecation.** `railway.toml` stops working on 2026-12-01. Migrate to
    `.railway/railway.ts` or keep configuring the service through the dashboard/API.
 8. **Security gate not fully run.** `docs/PEN_TEST_CHECKLIST.md` still needs an independent tester. Security headers, a strict CSP, rate limiting, credential rotation, and TOTP admin 2FA are done.
-9. **AI results enabled.** `GROQ_API_KEY` was set on 2026-11-16; SSRF-guarded source fetching uses it. Confidence thresholds and scraping permissions are still product questions.
+9. **AI results enabled.** `GROQ_API_KEY` was set on 2026-11-16; SSRF-guarded source fetching uses it. Confidence thresholds and scraping permissions are still product questions. Deterministic web discovery (ESPN + 100Tip) is on by default inside the settlement sweep; check `auto-result:` logs after a match day to confirm it finds scores.
 10. **Fee planner unconfigured.** Set `ACCESS_FEE_DAU_TARGET` and
     `MONTHLY_OPERATING_COST_CENTS` when the operator has real numbers.
 11. **Container runs as root.** The image has no `USER` because Railway volumes mount

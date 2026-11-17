@@ -128,6 +128,48 @@ func TestIntegration_SettlementSweep_UsesOnlyApprovedSuggestion(t *testing.T) {
 	}
 }
 
+// A web-discovered score is written as an approved suggestion, then settled by
+// the normal sweep. No AI and no direct match write is involved.
+func TestIntegration_WebResultApprovedThenSettled(t *testing.T) {
+	pool, cleanup := openIntegrationPool(t)
+	defer cleanup()
+	s := dbTestServer(pool)
+	s.Cfg.AutoSettleGraceMinutes = 0
+
+	id := insertEndedMatch(t, s, "awaiting_result", nil)
+	res := &fetchedResult{
+		HomeGoals:   2,
+		AwayGoals:   1,
+		HomeGoalsHT: intp(1),
+		AwayGoalsHT: intp(0),
+		Source:      "espn",
+		SourceURL:   "https://site.api.espn.com/test",
+		Detail:      "Test — ESPN 2-1",
+	}
+	approved, err := s.storeApprovedWebResult(context.Background(), id, res)
+	if err != nil || !approved {
+		t.Fatalf("store approved result: approved=%v err=%v", approved, err)
+	}
+	// Idempotent: repeated discovery must not create a second approval.
+	again, err := s.storeApprovedWebResult(context.Background(), id, res)
+	if err != nil || again {
+		t.Fatalf("second approval: approved=%v err=%v", again, err)
+	}
+
+	s.runSettlementPass()
+
+	status, settled := matchState(t, s, id)
+	if !settled || status != "finished" {
+		t.Fatalf("web result must settle: status=%q settled=%v", status, settled)
+	}
+	var source string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT source FROM results_archive WHERE match_id = $1 ORDER BY created_at DESC LIMIT 1
+	`, id).Scan(&source); err != nil || source != "auto" {
+		t.Fatalf("archive source = %q (err %v), want auto", source, err)
+	}
+}
+
 // The auto-refund path was broken for the same reason as auto-settle: the
 // synthetic request had no chi route param. Lock it in.
 func TestIntegration_SettlementSweep_RefundsCancelledMatch(t *testing.T) {

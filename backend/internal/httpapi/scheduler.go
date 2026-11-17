@@ -46,8 +46,10 @@ func StartPushScheduler(s *Server) {
 //
 // It runs once on startup and then on a short interval (default 15 minutes):
 //   - ended matches with no result move to 'awaiting_result', never 'finished';
-//   - an approved AI suggestion is used only as a fallback when no score has
-//     been stored on the match by an admin;
+//   - public result sites (ESPN, cross-checked with 100Tip) are searched for
+//     scores; a find writes an approved result suggestion — no model is used;
+//   - an approved suggestion is used only as a fallback when no score has been
+//     stored on the match by an admin;
 //   - refunds are retried while a postponed/cancelled match still has pending
 //     slips.
 //
@@ -123,7 +125,8 @@ func (s *Server) runSettlementPass() {
 	// are included only while they still have pending slips, so a completed
 	// refund is not retried and re-logged every pass.
 	rows, err := conn.Query(ctx, `
-		SELECT id, status, home_goals, away_goals, home_goals_ht, away_goals_ht
+		SELECT id, status, home_goals, away_goals, home_goals_ht, away_goals_ht,
+		       home_team, away_team, match_date
 		FROM matches
 		WHERE settled_at IS NULL
 		  AND (match_date + kickoff_time)
@@ -142,18 +145,11 @@ func (s *Server) runSettlementPass() {
 		return
 	}
 
-	type candidate struct {
-		id     string
-		status string
-		home   *int
-		away   *int
-		homeHT *int
-		awayHT *int
-	}
-	var cands []candidate
+	var cands []settlementCandidate
 	for rows.Next() {
-		var c candidate
-		if err := rows.Scan(&c.id, &c.status, &c.home, &c.away, &c.homeHT, &c.awayHT); err != nil {
+		var c settlementCandidate
+		if err := rows.Scan(&c.id, &c.status, &c.home, &c.away, &c.homeHT, &c.awayHT,
+			&c.homeTeam, &c.awayTeam, &c.matchDate); err != nil {
 			log.Printf("auto-settle: scan candidate: %v", err)
 			continue
 		}
@@ -163,6 +159,15 @@ func (s *Server) runSettlementPass() {
 		log.Printf("auto-settle: iterate candidates: %v", err)
 	}
 	rows.Close()
+
+	// Discover results from public websites before settling. This is a
+	// deterministic feed, independent of Groq; the discovered score becomes an
+	// approved suggestion and is settled by the same guarded loop below.
+	if feedStats := s.fetchAndApproveWebResults(ctx, cands); feedStats.Approved > 0 || feedStats.Conflicts > 0 || feedStats.SourcesUnavailable > 0 {
+		log.Printf("auto-result: pass complete — dates=%d fixtures=%d approved=%d conflicts=%d unavailable=%d",
+			feedStats.DatesScanned, feedStats.ESPNFixtures, feedStats.Approved,
+			feedStats.Conflicts, feedStats.SourcesUnavailable)
+	}
 
 	settled, refunded, noResult := 0, 0, 0
 	for _, c := range cands {

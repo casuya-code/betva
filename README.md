@@ -821,7 +821,7 @@ These were not in the brief but the product will need them:
 
 > A Groq-hosted model reads football result pages and turns them into structured rows. It is an **assistant that fills a form**, never the final authority on money.
 
-> **Status: 🟡 partially built.** The fetch → extract → validate → admin review pipeline works end to end, and the settlement scheduler will settle a match from the newest **admin-approved** suggestion. Automatic source discovery, two-source agreement, and the `DISPUTED` state are **not built**. An admin must still approve a suggestion before it can be used; raw AI output never settles a match.
+> **Status: 🟡 partially built (AI path).** The fetch → extract → validate → admin review pipeline works end to end, and the settlement scheduler will settle a match from the newest **admin-approved** suggestion. Raw AI output never settles a match. Deterministic, non-AI source discovery and two-source agreement are built separately — see [Automatic web result discovery](#automatic-web-result-discovery-no-ai) below. A formal `DISPUTED` UI state is still not built; a disagreement is simply left in `awaiting_result` for an admin.
 
 ### Correction Before Anything Else
 
@@ -864,17 +864,53 @@ Settlement scheduler settles the match from the approved score, or an
 admin settles manually in Matches (result + slips + notifications)
 ```
 
-**Planned automation (⬜):**
+An in-process settlement scheduler runs every 15 minutes by default and now
+includes deterministic web discovery (below). `AUTO_SETTLE_ENABLED=0` turns the
+whole job off.
+
+### Automatic web result discovery (no AI)
+
+A separate, non-AI stage runs inside the same settlement sweep:
 
 ```
-Daily scheduler (Railway cron) → fetch a fixed list of sources
-        → two independent sources must agree
-        → disagreement = DISPUTED, settlement blocked
+unsettled matches past grace
+  → group by kickoff date (most recent first, up to AUTO_RESULT_FETCH_MAX_DATES)
+  → ESPN public scoreboard JSON for that date
+  → match fixtures by folded home + away team name (accents/punctuation ignored)
+  → FT score from competitors[], HT score from goal minutes in details[]
+  → 100Tip graded rows for today/yesterday cross-check the FT and HT scores
+  → agreement → write an APPROVED result_suggestions row (provider 'espn')
+  → disagreement or no source → leave the match in awaiting_result for an admin
+  → settlement sweep settles the approved score with the normal locks
 ```
 
-An in-process settlement scheduler **does** run (every 15 minutes by default), but it never discovers sources — it only uses a score already stored on the match or an already-approved suggestion. `AUTO_SETTLE_ENABLED=0` turns it off.
+Important properties:
 
-### Sources
+- **No model is involved.** No Groq key, prompt, or inference. Scores come from
+  structured fields on public pages.
+- **No unattended writes to money.** Discovery only writes an approved
+  suggestion; the settlement handler remains the only code that updates
+  `matches`, `bets`, `results_archive`, and sends notifications.
+- **Conservative half-time grading.** HT is derived only when ESPN's goal list
+  accounts for every full-time goal. A 0–0 full time safely implies a 0–0 half
+  time. Otherwise HT stays unknown and an HT-market slip is not auto-graded.
+- **Conflict safety.** If 100Tip has the same fixture with a different score,
+  auto-approval is skipped and the mismatch is logged with `auto-result:`.
+- **Fetched URLs are SSRF-guarded** by the same `publicHTTPClient` used for AI
+  sources (public IPs only, DNS pinned, redirects refused).
+- `AUTO_RESULT_FETCH_ENABLED=0` stops discovery; manual settlement and the AI
+  assistant continue to work.
+
+An admin can trigger discovery for one date on demand:
+
+```
+POST /api/v1/admin/results/scan   {"date":"YYYY-MM-DD"}
+```
+
+The response reports `dates_scanned`, `espn_fixtures`, `approved`, `conflicts`,
+and `sources_unavailable`. Settlement still happens through the next sweep.
+
+### Sources (manual AI flow)
 
 The admin supplies the URL; the server does not know these sites by name.
 
@@ -1851,6 +1887,8 @@ The script exits `0` only when the throwaway database was created, restored, and
 | `AUTO_SETTLE_ENABLED` | No | Default `1`. Set to `0` to stop the settlement scheduler |
 | `AUTO_SETTLE_GRACE_MINUTES` | No | Minutes after kickoff before a match is settled; default `120` |
 | `AUTO_SETTLE_INTERVAL_MINUTES` | No | Settlement sweep interval; default `15` |
+| `AUTO_RESULT_FETCH_ENABLED` | No | Default `1`. Set to `0` to stop deterministic web result discovery (ESPN + 100Tip) |
+| `AUTO_RESULT_FETCH_MAX_DATES` | No | Most recent match dates scanned per sweep; default `7` |
 | `GROQ_API_KEY` | AI | Groq API key. Empty disables the AI Results centre (`503`). Set on staging 2026-11-16 |
 | `GROQ_MODEL` | No | Default `openai/gpt-oss-20b` |
 | `ACCESS_FEE_CENTS` | No | Flat monthly access rate in cents; public via `/config`, shown on Profile. `0` shows "Ask the admin" |
@@ -1898,7 +1936,7 @@ Rules the audit enforces: **no horizontal overflow at 320 px**, every control at
 - User activation: **manual** (admin marks active after payment) until automated
 - Public landing page: **planned** (live match ticker + activity feed + signup wall at the point of action) ⬜
 - Notifications: **PWA Web Push** from admin, with in-app inbox authoritative and per-category mutes; SMS fallback is ⬜
-- Results extraction: **Groq parses a server-fetched page → validator → admin approval**; AI never settles bets
+- Results extraction: **ESPN JSON + 100Tip cross-check → approved suggestion → settlement** (no AI), plus an optional **Groq parses a server-fetched page → validator → admin approval** path; neither raw feed nor AI output settles bets without an approved suggestion
 - Data: **daily off-site database dumps** run to the `betva-backups` bucket with verified manifests and GFS retention, and are mirrored to Cloudflare R2 (`betva-backups-r2`). Restore drills passed for both the staging copy and the off-site object. Managed PITR remains ⬜.
 - Security: **HTTPS + Cloudflare WAF**, parameterized queries, bcrypt, admin 2FA ⬜, audit trail, pen test before launch ⬜
 - Revenue: **access contribution** for running costs — explicitly **not** payment for predictions
