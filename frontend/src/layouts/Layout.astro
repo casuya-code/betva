@@ -6,12 +6,14 @@ interface Props {
   description?: string;
   active?: string;
   hideNav?: boolean;
+  lite?: boolean;
 }
 const {
   title = 'Betva',
   description = 'Betva — football betting and community for Tanzania. Fixed stakes, fast results, honest records.',
   active = '',
   hideNav = false,
+  lite = false,
 } = Astro.props;
 const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 ---
@@ -36,15 +38,17 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <link rel="preconnect" href={API} crossorigin />
     <link rel="dns-prefetch" href={API} />
     <title>{title}</title>
-    <noscript><style>#page-preloader{display:none!important}</style></noscript>
+    {!lite && <noscript><style>#page-preloader{display:none!important}</style></noscript>}
   </head>
   <body>
+    {!lite && (
     <div id="page-preloader" class="page-preloader" aria-hidden="true">
       <div class="page-preloader-inner">
         <img src="/favicon.svg" alt="" class="page-preloader-mark" width="48" height="48" decoding="async" />
         <div class="page-preloader-bar"></div>
       </div>
     </div>
+    )}
     <main class={hideNav ? '' : 'has-bottom-nav'}>
       <slot />
     </main>
@@ -70,121 +74,124 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     </nav>
     )}
 
-    <!-- Session reminder: 60 minutes, with a one-tap cool-off -->
-    <div id="breakBanner" class="nudge hidden" role="region" aria-label="Session reminder">
-      <div class="flex items-center justify-between gap-2 mb-1">
-        <div class="font-semibold">You've been here an hour</div>
-        <span class="badge badge-pending">⏱ 60 MIN</span>
+    {!lite && (
+      <div id="breakBanner" class="nudge hidden" role="region" aria-label="Session reminder">
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <div class="font-semibold">You've been here an hour</div>
+          <span class="badge badge-pending">⏱ 60 MIN</span>
+        </div>
+        <p class="text-sm text-[var(--text-2)] mb-3">Take a break? Your access stays active and betting pauses if you choose.</p>
+        <div class="flex gap-2">
+          <button class="btn btn-primary flex-1" id="breakTake" type="button">Take a 3h break</button>
+          <button class="btn btn-secondary" id="breakDismiss" type="button">Dismiss</button>
+        </div>
+        <div id="breakMsg" class="text-sm mt-2" aria-live="polite"></div>
       </div>
-      <p class="text-sm text-[var(--text-2)] mb-3">Take a break? Your access stays active and betting pauses if you choose.</p>
-      <div class="flex gap-2">
-        <button class="btn btn-primary flex-1" id="breakTake" type="button">Take a 3h break</button>
-        <button class="btn btn-secondary" id="breakDismiss" type="button">Dismiss</button>
-      </div>
-      <div id="breakMsg" class="text-sm mt-2" aria-live="polite"></div>
-    </div>
+    )}
 
-    <script>
-      import { registerServiceWorker } from '../lib/push';
-      import { API } from '../lib/api';
+    {!lite && (
+      <script>
+        import { registerServiceWorker } from '../lib/push';
+        import { API } from '../lib/api';
 
-      // Defer service worker registration so it doesn't compete with first paint/data fetch.
-      const ric = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => void) | undefined;
-      if (typeof ric === 'function') {
-        ric(() => registerServiceWorker(), { timeout: 2000 });
-      } else {
-        window.addEventListener('load', () => registerServiceWorker(), { once: true });
-      }
+        // Defer service worker registration so it doesn't compete with first paint/data fetch.
+        const ric = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => void) | undefined;
+        if (typeof ric === 'function') {
+          ric(() => registerServiceWorker(), { timeout: 2000 });
+        } else {
+          window.addEventListener('load', () => registerServiceWorker(), { once: true });
+        }
 
-      const pre = document.getElementById('page-preloader');
-      const hidePre = () => {
-        if (!pre || pre.classList.contains('is-hidden')) return;
-        pre.classList.add('is-hidden');
-        pre.addEventListener('transitionend', () => pre.remove(), { once: true });
-        // Fallback removal if transitions are disabled.
-        setTimeout(() => pre.remove(), 400);
-      };
-      const showContent = () => requestAnimationFrame(hidePre);
-      // Hide as soon as the DOM is usable to minimize perceived load time.
-      if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        showContent();
-      } else {
-        document.addEventListener('DOMContentLoaded', showContent, { once: true });
-      }
-      window.addEventListener('load', hidePre, { once: true });
-      // Failsafe only: never let a stuck state block the UI.
-      setTimeout(hidePre, 1200);
+        const pre = document.getElementById('page-preloader');
+        const hidePre = () => {
+          if (!pre || pre.classList.contains('is-hidden')) return;
+          pre.classList.add('is-hidden');
+          pre.addEventListener('transitionend', () => pre.remove(), { once: true });
+          // Fallback removal if transitions are disabled.
+          setTimeout(() => pre.remove(), 400);
+        };
+        const showContent = () => requestAnimationFrame(hidePre);
+        // Hide as soon as the DOM is usable to minimize perceived load time.
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+          showContent();
+        } else {
+          document.addEventListener('DOMContentLoaded', showContent, { once: true });
+        }
+        window.addEventListener('load', hidePre, { once: true });
+        // Failsafe only: never let a stuck state block the UI.
+        setTimeout(hidePre, 1200);
 
-      const HOUR_MS = 60 * 60 * 1000;
-      const path = location.pathname;
-      const token = localStorage.getItem('betva_token');
-      const skip = path.startsWith('/admin') || path === '/login' || path === '/register';
+        const HOUR_MS = 60 * 60 * 1000;
+        const path = location.pathname;
+        const token = localStorage.getItem('betva_token');
+        const skip = path.startsWith('/admin') || path === '/login' || path === '/register';
 
-      if (token && !skip) {
-        const initNudge = () => {
-          const KEY = 'betva_session_start';
-          let start = Number(localStorage.getItem(KEY) || 0);
-          if (!start || Number.isNaN(start)) {
-            start = Date.now();
-            localStorage.setItem(KEY, String(start));
-          }
+        if (token && !skip) {
+          const initNudge = () => {
+            const KEY = 'betva_session_start';
+            let start = Number(localStorage.getItem(KEY) || 0);
+            if (!start || Number.isNaN(start)) {
+              start = Date.now();
+              localStorage.setItem(KEY, String(start));
+            }
 
-          const banner = document.getElementById('breakBanner');
-          const check = () => {
-            if (Date.now() - start >= HOUR_MS) banner?.classList.remove('hidden');
-          };
-          const timer = window.setInterval(check, 60_000);
-          check();
+            const banner = document.getElementById('breakBanner');
+            const check = () => {
+              if (Date.now() - start >= HOUR_MS) banner?.classList.remove('hidden');
+            };
+            const timer = window.setInterval(check, 60_000);
+            check();
 
-          document.getElementById('breakDismiss')?.addEventListener('click', () => {
-            banner?.classList.add('hidden');
-            start = Date.now();
-            localStorage.setItem(KEY, String(start));
-          });
+            document.getElementById('breakDismiss')?.addEventListener('click', () => {
+              banner?.classList.add('hidden');
+              start = Date.now();
+              localStorage.setItem(KEY, String(start));
+            });
 
-          document.getElementById('breakTake')?.addEventListener('click', async () => {
-            const btn = document.getElementById('breakTake') as HTMLButtonElement | null;
-            const msg = document.getElementById('breakMsg')!;
-            if (!btn) return;
-            btn.disabled = true;
-            btn.textContent = 'Pausing…';
-            try {
-              const res = await fetch(`${API}/api/v1/self-exclusion`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${localStorage.getItem('betva_token') || ''}`,
-                },
-                body: JSON.stringify({ hours: 3 }),
-              });
-              const data = await res.json().catch(() => ({}));
-              if (!res.ok) {
-                msg.textContent = data.error || 'Could not pause betting.';
+            document.getElementById('breakTake')?.addEventListener('click', async () => {
+              const btn = document.getElementById('breakTake') as HTMLButtonElement | null;
+              const msg = document.getElementById('breakMsg')!;
+              if (!btn) return;
+              btn.disabled = true;
+              btn.textContent = 'Pausing…';
+              try {
+                const res = await fetch(`${API}/api/v1/self-exclusion`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('betva_token') || ''}`,
+                  },
+                  body: JSON.stringify({ hours: 3 }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                  msg.textContent = data.error || 'Could not pause betting.';
+                  msg.className = 'text-sm mt-2 text-[var(--danger)]';
+                  btn.disabled = false;
+                  btn.textContent = 'Take a 3h break';
+                  return;
+                }
+                msg.textContent = `Betting paused until ${data.until}. You can still browse.`;
+                msg.className = 'text-sm mt-2 text-[var(--success)]';
+                btn.remove();
+                window.clearInterval(timer);
+                setTimeout(() => banner?.classList.add('hidden'), 5000);
+              } catch {
+                msg.textContent = 'Network error. Try again.';
                 msg.className = 'text-sm mt-2 text-[var(--danger)]';
                 btn.disabled = false;
                 btn.textContent = 'Take a 3h break';
-                return;
               }
-              msg.textContent = `Betting paused until ${data.until}. You can still browse.`;
-              msg.className = 'text-sm mt-2 text-[var(--success)]';
-              btn.remove();
-              window.clearInterval(timer);
-              setTimeout(() => banner?.classList.add('hidden'), 5000);
-            } catch {
-              msg.textContent = 'Network error. Try again.';
-              msg.className = 'text-sm mt-2 text-[var(--danger)]';
-              btn.disabled = false;
-              btn.textContent = 'Take a 3h break';
-            }
-          });
-        };
-        // Defer non-critical session-nudge setup so initial render/data work runs first.
-        if ('requestIdleCallback' in window) {
-          (window as any).requestIdleCallback(initNudge, { timeout: 3000 });
-        } else {
-          setTimeout(initNudge, 500);
+            });
+          };
+          // Defer non-critical session-nudge setup so initial render/data work runs first.
+          if ('requestIdleCallback' in window) {
+            (window as any).requestIdleCallback(initNudge, { timeout: 3000 });
+          } else {
+            setTimeout(initNudge, 500);
+          }
         }
-      }
-    </script>
+      </script>
+    )}
   </body>
 </html>
