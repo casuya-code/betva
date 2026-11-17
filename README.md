@@ -490,7 +490,7 @@ A persistent, compact counter shown on Home and in Profile:
 
 - The counter **updates only after settlement**, never in real time, so it cannot flicker.
 - It is **aggregate**, not per-user — the same record for everyone, which keeps it cheap to compute and cache.
-- **Implementation:** `GET /api/v1/stats` counts one tip per published market on a settled match, so a settled match with two markets counts twice. A correction replaces the match's current result, so a corrected match is counted once, at its corrected outcome. The response carries `total`, `wins`, `losses`, `win_rate_pct`, `current_streak`, `streak_type`, and `best_win_streak`, and is cached for 60 seconds. The UI (`components/TrackRecord.astro`) renders it on Home and Profile and shows losses in the same weight as wins.
+- **Implementation:** `GET /api/v1/stats` counts one tip per published market on a settled match, so a settled match with two markets counts twice. A correction replaces the match's current result, so a corrected match is counted once, at its corrected outcome. The response carries `total`, `wins`, `losses`, `win_rate_pct`, `current_streak`, `streak_type`, and `best_win_streak`, and is cached for 60 seconds server-side (Redis-backed when available, with an in-memory fallback) as well as in the browser. The UI (`components/TrackRecord.astro`) renders it on Home and Profile and shows losses in the same weight as wins.
 
 ### Confidence Badge
 
@@ -1162,9 +1162,10 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
 4. **Railway managed volume backups / PITR** — Pro-only. The Hobby workspace rejects the
    schedule API with "Manual backups and backup schedules are only available for Pro
    workspaces", so RPO is up to 24 hours until the workspace is upgraded. ⬜
-5. **Redis persistence** — Redis is connected at startup but **currently unused**, so it
-   holds no data worth backing up. ⬜
-6. **Code & config in Git** — the schema is versioned (`001`–`007`), so a fresh database
+5. **Redis persistence** — Redis now holds only rebuildable caches (`/stats`) and
+   rate-limit counters, both of which expire on their own, so there is no durable
+   state to back up. ✅
+6. **Code & config in Git** — the schema is versioned (`001`–`011`), so a fresh database
    can be rebuilt from scratch. ✅
 7. **Media storage** — uploads live on the Railway volume `media` mounted at `/data` and
    are **not** in a Postgres dump. A volume mounts to one service, so the cron cannot read
@@ -1233,13 +1234,13 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 > **Status: designed for scale, currently a single instance.** The API is stateless and can run multiple copies, but the other layers are not wired yet.
 
 - **Stateless Go API** — no session state in the process, so it can run behind a load balancer. ✅ (single instance today)
-- **Redis for live odds & feeds** — connected at startup but **unused**; every read and write goes to Postgres. ⬜
+- **Redis for caches & shared rate limits** — backs the 60s `/stats` cache and the shared rate-limit counters; falls back to in-memory if Redis is down. ✅ Live odds/feeds still use Postgres (no live source yet). ⬜
 - **Connection pooling** — pgx pool inside the API. PgBouncer or a managed pooler is ⬜.
 - **Read/write split** — heavy reads go to a replica; writes go to the primary. ⬜
 - **SSE/WebSocket at scale** — Redis pub/sub so any API instance can reach any user. ⬜ (no SSE endpoint exists)
 - **Cloudflare absorbs the edge** — static assets, media, and cached pages never reach the origin. ⬜ (not deployed)
 - **Queue-based writes for bets** — a kickoff spike becomes a queue, not a DB crash. ⬜ (bets are written synchronously inside one transaction)
-- **Rate limiting** at Cloudflare and the API — per-IP and per-user, stricter on login, registration, and payment endpoints. ⬜ **Known gap** — see the pen-test checklist.
+- **Rate limiting** at Cloudflare and the API — per-IP and per-user, stricter on login, registration, and payment endpoints. API limits are shared across replicas via Redis; Cloudflare edge limiting is ⬜. See the pen-test checklist.
 - **Graceful degradation** — if push fails, the in-app inbox still works. ✅ (DB slowness and write queueing are ⬜)
 
 ### Never Losing Data Under Load
@@ -1248,7 +1249,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 - **Idempotency keys** on every write — a retried request cannot double-charge or double-pay. ⬜ Not implemented; duplicate placement is currently blocked by the one-bet-per-market constraint and the row lock, not by request keys.
 - **Append-only ledger** — balance changes are never overwritten, only appended; reconciliation is always possible. ✅
 - **Backups run continuously**, not only at night, so a failure at peak loses minutes, not hours. ⬜
-- **Migrations are versioned** — `001`–`007`, applied in order. They are forward-only; automatic rollback is ⬜. 🟡
+- **Migrations are versioned** — `001`–`011`, applied in order. They are forward-only; automatic rollback is ⬜. 🟡
 
 ### Capacity Planning
 
@@ -1280,7 +1281,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 - **CSRF protection** — the API authenticates with a bearer token in `Authorization`, not an ambient cookie, so classic CSRF does not apply. Any future cookie-based auth must add tokens. ✅/⬜
 - **Authentication:** phone + bcrypt-hashed password, normalized phone numbers, JWT with 30-day expiry. **Argon2 is not used** — bcrypt at the library default cost. ✅
 - **Admin 2FA** — when `ADMIN_TOTP_SECRET` is set, admin login requires a current six-digit TOTP code (or `ADMIN_RECOVERY_CODE`) in addition to the env-var password. Generate secrets with `go run ./cmd/totp`; the login form shows the code field only when 2FA is configured. ✅ TOTP; WebAuthn/passkeys remain ⬜.
-- **Rate limiting** on login, registration, admin login, media upload, and AI suggestions — fixed windows keyed by IP, phone, or user ID, with `Retry-After` on `429`. ✅ `backend/internal/httpapi/ratelimit.go`. Limits are in-memory and per-process: fine for one replica, but a scale-out needs shared Redis counters. Progressive lockout and a safe unlock flow are still ⬜.
+- **Rate limiting** on login, registration, admin login, media upload, and AI suggestions — fixed windows keyed by IP, phone, or user ID, with `Retry-After` on `429`. ✅ `backend/internal/httpapi/ratelimit.go`. Counters are shared across replicas via Redis (atomic Lua script) with an in-memory fallback when Redis is unavailable; Redis calls are bounded to 75ms so an outage cannot stall requests. Progressive lockout and a safe unlock flow are still ⬜.
 - **Account enumeration** — unknown phone numbers run a dummy bcrypt comparison, so login timing does not reveal whether an account exists. ✅
 - **Account lockout** after repeated failures, with a safe unlock path. ⬜ The per-phone attempt cap slows guessing but does not implement a formal lockout/unlock flow.
 - **Least privilege in the database** — the API role currently owns the schema locally; production should split migration and runtime roles. 🟡
@@ -1327,9 +1328,9 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 | --- | --- | --- |
 | Frontend | Astro 7 + Tailwind v4, static output, PWA manifest + service worker | ✅ |
 | Backend | Go 1.x, chi, pgx | ✅ |
-| Database | PostgreSQL 18 locally; migrations `001`–`007` | ✅ |
-| Cache / queues | Redis client connected at startup, no reads or writes yet | 🟡 |
-| Media | Local `MEDIA_DIR`, served from `/media/*` with immutable cache headers | 🟡 |
+| Database | PostgreSQL 18 locally; migrations `001`–`011` | ✅ |
+| Cache / queues | Redis backs the `/stats` cache and shared rate limits (in-memory fallback) | ✅ |
+| Media | Local `MEDIA_DIR` by default; R2 when configured on the API | ✅ |
 | Results extraction | Groq `openai/gpt-oss-20b`, admin-triggered, manual approval | ✅ |
 | Payments | Manual admin credit only; no mobile-money integration | ⬜ |
 | Hosting | Nothing deployed; local `:8080` API and `:4321` frontend | ⬜ |
@@ -1378,7 +1379,7 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 ### Language & Framework: Go (chosen) ✅
 
 - **Why:** Go is built for high concurrency — thousands of users can place bets and upload content simultaneously without the server crashing or lagging.
-- **Status:** chi router, pgx, and a Redis client (connected but unused). Node.js/Fastify was the alternative and was not used. ✅
+- **Status:** chi router, pgx, and Redis for caching + shared rate limits. Node.js/Fastify was the alternative and was not used. ✅
 
 ### Real-Time Odds: Server-Sent Events (SSE) or Lightweight WebSockets ⬜
 
@@ -1390,7 +1391,7 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 | Component | Role | Status |
 | --- | --- | --- |
 | **PostgreSQL** | User accounts, wallet balances, betting slips, matches, community, notifications, analytics | ✅ Authoritative store |
-| **Redis** | Intended for live odds, feeds, and pub/sub | 🟡 Connected at startup; no application reads or writes yet. Rate limiting is in-memory today. |
+| **Redis** | Short-lived `/stats` cache and shared rate-limit counters | ✅ Connected at startup; in-memory fallback if unavailable. Live odds/feeds/pub-sub still ⬜ (no live source yet). |
 
 ---
 
@@ -1403,13 +1404,13 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 - **Images:** uploads are stored as received, capped at **400 KB**, and served from `/media/*`. Server-side MIME sniffing prevents a renamed executable from being served as an image. Auto-conversion to WebP/AVIF and blur-up placeholders are ⬜.
 - **Profile pictures:** `PUT /me` now accepts only local `/media/<name>.(jpg|jpeg|png|webp|gif)` paths, so a tracking pixel, `javascript:` URL, or remote embed cannot be stored as an avatar. There is still no upload UI or separate 10 KB image-size check. 🟡
 - **Videos:** uploads are capped at **3 MB**, served as a single file with `preload="none"` and native controls. No autoplay. HLS adaptive bitrate is ⬜.
-- **Storage:** local `MEDIA_DIR` with random 24-character hex filenames and `Cache-Control: public, max-age=31536000, immutable`. Production moves to R2/Images/Stream behind the same upload endpoint. ⬜
+- **Storage:** local `MEDIA_DIR` with random 24-character hex filenames and `Cache-Control: public, max-age=31536000, immutable` by default; when the five `R2_*` media variables are set, uploads go straight to Cloudflare R2 behind the same endpoint. ✅
+- **Cloudflare Images/Stream** (auto WebP/AVIF, blur-up placeholders, adaptive HLS) is still ⬜.
 
-### Storage: Cloudflare R2 or AWS S3 ⬜
+### Storage: Cloudflare R2 ✅ (opt-in via env vars)
 
-- **Why:** Cheap, scalable storage for community uploads.
-- **Cloudflare R2 advantage:** Zero bandwidth/egress fees.
-- **Status:** Not in use. Uploads live on the API host's disk, which does not survive a redeploy without a mounted volume.
+- **Why:** Cheap, scalable storage for community uploads, zero egress fees.
+- **Status:** Implemented in `backend/internal/httpapi/media_storage.go`. When `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_MEDIA_BUCKET`, and `R2_MEDIA_PUBLIC_URL` are all set, `POST /api/v1/media` writes to R2 (S3 API, region `auto`) with immutable cache headers and stores the public URL in the post. Otherwise it falls back to the local `MEDIA_DIR`. No frontend change is needed to switch. Staging values are recorded in `docs/DEPLOYMENT.md`; the API service must have the media credentials set to enable it.
 
 ---
 
@@ -1563,8 +1564,8 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 
 | Area | Status | Location |
 | --- | --- | --- |
-| Go API (chi router, pgx, Redis-ready) | ✅ Working | `backend/` |
-| Postgres schema and migrations `001`–`007` | ✅ Working | `backend/migrations/` |
+| Go API (chi router, pgx, Redis caches + shared rate limits) | ✅ Working | `backend/` |
+| Postgres schema and migrations `001`–`011` | ✅ Working | `backend/migrations/` |
 | User register / login / profile | ✅ Working | `backend/internal/httpapi/auth.go` |
 | Admin login from environment variables | ✅ Working | `backend/internal/httpapi/admin.go` |
 | Matches CSV upload, validation, duplicate detection, import log | ✅ Working | `backend/internal/httpapi/matches.go` |
@@ -1598,7 +1599,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Daily off-site Postgres backup cron | ✅ Live | `backend/cmd/backup`, `backend/Dockerfile.backup`, `docs/DEPLOYMENT.md#4-off-site-backups` |
 | PNG/ICO app icons from the eagle-B mark | ✅ Working | `frontend/scripts/generate-icons.mjs` |
 | Penetration test and real-device latency measurement | ⬜ Later | Phase 6 |
-| Cloudflare edge/WAF, R2 media, managed PITR | ⬜ Later | Phase 6 |
+| Cloudflare edge/WAF, managed PITR | ⬜ Later | Phase 6 |
 | Public landing page, KYC queue, admin profile, results archive page | ⬜ Later | Post-launch |
 
 ### Matches CSV format

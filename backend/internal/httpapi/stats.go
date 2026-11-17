@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"math"
 	"net/http"
 	"time"
@@ -26,6 +27,17 @@ type platformRecord struct {
 // counter is only worth anything if it can show a losing run.
 func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// Aggregate, not per-user, so one cached blob serves everyone. The counter
+	// only changes at settlement; a 60-second cache saves the full scan below
+	// on every browser/CDN cache miss without hiding real results.
+	if cached, ok := s.statsCache.Get(ctx); ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "public, max-age=60")
+		w.Write(cached)
+		return
+	}
+
 	rows, err := s.Pool.Query(ctx, `
 		SELECT m.settled_at, mm.market,
 		       COALESCE(m.home_goals, 0), COALESCE(m.away_goals, 0),
@@ -82,6 +94,13 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 	// The counter changes only at settlement, so a short shared cache is safe
 	// and saves data on slow connections.
+	body, err := json.Marshal(rec)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "encode error"})
+		return
+	}
+	s.statsCache.Set(ctx, body)
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=60")
-	writeJSON(w, http.StatusOK, rec)
+	w.Write(body)
 }

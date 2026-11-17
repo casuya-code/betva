@@ -19,7 +19,13 @@ type Server struct {
 	RDB   *redis.Client
 	Media *mediaStore
 
-	// Rate limiters. In-memory and per-process; see ratelimit.go.
+	// Short-lived JSON caches for public, aggregate data. Redis-backed when
+	// available so the cache is shared across replicas, in-memory otherwise.
+	// See cache.go.
+	statsCache *jsonCache
+
+	// Rate limiters. Redis-backed when available so limits are shared across
+	// replicas, in-memory per-process otherwise; see ratelimit.go.
 	loginIP       *RateLimiter
 	loginPhone    *RateLimiter
 	registerIP    *RateLimiter
@@ -41,17 +47,18 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 		Pool:          pool,
 		RDB:           rdb,
 		Media:         newMediaStore(cfg),
-		loginIP:       NewRateLimiter(60, 5*time.Minute),
-		loginPhone:    NewRateLimiter(10, 15*time.Minute),
-		registerIP:    NewRateLimiter(30, time.Hour),
-		registerPhone: NewRateLimiter(3, time.Hour),
-		adminLoginIP:  NewRateLimiter(20, 5*time.Minute),
-		mediaUpload:   NewRateLimiter(30, time.Hour),
-		aiSuggest:     NewRateLimiter(30, time.Hour),
+		statsCache:    newJSONCache("betva:stats:v1", 60*time.Second, rdb),
+		loginIP:       NewSharedRateLimiter(60, 5*time.Minute, rdb, "login_ip"),
+		loginPhone:    NewSharedRateLimiter(10, 15*time.Minute, rdb, "login_phone"),
+		registerIP:    NewSharedRateLimiter(30, time.Hour, rdb, "register_ip"),
+		registerPhone: NewSharedRateLimiter(3, time.Hour, rdb, "register_phone"),
+		adminLoginIP:  NewSharedRateLimiter(20, 5*time.Minute, rdb, "admin_login_ip"),
+		mediaUpload:   NewSharedRateLimiter(30, time.Hour, rdb, "media_upload"),
+		aiSuggest:     NewSharedRateLimiter(30, time.Hour, rdb, "ai_suggest"),
 	}
 
 	// Broad flood guard. Auth, upload, and AI routes add stricter limits.
-	r.Use(NewRateLimiter(600, time.Minute).Middleware)
+	r.Use(NewSharedRateLimiter(600, time.Minute, rdb, "global").Middleware)
 
 	if err := os.MkdirAll(cfg.MediaDir, 0o755); err != nil {
 		log.Printf("media dir: %v", err)

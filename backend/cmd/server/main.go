@@ -52,9 +52,17 @@ func main() {
 
 	httpapi.Register(r, cfg, pool, rdb)
 
+	// Transport-level timeouts stop slow/stuck clients from holding goroutines
+	// and connections open. WriteTimeout is deliberately above the 30s handler
+	// timeout so a legitimately slow response is not cut off mid-write.
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: r,
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      45 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	go func() {

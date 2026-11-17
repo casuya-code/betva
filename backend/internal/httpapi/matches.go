@@ -869,6 +869,17 @@ func (s *Server) handleMatchHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// History is a bounded backward lookup, not a live feed. Cap the row count
+	// so this endpoint cannot scan and transfer six months of matches on every
+	// request; an optional ?limit= is honoured only up to the hard cap.
+	const maxHistoryMatches = 500
+	historyLimit := maxHistoryMatches
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n < historyLimit {
+			historyLimit = n
+		}
+	}
+
 	rows, err := s.Pool.Query(ctx, `
 		SELECT m.id, to_char(m.match_date, 'YYYY-MM-DD'), to_char(m.kickoff_time, 'HH24:MI'), COALESCE(m.league, ''),
 		       m.home_team, m.away_team, m.status, m.confidence,
@@ -880,7 +891,8 @@ func (s *Server) handleMatchHistory(w http.ResponseWriter, r *http.Request) {
 		WHERE m.match_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Dar_es_Salaam')::date - INTERVAL '6 months'
 		GROUP BY m.id
 		ORDER BY m.match_date DESC, m.kickoff_time, m.home_team
-	`)
+		LIMIT $1
+	`, historyLimit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
 		return

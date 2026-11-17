@@ -123,7 +123,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Per-phone limit: one number cannot be used to spam registrations. The
 	// IP limit is deliberately generous because mobile carriers put many users
 	// behind one NAT address.
-	if ok, retry := s.registerPhone.Allow("phone:" + req.Phone); !ok {
+	if ok, retry := s.registerPhone.AllowCtx(r.Context(), "phone:"+req.Phone); !ok {
 		writeRateLimited(w, retry)
 		return
 	}
@@ -172,7 +172,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Per-phone attempt limit. Ten attempts per 15 minutes leaves room for a
 	// mistyped password without allowing an online guessing loop.
-	if ok, retry := s.loginPhone.Allow("phone:" + req.Phone); !ok {
+	if ok, retry := s.loginPhone.AllowCtx(r.Context(), "phone:"+req.Phone); !ok {
 		writeRateLimited(w, retry)
 		return
 	}

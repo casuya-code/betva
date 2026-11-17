@@ -5,10 +5,12 @@ import tailwindcss from '@tailwindcss/vite';
 
 // https://astro.build/config
 export default defineConfig({
-  // Prefetch same-origin pages on hover/viewport so navigation feels instant.
+  // Prefetch only the links that opt in (the bottom-nav routes). This keeps
+  // navigation instant without downloading a full HTML page for every link
+  // that merely scrolls into view — a real data cost on cheap phones.
   prefetch: {
-    prefetchAll: true,
-    defaultStrategy: 'viewport',
+    prefetchAll: false,
+    defaultStrategy: 'hover',
   },
   // Smaller HTML output.
   compressHTML: true,

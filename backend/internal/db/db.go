@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -26,6 +27,12 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if cfg.MinConns == 0 {
 		cfg.MinConns = 2
 	}
+	// Recycle connections so a stale network connection or a server-side
+	// setting change cannot linger for the lifetime of the process. The health
+	// check keeps the pool from handing out a dead connection.
+	cfg.MaxConnLifetime = 30 * time.Minute
+	cfg.MaxConnIdleTime = 5 * time.Minute
+	cfg.HealthCheckPeriod = time.Minute
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

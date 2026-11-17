@@ -16,12 +16,16 @@ export const API: string = resolveApiBase();
 if (typeof window !== 'undefined') (window as any).BETVA_API = API;
 
 // Cache the public config (stake tiers, markets, payment number, fee) so pages
-// render instantly on repeat visits and on slow connections. The cache is
-// refreshed in the background; nothing user-specific lives in it.
+// render instantly on repeat visits and on slow connections. Nothing
+// user-specific lives in it. A fresh cache is used as-is: a background refresh
+// is throttled to at most once per REFRESH window, so opening several pages in
+// a row does not spend data re-fetching a config that barely ever changes.
 const CONFIG_CACHE_KEY = 'betva_config_cache';
 const CONFIG_TTL_MS = 60 * 60 * 1000;
+const CONFIG_REFRESH_MS = 10 * 60 * 1000;
 
 let configCache: any = null;
+let configFetchedAt = 0;
 let configPromise: Promise<any> | null = null;
 
 function readCachedConfig(): any | null {
@@ -33,28 +37,33 @@ function readCachedConfig(): any | null {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || !parsed.t || Date.now() - parsed.t > CONFIG_TTL_MS) return null;
     configCache = parsed.v;
+    configFetchedAt = parsed.t;
     return configCache;
   } catch {
     return null;
   }
 }
 
+function storeConfig(d: any): void {
+  configCache = d;
+  configFetchedAt = Date.now();
+  try {
+    localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ v: d, t: configFetchedAt }));
+  } catch {
+    /* quota or private mode */
+  }
+}
+
 export async function fetchConfig(): Promise<any> {
   const cached = readCachedConfig();
   if (cached) {
-    // Refresh in the background without blocking the caller.
-    if (!configPromise) {
+    // Only refresh in the background when the cached copy is old enough to be
+    // worth another request, and never run two refreshes at once.
+    if (!configPromise && Date.now() - configFetchedAt >= CONFIG_REFRESH_MS) {
       configPromise = fetch(`${API}/api/v1/config`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
-          if (d) {
-            configCache = d;
-            try {
-              localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ v: d, t: Date.now() }));
-            } catch {
-              /* quota or private mode */
-            }
-          }
+          if (d) storeConfig(d);
           return d;
         })
         .catch(() => null)
@@ -68,12 +77,7 @@ export async function fetchConfig(): Promise<any> {
   configPromise = fetch(`${API}/api/v1/config`)
     .then((r) => (r.ok ? r.json() : {}))
     .then((d) => {
-      configCache = d;
-      try {
-        localStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify({ v: d, t: Date.now() }));
-      } catch {
-        /* quota or private mode */
-      }
+      storeConfig(d);
       return d;
     })
     .catch(() => ({}))

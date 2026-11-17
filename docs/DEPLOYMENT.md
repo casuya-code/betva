@@ -351,7 +351,8 @@ Launch blockers or follow-ups, in order:
 
 1. **Cloudflare is not fully configured.** No WAF, no edge cache in Dar es Salaam/Mombasa
    (needs a custom domain), and the Vercel alias/Railway API are public directly. R2
-   **media uploads** are now supported in code when `R2_*` media env vars are set on `api`.
+   **media uploads** are enabled in production: all five `R2_*` media variables are set on
+   `api`, so new uploads go to R2 while the `/data` volume only serves legacy local files.
 2. **RPO is up to 24 hours.** Daily off-site dumps are live (section 4), but Railway
    managed volume backups and point-in-time recovery are Pro-only and this workspace is
    Hobby. Near-zero RPO for wallets needs Pro PITR or a WAL-shipping setup. Media on the

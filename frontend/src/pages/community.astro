@@ -140,7 +140,9 @@ import Layout from '../layouts/Layout.astro';
         // No autoplay, no preload: the user decides whether to spend data.
         return `<video class="post-media mt-3" controls preload="none" playsinline src="${src}"></video>`;
       }
-      return `<img class="post-media mt-3" src="${src}" alt="Photo shared by ${esc(p.nickname)}" loading="lazy" decoding="async" fetchpriority="low" />`;
+      // Intrinsic size matches the 4/3 ratio reserved by .post-media, so the
+      // feed does not shift when a lazy image finishes loading.
+      return `<img class="post-media mt-3" src="${src}" alt="Photo shared by ${esc(p.nickname)}" width="400" height="300" loading="lazy" decoding="async" fetchpriority="low" />`;
     }
 
     function reactionBar(p: Post): string {
