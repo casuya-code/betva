@@ -81,7 +81,7 @@ func Load() *Config {
 		}
 	}
 
-	return &Config{
+	c := &Config{
 		Port:          getEnv("PORT", "8080"),
 		DatabaseURL:   getEnv("DATABASE_URL", "postgres://betva:betva@localhost:5432/betva?sslmode=disable"),
 		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
@@ -123,6 +123,26 @@ func Load() *Config {
 		MonthlyCostCents: int64(Atoi(getEnv("MONTHLY_OPERATING_COST_CENTS", "0"), 0)),
 		AccessFeeCents:   int64(Atoi(getEnv("ACCESS_FEE_CENTS", "0"), 0)),
 	}
+
+	// Bad push settings must not take the whole app down. Clamp them to sane
+	// values so quiet-hour and cap checks can never produce an impossible window.
+	if c.PushDailyCap < 0 {
+		c.PushDailyCap = 0
+	}
+	c.QuietStartHour, _ = clampHour(c.QuietStartHour, 22)
+	c.QuietEndHour, _ = clampHour(c.QuietEndHour, 7)
+	if c.QuietStartHour == c.QuietEndHour {
+		c.QuietEndHour = (c.QuietEndHour + 1) % 24
+	}
+
+	return c
+}
+
+func clampHour(hour, fallback int) (int, bool) {
+	if hour < 0 || hour > 23 {
+		return fallback, false
+	}
+	return hour, true
 }
 
 // PushEnabled reports whether VAPID keys are configured.

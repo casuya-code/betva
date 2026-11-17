@@ -106,7 +106,8 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			protected.Post("/self-exclusion", s.handleSetSelfExclusion)
 		})
 
-	StartSettlementScheduler(s)
+		StartSettlementScheduler(s)
+		StartPushScheduler(s)
 
 		// admin
 		api.Route("/admin", func(adm chi.Router) {

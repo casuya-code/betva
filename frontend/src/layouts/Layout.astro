@@ -91,8 +91,10 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 
     {!lite && (
       <script>
-        import { registerServiceWorker } from '../lib/push';
+        import { registerServiceWorker, watchPushChanges } from '../lib/push';
         import { API } from '../lib/api';
+
+        watchPushChanges();
 
         // Defer service worker registration so it doesn't compete with first paint/data fetch.
         const ric = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => void) | undefined;

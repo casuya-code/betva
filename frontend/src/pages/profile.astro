@@ -148,7 +148,7 @@ import TrackRecord from '../components/TrackRecord.astro';
 
   <script>
     import { authFetch, esc, money, clearToken, toast, fetchConfig } from '../lib/api';
-    import { enablePush, pushSupported } from '../lib/push';
+    import { enablePush, disablePush, pushSupported } from '../lib/push';
 
     const statusClass: Record<string, string> = {
       active: 'badge-win',
@@ -344,7 +344,7 @@ import TrackRecord from '../components/TrackRecord.astro';
       const btn = document.getElementById('enablePushBtn') as HTMLButtonElement;
       const msg = document.getElementById('pushMsg')!;
       btn.disabled = true;
-      const result = await enablePush();
+      const result = await enablePush(btn.textContent?.trim() === 'Refresh');
       msg.textContent = result.message;
       msg.className = `text-sm ${result.ok ? 'text-[var(--success)]' : 'text-[var(--text-2)]'}`;
       pushStatus();
@@ -500,7 +500,10 @@ import TrackRecord from '../components/TrackRecord.astro';
       }
     });
 
-    document.getElementById('logoutBtn')!.addEventListener('click', () => {
+    document.getElementById('logoutBtn')!.addEventListener('click', async () => {
+      // Stop push for this account before the token is cleared, otherwise the
+      // device keeps receiving alerts after logout.
+      try { await disablePush(); } catch { /* logout must never be blocked */ }
       clearToken();
       localStorage.removeItem('betva_session_start');
       localStorage.removeItem('betva_push_asked');

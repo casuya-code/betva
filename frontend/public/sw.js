@@ -1,7 +1,7 @@
 /* Betva service worker: Web Push, notification clicks, and a small
    runtime cache for same-origin static assets (JS/CSS/images/fonts).
    HTML is never cached, so deploys always reach users. */
-const CACHE_NAME = 'betva-static-v2';
+const CACHE_NAME = 'betva-static-v3';
 const ASSET_RE = /\.(?:js|css|svg|png|jpe?g|webp|avif|ico|woff2?|webmanifest)$/i;
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -37,7 +37,9 @@ self.addEventListener('fetch', (event) => {
         const res = await fetch(req);
         if (res.ok) {
           const copy = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+          // Await the write: the worker can be terminated right after the
+          // response is returned, which used to make caching unreliable.
+          await caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
         }
         return res;
       } catch {
@@ -54,36 +56,70 @@ self.addEventListener('push', (event) => {
   } catch {
     data = { title: 'Betva', body: event.data ? event.data.text() : '' };
   }
+  if (!data || typeof data !== 'object') data = {};
 
-  const title = data.title || 'Betva';
+  const title = typeof data.title === 'string' && data.title ? data.title : 'Betva';
   const options = {
-    body: data.body || '',
+    body: typeof data.body === 'string' ? data.body : '',
     icon: '/favicon.svg',
     badge: '/favicon.svg',
-    tag: data.tag || 'betva',
+    tag: typeof data.tag === 'string' && data.tag ? data.tag : 'betva',
     renotify: false,
-    data: { url: data.link || '/' },
+    data: { url: typeof data.link === 'string' ? data.link : '/' },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// Browsers rotate push subscriptions. Tell open tabs to re-subscribe with the
+// current VAPID key; if nobody is open, leave a single reminder notification.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of clients) client.postMessage({ type: 'betva:push-expired' });
+      if (clients.length === 0) {
+        await self.registration.showNotification('Betva notifications need a refresh', {
+          body: 'Open Betva and tap Refresh on your Profile to keep alerts working.',
+          icon: '/favicon.svg',
+          badge: '/favicon.svg',
+          tag: 'betva-push-refresh',
+          renotify: false,
+          data: { url: '/profile' },
+        });
+      }
+    })()
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  // Only same-origin, absolute paths are valid in-app links. A bare "//host"
+  // would resolve to another site and must never be used.
+  const raw = event.notification.data && event.notification.data.url;
+  const link = typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
+  const target = new URL(link, self.location.origin);
 
   event.waitUntil(
     (async () => {
       const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (const client of clientList) {
-        if (client.url === target && 'focus' in client) return client.focus();
+        const current = new URL(client.url);
+        if (
+          current.origin === target.origin &&
+          current.pathname === target.pathname &&
+          current.search === target.search &&
+          'focus' in client
+        ) {
+          return client.focus();
+        }
       }
       const windows = await self.clients.matchAll({ type: 'window' });
       if (windows.length && 'navigate' in windows[0]) {
         await windows[0].focus();
-        return windows[0].navigate(target);
+        return windows[0].navigate(target.href);
       }
-      return self.clients.openWindow(target);
+      return self.clients.openWindow(target.href);
     })()
   );
 });

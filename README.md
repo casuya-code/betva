@@ -1054,18 +1054,21 @@ iOS is the real constraint: on iPhone, push only works once the user installs th
 
 ### Guardrails (Enforced Server-Side)
 
-These are checked in the dispatch path, so a bug in the UI cannot bypass them. Every notification row also records why a push did not go out.
+These are checked in the dispatch path, so a bug in the UI cannot bypass them. Every notification row records the last reason a push did not go out and when it will be tried again.
 
 | Guardrail | Behaviour |
 | --- | --- |
-| **Daily cap** | `PUSH_DAILY_CAP` (default **2**) pushes per user per EAT day. Counted in `push_delivery_log`, not in inbox rows. |
-| **Quiet hours** | `QUIET_START_HOUR` (22) to `QUIET_END_HOUR` (7) EAT. Push is skipped; the inbox row still lands. |
-| **Muted category** | Skipped at push time; inbox row still written. |
-| **No subscription** | Recorded as `no subscription`; nothing retries in a loop. |
-| **Push not configured** | Recorded as `push not configured`; the product still works. |
-| **Expired subscription** | A `404` or `410` from the push service deletes that subscription row. |
+| **Daily cap** | `PUSH_DAILY_CAP` (default **2**) pushes per user per EAT day. Counted in `push_delivery_log`, not in inbox rows. A capped push is deferred to 00:01 EAT the next day. |
+| **Quiet hours** | `QUIET_START_HOUR` (22) to `QUIET_END_HOUR` (7) EAT. Push is deferred until the window ends; the inbox row still lands immediately. |
+| **Muted category** | Skipped at push time; inbox row still written. Rechecked every six hours and immediately when the user unmutes a category. |
+| **No subscription** | Deferred for one hour and retried immediately when the user subscribes. |
+| **Push not configured** | Recorded as `push not configured`; the product still works and retries hourly if keys are added later. |
+| **Expired subscription** | A `403`, `404`, or `410` from the push service deletes that subscription row; `403` covers VAPID key rotation. |
+| **Transport failure** | Retried with backoff (1m, 5m, 30m, 2h) up to five attempts, then marked terminal. |
 
 The inbox is authoritative. Push is a best-effort extra: a failed push never loses the message.
+
+**Delivery is a queue, not a one-shot send.** Broadcasters are processed in batches of 500 in a loop (no recipient limit), guarded by a Postgres advisory lock so concurrent dispatchers cannot double-send or double-count against the cap. A retry scheduler runs every five minutes (`PUSH_RETRY_ENABLED=0` disables it) and picks up deferred, failed, or interrupted rows. The Profile **Refresh** button re-subscribes with the current VAPID key, and `pushsubscriptionchange` in the service worker tells open tabs to refresh automatically. Logging out unsubscribes this device.
 
 ### Low-Data Design
 
@@ -1840,9 +1843,10 @@ The script exits `0` only when the throwaway database was created, restored, and
 | `VAPID_PUBLIC_KEY` | Push | Public key, also served by `GET /api/v1/config` |
 | `VAPID_PRIVATE_KEY` | Push | Secret. Rotating it invalidates every subscription |
 | `VAPID_SUBJECT` | Push | Contact URI for the push service, e.g. `mailto:admin@example.com` |
-| `PUSH_DAILY_CAP` | No | Pushes per user per EAT day; default `2` |
-| `QUIET_START_HOUR` | No | Default `22` (EAT) |
-| `QUIET_END_HOUR` | No | Default `7` (EAT) |
+| `PUSH_DAILY_CAP` | No | Pushes per user per EAT day; default `2`, `0` = unlimited |
+| `QUIET_START_HOUR` | No | Default `22` (EAT); invalid values fall back to default |
+| `QUIET_END_HOUR` | No | Default `7` (EAT); equal start/end is nudged by one hour |
+| `PUSH_RETRY_ENABLED` | No | Set to `0` to stop the five-minute retry scheduler |
 | `GROQ_API_KEY` | AI | Groq API key. Empty disables the AI Results centre (`503`). Set on staging 2026-11-16 |
 | `GROQ_MODEL` | No | Default `openai/gpt-oss-20b` |
 | `ACCESS_FEE_CENTS` | No | Flat monthly access rate in cents; public via `/config`, shown on Profile. `0` shows "Ask the admin" |

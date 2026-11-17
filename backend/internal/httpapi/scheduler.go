@@ -11,6 +11,29 @@ import (
 	"time"
 )
 
+// StartPushScheduler retries deferred/failed pushes. Inbox rows are always
+// authoritative; this job only makes sure a temporary failure does not cost
+// the user the notification forever.
+func StartPushScheduler(s *Server) {
+	if os.Getenv("PUSH_RETRY_ENABLED") == "0" {
+		return
+	}
+	go func() {
+		run := func() {
+			if !s.Cfg.PushEnabled() {
+				return
+			}
+			s.dispatchPendingPush(nil)
+		}
+		run()
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			run()
+		}
+	}()
+}
+
 // StartSettlementScheduler runs a background job that settles finished matches
 // automatically. It runs once on startup and then every hour.
 func StartSettlementScheduler(s *Server) {

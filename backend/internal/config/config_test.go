@@ -42,3 +42,20 @@ func TestAtoi(t *testing.T) {
 		t.Fatalf("default got %d", got)
 	}
 }
+
+func TestPushConfigIsClamped(t *testing.T) {
+	t.Setenv("PUSH_DAILY_CAP", "-5")
+	t.Setenv("QUIET_START_HOUR", "99")
+	t.Setenv("QUIET_END_HOUR", "22")
+	c := Load()
+	if c.PushDailyCap != 0 || c.QuietStartHour != 22 || c.QuietEndHour != 23 {
+		t.Fatalf("bad push config not clamped: cap=%d quiet=%d-%d", c.PushDailyCap, c.QuietStartHour, c.QuietEndHour)
+	}
+
+	t.Setenv("QUIET_START_HOUR", "9")
+	t.Setenv("QUIET_END_HOUR", "9")
+	c = Load()
+	if c.QuietEndHour != 10 {
+		t.Fatalf("equal quiet hours must not produce an empty window: %d-%d", c.QuietStartHour, c.QuietEndHour)
+	}
+}

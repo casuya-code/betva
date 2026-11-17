@@ -1,4 +1,4 @@
-﻿package httpapi
+package httpapi
 
 import (
 	"context"
@@ -248,13 +248,26 @@ func (s *Server) notifyMatchBettors(matchID, home, away string, hg, ag int, corr
 		prefix = "Corrected result"
 	}
 	score := fmt.Sprintf("%dâ€“%d", hg, ag)
+	// Group identical messages so a big settlement starts one dispatcher, not
+	// one goroutine and one full pending-query per user.
+	type noticeGroup struct{ title, body string }
+	groups := map[noticeGroup][]string{}
 	for _, uid := range winUsers {
-		s.notifyAndPush([]string{uid}, catResults, prefix+": WIN",
-			fmt.Sprintf("%s vs %s â€” FT %s. Payout +%s TZS.", home, away, score, formatTZS(winPayout[uid])), "/history")
+		g := noticeGroup{
+			title: prefix + ": WIN",
+			body:  fmt.Sprintf("%s vs %s â€” FT %s. Payout +%s TZS.", home, away, score, formatTZS(winPayout[uid])),
+		}
+		groups[g] = append(groups[g], uid)
 	}
-	for _, uid := range lossUsers {
-		s.notifyAndPush([]string{uid}, catResults, prefix+": LOSS",
-			fmt.Sprintf("%s vs %s â€” FT %s. Open History to see the settled slip.", home, away, score), "/history")
+	if len(lossUsers) > 0 {
+		g := noticeGroup{
+			title: prefix + ": LOSS",
+			body:  fmt.Sprintf("%s vs %s â€” FT %s. Open History to see the settled slip.", home, away, score),
+		}
+		groups[g] = append(groups[g], lossUsers...)
+	}
+	for g, ids := range groups {
+		s.notifyAndPush(ids, catResults, g.title, g.body, "/history")
 	}
 }
 
