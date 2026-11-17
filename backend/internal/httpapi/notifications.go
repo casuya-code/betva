@@ -747,6 +747,10 @@ func (s *Server) handleSetSelfExclusion(w http.ResponseWriter, r *http.Request) 
 		RETURNING to_char(until AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI')
 	`, u.ID, body.Hours).Scan(&until)
 	if err != nil {
+		// Log the real cause server-side. Returning only "db error" to the
+		// client hid a constraint mismatch for a long time; keep the client
+		// message generic but make the failure diagnosable in deploy logs.
+		log.Printf("self-exclusion insert failed for user %s, hours=%d: %v", u.ID, body.Hours, err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
 		return
 	}

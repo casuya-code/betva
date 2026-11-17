@@ -1165,7 +1165,7 @@ This distinction must be explicit everywhere: on the pricing page, in the receip
 5. **Redis persistence** — Redis now holds only rebuildable caches (`/stats`) and
    rate-limit counters, both of which expire on their own, so there is no durable
    state to back up. ✅
-6. **Code & config in Git** — the schema is versioned (`001`–`011`), so a fresh database
+6. **Code & config in Git** — the schema is versioned (`001`–`012`), so a fresh database
    can be rebuilt from scratch. ✅
 7. **Media storage** — uploads live on the Railway volume `media` mounted at `/data` and
    are **not** in a Postgres dump. A volume mounts to one service, so the cron cannot read
@@ -1249,7 +1249,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 - **Idempotency keys** on every write — a retried request cannot double-charge or double-pay. ⬜ Not implemented; duplicate placement is currently blocked by the one-bet-per-market constraint and the row lock, not by request keys.
 - **Append-only ledger** — balance changes are never overwritten, only appended; reconciliation is always possible. ✅
 - **Backups run continuously**, not only at night, so a failure at peak loses minutes, not hours. ⬜
-- **Migrations are versioned** — `001`–`011`, applied in order. They are forward-only; automatic rollback is ⬜. 🟡
+- **Migrations are versioned** — `001`–`012`, applied in order. They are forward-only; automatic rollback is ⬜. 🟡
 
 ### Capacity Planning
 
@@ -1328,7 +1328,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 | --- | --- | --- |
 | Frontend | Astro 7 + Tailwind v4, static output, PWA manifest + service worker | ✅ |
 | Backend | Go 1.x, chi, pgx | ✅ |
-| Database | PostgreSQL 18 locally; migrations `001`–`011` | ✅ |
+| Database | PostgreSQL 18 locally; migrations `001`–`012` | ✅ |
 | Cache / queues | Redis backs the `/stats` cache and shared rate limits (in-memory fallback) | ✅ |
 | Media | Local `MEDIA_DIR` by default; R2 when configured on the API | ✅ |
 | Results extraction | Groq `openai/gpt-oss-20b`, admin-triggered, manual approval | ✅ |
@@ -1565,7 +1565,7 @@ Cloudflare edge (Dar es Salaam / Mombasa)
 | Area | Status | Location |
 | --- | --- | --- |
 | Go API (chi router, pgx, Redis caches + shared rate limits) | ✅ Working | `backend/` |
-| Postgres schema and migrations `001`–`011` | ✅ Working | `backend/migrations/` |
+| Postgres schema and migrations `001`–`012` | ✅ Working | `backend/migrations/` |
 | User register / login / profile | ✅ Working | `backend/internal/httpapi/auth.go` |
 | Admin login from environment variables | ✅ Working | `backend/internal/httpapi/admin.go` |
 | Matches CSV upload, validation, duplicate detection, import log | ✅ Working | `backend/internal/httpapi/matches.go` |
