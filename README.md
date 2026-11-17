@@ -715,7 +715,7 @@ The **Matches** centre is the single source of matches shown to users.
 - **Validation before import** — bad rows are rejected with their line number and a readable error; good rows still import. ✅
 - **Duplicate detection** — re-uploading the same date warns before overwriting; replace is blocked when bets already exist. ✅
 - **Import log** — who uploaded, when, which date, how many rows, how many failed, whether it replaced. ✅
-- **Match state** — open for betting → closed automatically at kickoff → settled once results arrive. ✅
+- **Match state** — open for betting → closed automatically at kickoff → `awaiting_result` while no score exists → settled (and shown `FINISHED`) only once a result is recorded. A match is never shown as finished with an empty result. ✅
 
 ### Users & Financial Status ✅
 
@@ -821,7 +821,7 @@ These were not in the brief but the product will need them:
 
 > A Groq-hosted model reads football result pages and turns them into structured rows. It is an **assistant that fills a form**, never the final authority on money.
 
-> **Status: 🟡 partially built.** The fetch → extract → validate → admin review pipeline works end to end. The scheduler, automatic source discovery, two-source agreement, `DISPUTED` state, and one-click settlement from an approved suggestion are **not built**. An approved suggestion only marks the row `approved`; the admin still settles the match from the Matches centre.
+> **Status: 🟡 partially built.** The fetch → extract → validate → admin review pipeline works end to end, and the settlement scheduler will settle a match from the newest **admin-approved** suggestion. Automatic source discovery, two-source agreement, and the `DISPUTED` state are **not built**. An admin must still approve a suggestion before it can be used; raw AI output never settles a match.
 
 ### Correction Before Anything Else
 
@@ -860,7 +860,8 @@ Admin approves or rejects in /admin/ai
         └── rejected → reason required
         │
         ▼
-Admin settles the match manually in Matches (payouts happen there)
+Settlement scheduler settles the match from the approved score, or an
+admin settles manually in Matches (result + slips + notifications)
 ```
 
 **Planned automation (⬜):**
@@ -869,10 +870,9 @@ Admin settles the match manually in Matches (payouts happen there)
 Daily scheduler (Railway cron) → fetch a fixed list of sources
         → two independent sources must agree
         → disagreement = DISPUTED, settlement blocked
-        → approved row pre-fills the settle modal
 ```
 
-No cron job, queue, or scheduler exists in the codebase today. Nothing runs unless an admin triggers it.
+An in-process settlement scheduler **does** run (every 15 minutes by default), but it never discovers sources — it only uses a score already stored on the match or an already-approved suggestion. `AUTO_SETTLE_ENABLED=0` turns it off.
 
 ### Sources
 
@@ -924,7 +924,7 @@ Check current limits before relying on any of them — free tiers change without
 - **Date match** — rejecting a result whose date differs from the match date.
 - **Two-source agreement** — a second independent source confirming the score.
 - **Confidence gate** — blocking `low` confidence from reaching the review queue. Today it reaches the admin with the badge visible.
-- **Automatic settlement** — never, by design; the admin settles manually.
+- **Automatic settlement from an approved suggestion** — implemented. It never uses raw AI output and never discovers sources itself.
 
 ### Why AI Must Never Settle Bets Alone
 
@@ -1848,6 +1848,9 @@ The script exits `0` only when the throwaway database was created, restored, and
 | `QUIET_START_HOUR` | No | Default `22` (EAT); invalid values fall back to default |
 | `QUIET_END_HOUR` | No | Default `7` (EAT); equal start/end is nudged by one hour |
 | `PUSH_RETRY_ENABLED` | No | Set to `0` to stop the five-minute retry scheduler |
+| `AUTO_SETTLE_ENABLED` | No | Default `1`. Set to `0` to stop the settlement scheduler |
+| `AUTO_SETTLE_GRACE_MINUTES` | No | Minutes after kickoff before a match is settled; default `120` |
+| `AUTO_SETTLE_INTERVAL_MINUTES` | No | Settlement sweep interval; default `15` |
 | `GROQ_API_KEY` | AI | Groq API key. Empty disables the AI Results centre (`503`). Set on staging 2026-11-16 |
 | `GROQ_MODEL` | No | Default `openai/gpt-oss-20b` |
 | `ACCESS_FEE_CENTS` | No | Flat monthly access rate in cents; public via `/config`, shown on Profile. `0` shows "Ask the admin" |

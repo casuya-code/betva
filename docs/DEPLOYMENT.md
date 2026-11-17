@@ -269,6 +269,7 @@ every name.
 | `PUSH_DAILY_CAP` | `2` | Enforced server-side |
 | `QUIET_START_HOUR` / `QUIET_END_HOUR` | `22` / `7` | EAT |
 | `PUSH_RETRY_ENABLED` | unset (on) | Five-minute retry scheduler for deferred/failed pushes; `0` disables it |
+| `AUTO_SETTLE_ENABLED` | unset (on) | 15-minute settlement sweep; `0` disables it. Never uses raw AI output — only stored scores or admin-approved suggestions |
 | `GROQ_API_KEY` | set 2026-11-16 | AI suggestions enabled; never logged or returned to clients |
 | `ACCESS_FEE_DAU_TARGET` / `MONTHLY_OPERATING_COST_CENTS` | **not set** | Fee planner shows unconfigured |
 

@@ -43,6 +43,14 @@ type Config struct {
 	R2MediaBucket     string
 	R2MediaPublicBase string
 
+	// Automatic match settlement. Results are only settled once a score is
+	// available: either stored on the match by an admin or taken from the
+	// newest admin-approved AI suggestion. A match with no result stays in the
+	// honest 'awaiting_result' state until a human supplies one.
+	AutoSettleEnabled         bool
+	AutoSettleGraceMinutes    int // minutes after kickoff before a match is a candidate
+	AutoSettleIntervalMinutes int // how often the sweep runs
+
 	// Push notifications.
 	VAPIDPublicKey  string
 	VAPIDPrivateKey string
@@ -109,6 +117,10 @@ func Load() *Config {
 		R2MediaBucket:     os.Getenv("R2_MEDIA_BUCKET"),
 		R2MediaPublicBase: getEnv("R2_MEDIA_PUBLIC_URL", ""),
 
+		AutoSettleEnabled:         getEnv("AUTO_SETTLE_ENABLED", "1") != "0",
+		AutoSettleGraceMinutes:    Atoi(getEnv("AUTO_SETTLE_GRACE_MINUTES", "120"), 120),
+		AutoSettleIntervalMinutes: Atoi(getEnv("AUTO_SETTLE_INTERVAL_MINUTES", "15"), 15),
+
 		VAPIDPublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
 		VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
 		VAPIDSubject:    getEnv("VAPID_SUBJECT", "mailto:admin@betva.local"),
@@ -122,6 +134,15 @@ func Load() *Config {
 		FeeTargetDAU:     Atoi(getEnv("ACCESS_FEE_DAU_TARGET", "0"), 0),
 		MonthlyCostCents: int64(Atoi(getEnv("MONTHLY_OPERATING_COST_CENTS", "0"), 0)),
 		AccessFeeCents:   int64(Atoi(getEnv("ACCESS_FEE_CENTS", "0"), 0)),
+	}
+
+	// A zero/negative grace means "settle as soon as kickoff passes"; a bad
+	// interval is clamped so a typo cannot make the sweep hammer the database.
+	if c.AutoSettleGraceMinutes < 0 {
+		c.AutoSettleGraceMinutes = 0
+	}
+	if c.AutoSettleIntervalMinutes < 1 {
+		c.AutoSettleIntervalMinutes = 15
 	}
 
 	// Bad push settings must not take the whole app down. Clamp them to sane

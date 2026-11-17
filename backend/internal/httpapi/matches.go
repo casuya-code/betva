@@ -699,11 +699,41 @@ func (s *Server) handleAdminUpdateMatch(w http.ResponseWriter, r *http.Request) 
 
 	if body.Status != "" {
 		switch body.Status {
-		case "upcoming", "live", "finished", "postponed", "cancelled":
+		case "upcoming", "live", "awaiting_result", "finished", "postponed", "cancelled":
 		default:
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid status"})
 			return
 		}
+
+		var settledAt *string
+		if err := s.Pool.QueryRow(ctx, `SELECT settled_at::text FROM matches WHERE id = $1`, id).Scan(&settledAt); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "match not found"})
+			return
+		}
+		if settledAt != nil {
+			if body.Status == "finished" {
+				// Already finished: a stale admin page saving the same status
+				// is a harmless no-op.
+				writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+				return
+			}
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "match is settled — correct the result instead of changing its status",
+			})
+			return
+		}
+
+		// 'finished' is written only by settlement, which records the score,
+		// settles every slip and notifies bettors in one transaction. Letting
+		// this dropdown set it directly is how a match was shown as completed
+		// with no result at all.
+		if body.Status == "finished" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "use the Settle action to finish a match — it records the score and settles slips",
+			})
+			return
+		}
+
 		if _, err := s.Pool.Exec(ctx, `
 			UPDATE matches SET status = $1, updated_at = NOW() WHERE id = $2
 		`, body.Status, id); err != nil {
@@ -764,7 +794,7 @@ func (s *Server) handleAdminDeleteMatch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	switch status {
-	case "finished", "live", "cancelled":
+	case "finished", "awaiting_result", "live", "cancelled":
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "match has started or finished — it can no longer be deleted"})
 		return
 	}

@@ -302,8 +302,9 @@ func TestIntegration_PlaceSettleAndCorrect(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT balance_cents FROM users WHERE id=$1`, userID).Scan(&balanceAfterBet); err != nil {
 		t.Fatal(err)
 	}
-	if balanceAfterBet != 50000 {
-		t.Fatalf("balance after bet=%d want 50000", balanceAfterBet)
+	// Virtual play: slips do not debit the wallet.
+	if balanceAfterBet != 100000 {
+		t.Fatalf("balance after bet=%d want 100000", balanceAfterBet)
 	}
 	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM bets WHERE match_id=$1 AND status='pending'`, matchID).Scan(&pendingBets); err != nil {
 		t.Fatal(err)
@@ -333,8 +334,9 @@ func TestIntegration_PlaceSettleAndCorrect(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT balance_cents FROM users WHERE id=$1`, userID).Scan(&balAfterWin); err != nil {
 		t.Fatal(err)
 	}
-	if balAfterWin != 125000 { // 50000 remaining + 75000 payout
-		t.Fatalf("balance after win=%d want 125000", balAfterWin)
+	// Virtual play: a win is recorded on the slip only, no wallet credit.
+	if balAfterWin != 100000 {
+		t.Fatalf("balance after win=%d want 100000", balAfterWin)
 	}
 
 	// public feed must expose the settled score so the UI can show win/loss ticks
@@ -367,7 +369,7 @@ func TestIntegration_PlaceSettleAndCorrect(t *testing.T) {
 		t.Fatal("settled match missing from public feed")
 	}
 
-	// correct: 0-0 => should reverse win and result in loss (no payout), balance back to 50000
+	// correct: 0-0 => should reverse win and result in loss (no payout)
 	correctBody := map[string]interface{}{
 		"home_goals": 0, "away_goals": 0,
 		"source": "test", "reason": "integration correction", "correct": true,
@@ -387,8 +389,8 @@ func TestIntegration_PlaceSettleAndCorrect(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT balance_cents FROM users WHERE id=$1`, userID).Scan(&balAfterCorrection); err != nil {
 		t.Fatal(err)
 	}
-	if balAfterCorrection != 50000 {
-		t.Fatalf("balance after correction=%d want 50000", balAfterCorrection)
+	if balAfterCorrection != 100000 {
+		t.Fatalf("balance after correction=%d want 100000", balAfterCorrection)
 	}
 	if err := pool.QueryRow(ctx, `SELECT status, payout_cents FROM bets WHERE match_id=$1 AND user_id=$2`, matchID, userID).Scan(&betStatus, &payoutCents); err != nil {
 		t.Fatal(err)

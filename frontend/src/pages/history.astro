@@ -396,6 +396,7 @@ import Layout from '../layouts/Layout.astro';
           upcoming: { cls: 'badge-pending', label: '⏳ PENDING' },
           live: { cls: 'badge-live', label: 'LIVE' },
           finished: { cls: 'badge-pending', label: 'FINISHED' },
+          awaiting_result: { cls: 'badge-pending', label: '⏳ AWAITING RESULT' },
           postponed: { cls: 'badge-postponed', label: '⟲ POSTPONED' },
           cancelled: { cls: 'badge-loss', label: '✕ CANCELLED' },
         }[s] || { cls: 'badge-pending', label: s.toUpperCase() }

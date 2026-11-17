@@ -215,7 +215,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                     </td>
                     <td>
                       <select class="input admin-select" data-field="status">
-                        ${['upcoming', 'live', 'finished', 'postponed', 'cancelled']
+                        ${['upcoming', 'live', 'awaiting_result', 'finished', 'postponed', 'cancelled']
                           .map((s) => `<option value="${s}" ${m.status === s ? 'selected' : ''}>${s.toUpperCase()}</option>`)
                           .join('')}
                       </select>

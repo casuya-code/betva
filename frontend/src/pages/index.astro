@@ -123,6 +123,9 @@ import BrandName from '../components/BrandName.astro';
       upcoming: { cls: 'badge-pending', label: 'PENDING' },
       live: { cls: 'badge-live', label: 'LIVE', dot: true },
       finished: { cls: 'badge-win', label: 'FINISHED' },
+      // The game is over but no score has been recorded yet. Never present
+      // this as FINISHED — that is the "completed with no result" bug.
+      awaiting_result: { cls: 'badge-pending', label: 'AWAITING RESULT' },
       postponed: { cls: 'badge-postponed', label: 'POSTPONED' },
       cancelled: { cls: 'badge-loss', label: 'CANCELLED' },
     };

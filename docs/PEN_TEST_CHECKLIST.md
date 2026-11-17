@@ -59,7 +59,7 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 - [ ] CSV `replace` is refused when bets exist for that date.
 - [ ] **AI source URL:** `/admin/ai/suggest` now resolves the hostname, rejects loopback/private/link-local/multicast/CGNAT addresses (including `127.0.0.1`, `169.254.169.254`, `localhost`, and Railway internal names), pins the dial to the vetted IPs, and refuses redirects. Confirm SSRF attempts return `400` without any request reaching internal services.
 - [ ] AI fetch enforces the 20s timeout and 1MB read cap; a slow-loris or huge page cannot exhaust the server.
-- [ ] AI response is validated (both goals present, 0–30, confidence enum) and stored as `pending`; nothing auto-settles.
+- [ ] AI response is validated (both goals present, 0–30, confidence enum) and stored as `pending`; raw AI output never settles a match. Only an **admin-approved** suggestion can be used by the settlement scheduler.
 - [ ] Rejecting an AI suggestion without a reason returns `400`; an already-reviewed suggestion returns `409`.
 
 ## Rate limits & abuse
