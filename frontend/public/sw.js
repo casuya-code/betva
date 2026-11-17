@@ -1,7 +1,7 @@
 /* Betva service worker: Web Push, notification clicks, and a small
    runtime cache for same-origin static assets (JS/CSS/images/fonts).
    HTML is never cached, so deploys always reach users. */
-const CACHE_NAME = 'betva-static-v3';
+const CACHE_NAME = 'betva-static-v4';
 const ASSET_RE = /\.(?:js|css|svg|png|jpe?g|webp|avif|ico|woff2?|webmanifest)$/i;
 
 self.addEventListener('install', () => self.skipWaiting());
