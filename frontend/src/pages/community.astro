@@ -227,7 +227,10 @@ import Layout from '../layouts/Layout.astro';
         const posts: Post[] = data.posts || [];
         posts.forEach((p) => (postsById[p.id] = p));
 
-        if (reset) {
+        // Clear the placeholder skeletons on any successful first page, even
+        // if a scroll observer pre-empted the reset load (see observer setup
+        // below). Otherwise they stay above the real posts as empty cards.
+        if (reset || feed.querySelector('.skeleton')) {
           feed.innerHTML = '';
           document.getElementById('feed-count')!.textContent = '';
         }
@@ -497,10 +500,13 @@ import Layout from '../layouts/Layout.astro';
       },
       { rootMargin: '400px 0px' }
     );
-    observer.observe(sentinel);
-
+    // Load the first page BEFORE watching the sentinel. Registering the
+    // observer first let it fire during the /me await below; that load set
+    // loading=true, so the reset load was skipped and the two skeleton cards
+    // were never removed. Awaiting here also means no scroll can pre-empt it.
     await loadAccess();
-    loadFeed(true);
+    await loadFeed(true);
+    observer.observe(sentinel);
   </script>
 
   <style>
