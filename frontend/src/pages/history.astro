@@ -68,7 +68,7 @@ import Layout from '../layouts/Layout.astro';
   </div>
 
   <script>
-    import { authFetch, esc, money, MARKET_LABEL, oddsText, betStatus, toast } from '../lib/api';
+    import { authFetch, esc, money, MARKET_LABEL, oddsText, payoutFor, betStatus, toast } from '../lib/api';
 
     const listEl = document.getElementById('list')!;
     const settledEl = document.getElementById('h-settled')!;
@@ -149,7 +149,7 @@ import Layout from '../layouts/Layout.astro';
             ? `<div class="text-[var(--text-2)] counter">${money(b.stake_cents)} TZS returned</div>`
             : b.status === 'loss'
               ? `<div class="text-[var(--danger)] counter">−${money(b.stake_cents)} TZS</div>`
-              : `<div class="text-[var(--text-2)] counter">${money(b.stake_cents)} TZS at stake</div>`;
+              : `<div class="text-[var(--text-2)] counter">${money(payoutFor(b.stake_cents, b.odds_bp))} TZS</div>`;
 
       const reason = b.void_reason
         ? `<div class="mt-2 text-xs text-[var(--text-3)]">Reason: ${esc(b.void_reason)}</div>`
