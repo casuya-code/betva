@@ -54,9 +54,9 @@ import BrandName from '../components/BrandName.astro';
           Preview of 3 matches. Pay the official number on your Profile, then ask the admin to activate you.
         </div>
         <div id="matches" class="mt-3 space-y-3" role="tabpanel" aria-label="Match list">
-          <div class="card"><div class="skeleton h-24"></div></div>
-          <div class="card"><div class="skeleton h-24"></div></div>
-          <div class="card"><div class="skeleton h-24"></div></div>
+          <div class="card" aria-hidden="true"><div class="skeleton h-36"></div></div>
+          <div class="card" aria-hidden="true"><div class="skeleton h-36"></div></div>
+          <div class="card" aria-hidden="true"><div class="skeleton h-36"></div></div>
         </div>
       </div>
     </div>
@@ -85,6 +85,9 @@ import BrandName from '../components/BrandName.astro';
         <span class="counter text-lg" id="slip-return">—</span>
       </div>
       <p class="text-xs text-[var(--text-3)] mt-1">Return includes your stake.</p>
+      <p class="text-xs text-[var(--text-3)] mt-2">
+        Virtual play for enjoyment only — no real money is won or lost. For real-money betting, use a licensed bookmaker.
+      </p>
 
       <div class="mt-4 flex gap-2">
         <button class="btn btn-secondary flex-1" id="slip-cancel" type="button">Cancel</button>
@@ -107,6 +110,14 @@ import BrandName from '../components/BrandName.astro';
     const slip = document.getElementById('slip')!;
     const slipMsg = document.getElementById('slip-msg')!;
     const confirmBtn = document.getElementById('slip-confirm') as HTMLButtonElement;
+    const matchesEl = document.getElementById('matches')!;
+    const previewNote = document.getElementById('previewNote');
+    const slipMatch = document.getElementById('slip-match')!;
+    const slipMarket = document.getElementById('slip-market')!;
+    const slipOdds = document.getElementById('slip-odds')!;
+    const slipConf = document.getElementById('slip-conf')!;
+    const stakeTiersEl = document.getElementById('stake-tiers')!;
+    const slipReturn = document.getElementById('slip-return')!;
 
     const statusMap: Record<string, { cls: string; label: string; dot?: boolean }> = {
       upcoming: { cls: 'badge-pending', label: 'PENDING' },
@@ -130,8 +141,7 @@ import BrandName from '../components/BrandName.astro';
     }
 
     function renderTiers() {
-      const el = document.getElementById('stake-tiers')!;
-      el.innerHTML = config.stake_tiers_cents
+      stakeTiersEl.innerHTML = config.stake_tiers_cents
         .map(
           (t) => `
           <button type="button" class="stake-chip ${t === selectedStake ? 'selected' : ''}" data-stake="${t}">
@@ -142,13 +152,12 @@ import BrandName from '../components/BrandName.astro';
     }
 
     function updateReturn() {
-      const el = document.getElementById('slip-return')!;
       if (!selectedStake) {
-        el.textContent = '—';
+        slipReturn.textContent = '—';
         return;
       }
       const bp = active?.oddsBp || config.payout_multiplier_bp;
-      el.textContent = `${money(payoutFor(selectedStake, bp))} TZS`;
+      slipReturn.textContent = `${money(payoutFor(selectedStake, bp))} TZS`;
     }
 
     function openSlip(data: typeof active) {
@@ -159,12 +168,11 @@ import BrandName from '../components/BrandName.astro';
       active = data;
       if (!data) return;
       selectedStake = config.stake_tiers_cents[Math.min(1, config.stake_tiers_cents.length - 1)] || config.stake_tiers_cents[0];
-      document.getElementById('slip-match')!.textContent = `${data.teams} · ${data.league || 'Match'} · ${data.kickoff}`;
-      document.getElementById('slip-market')!.textContent = MARKET_LABEL[data.market] || data.market;
-      document.getElementById('slip-odds')!.textContent = `${oddsText(data.oddsBp)}×`;
-      const conf = document.getElementById('slip-conf')!;
-      conf.textContent = `${(data.confidence || 'medium').toUpperCase()} confidence`;
-      conf.className = `badge ${confidenceMap[data.confidence] || confidenceMap.medium}`;
+      slipMatch.textContent = `${data.teams} · ${data.league || 'Match'} · ${data.kickoff}`;
+      slipMarket.textContent = MARKET_LABEL[data.market] || data.market;
+      slipOdds.textContent = `${oddsText(data.oddsBp)}×`;
+      slipConf.textContent = `${(data.confidence || 'medium').toUpperCase()} confidence`;
+      slipConf.className = `badge ${confidenceMap[data.confidence] || confidenceMap.medium}`;
       slipMsg.textContent = '';
       slipMsg.className = 'mt-2 text-center text-sm';
       renderTiers();
@@ -187,11 +195,11 @@ import BrandName from '../components/BrandName.astro';
       if (e.key === 'Escape' && !slip.classList.contains('hidden')) closeSlip();
     });
 
-    document.getElementById('stake-tiers')!.addEventListener('click', (e) => {
+    stakeTiersEl.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('.stake-chip') as HTMLElement | null;
       if (!btn) return;
       selectedStake = Number(btn.dataset.stake);
-      document.querySelectorAll('.stake-chip').forEach((c) => c.classList.remove('selected'));
+      stakeTiersEl.querySelectorAll('.stake-chip').forEach((c) => c.classList.remove('selected'));
       btn.classList.add('selected');
       updateReturn();
     });
@@ -217,7 +225,7 @@ import BrandName from '../components/BrandName.astro';
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           slipMsg.textContent = data.error || 'Could not place the slip.';
-          slipMsg.className = 'mt-2 text-center text-sm text-red-400';
+          slipMsg.className = 'mt-2 text-center text-sm text-[var(--danger)]';
           return;
         }
         toast('Slip placed.');
@@ -226,7 +234,7 @@ import BrandName from '../components/BrandName.astro';
         maybeAskPush();
       } catch {
         slipMsg.textContent = 'Network error. Try again.';
-        slipMsg.className = 'mt-2 text-center text-sm text-red-400';
+        slipMsg.className = 'mt-2 text-center text-sm text-[var(--danger)]';
       } finally {
         confirmBtn.disabled = false;
         confirmBtn.textContent = 'Confirm';
@@ -284,23 +292,32 @@ import BrandName from '../components/BrandName.astro';
               if (m.settled) {
                 const won = marketOutcome(m, mk);
                 if (won === true) {
-                  return `<button class="btn btn-secondary flex-1 text-sm" disabled>${label} <span class="mk-outcome mk-win" aria-label="won">✔</span></button>`;
+                  return `<button type="button" class="btn btn-secondary flex-1 text-sm" disabled>${label} <span class="mk-outcome mk-win" aria-label="won">✔</span></button>`;
                 }
                 if (won === false) {
-                  return `<button class="btn btn-secondary flex-1 text-sm" disabled>${label} <span class="mk-outcome mk-loss" aria-label="lost">✘</span></button>`;
+                  return `<button type="button" class="btn btn-secondary flex-1 text-sm" disabled>${label} <span class="mk-outcome mk-loss" aria-label="lost">✘</span></button>`;
                 }
-                return `<button class="btn btn-secondary flex-1 text-sm" disabled>${label}</button>`;
+                return `<button type="button" class="btn btn-secondary flex-1 text-sm" disabled>${label}</button>`;
               }
               if (!m.is_open) {
-                return `<button class="btn btn-secondary flex-1 text-sm" disabled>${label} · closed</button>`;
+                return `<button type="button" class="btn btn-secondary flex-1 text-sm" disabled>${label} · closed</button>`;
               }
-              return `<button class="btn btn-secondary flex-1 text-sm" data-match="${esc(m.id)}" data-market="${esc(mk)}" data-teams="${esc(teams)}" data-league="${esc(m.league || '')}" data-kickoff="${esc(m.match_date)} ${esc(m.kickoff)}" data-confidence="${esc(m.confidence || 'medium')}" data-odds="${odds}">${label}</button>`;
+              return `<button type="button" class="btn btn-secondary flex-1 text-sm" data-match="${esc(m.id)}" data-market="${esc(mk)}" data-teams="${esc(teams)}" data-league="${esc(m.league || '')}" data-kickoff="${esc(m.match_date)} ${esc(m.kickoff)}" data-confidence="${esc(m.confidence || 'medium')}" data-odds="${odds}">${label}</button>`;
             })
             .join('')
         : '<span class="text-xs text-[var(--text-3)]">No markets open</span>';
 
+      const scoreMid =
+        m.settled && m.home_goals != null && m.away_goals != null
+          ? `<div class="counter text-sm text-center whitespace-nowrap">${m.home_goals}–${m.away_goals}${
+              m.home_goals_ht != null && m.away_goals_ht != null
+                ? ` <span class="text-[var(--text-3)] text-xs font-normal">(HT ${m.home_goals_ht}–${m.away_goals_ht})</span>`
+                : ''
+            }</div>`
+          : '<div class="text-[var(--text-3)] text-sm">vs</div>';
+
       return `
-              <div class="card">
+              <div class="card cv-auto">
                 <div class="flex items-center justify-between mb-2 gap-2">
                   <span class="text-xs text-[var(--text-3)] leading-snug break-words">
                     ${esc(m.league || '')}${m.league ? ' · ' : ''}${esc(m.match_date)} ${esc(m.kickoff)}
@@ -309,7 +326,7 @@ import BrandName from '../components/BrandName.astro';
                 </div>
                 <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
                   <div class="font-semibold leading-tight break-words">${esc(m.home_team)}</div>
-                  <div class="text-[var(--text-3)] text-sm">vs</div>
+                  ${scoreMid}
                   <div class="font-semibold leading-tight break-words text-right">${esc(m.away_team)}</div>
                 </div>
                 <div class="mt-2 flex items-center justify-between gap-2">
@@ -326,13 +343,12 @@ import BrandName from '../components/BrandName.astro';
     }
 
     function renderDay() {
-      const el = document.getElementById('matches')!;
       const list = matchesFor(currentDay);
       if (!list.length) {
-        el.innerHTML = `<div class="card text-center text-[var(--text-2)]">No matches ${currentDay === 'today' ? 'today' : 'tomorrow'} yet.</div>`;
+        matchesEl.innerHTML = `<div class="card empty-state">No matches ${currentDay === 'today' ? 'today' : 'tomorrow'} yet.</div>`;
         return;
       }
-      el.innerHTML = list.map(cardHTML).join('');
+      matchesEl.innerHTML = list.map(cardHTML).join('');
     }
 
     function setDay(day: 'today' | 'tomorrow') {
@@ -346,7 +362,6 @@ import BrandName from '../components/BrandName.astro';
     }
 
     async function load() {
-      const el = document.getElementById('matches')!;
       try {
         // Send the token when signed in so an inactive account receives only
         // the three-match preview instead of the full published list.
@@ -356,7 +371,7 @@ import BrandName from '../components/BrandName.astro';
           : await fetch(`${API}/api/v1/matches`);
         const data = await res.json().catch(() => ({}));
         allMatches = data.matches || [];
-        document.getElementById('previewNote')?.classList.toggle('hidden', !data.preview);
+        previewNote?.classList.toggle('hidden', !data.preview);
 
         // The API only publishes the two days Home cares about. Keep the
         // device-computed EAT dates as the tab labels; when only one day has
@@ -387,8 +402,8 @@ import BrandName from '../components/BrandName.astro';
         }
 
         if (!allMatches.length) {
-          el.innerHTML =
-            '<div class="card text-center text-[var(--text-2)]">No matches yet.</div>';
+          matchesEl.innerHTML =
+            '<div class="card empty-state">No matches yet.</div>';
           return;
         }
 
@@ -399,12 +414,13 @@ import BrandName from '../components/BrandName.astro';
           renderDay();
         }
       } catch {
-        el.innerHTML =
-          '<div class="card text-center text-[var(--text-2)]">Could not load matches. Check your connection.</div>';
+        matchesEl.innerHTML =
+          '<div class="card empty-state"><p>Could not load matches. Check your connection.</p><button type="button" class="btn btn-secondary text-sm" id="retryMatches">Retry</button></div>';
+        document.getElementById('retryMatches')?.addEventListener('click', () => { void load(); }, { once: true });
       }
     }
 
-    document.getElementById('matches')!.addEventListener('click', (e) => {
+    matchesEl.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('button[data-market]') as HTMLButtonElement | null;
       if (!btn || btn.disabled) return;
       openSlip({
@@ -503,6 +519,8 @@ import BrandName from '../components/BrandName.astro';
       border-radius: var(--r-md);
       padding: var(--s1) var(--s2);
       color: var(--text-2);
+      cursor: pointer;
+      touch-action: manipulation;
       transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
       -webkit-tap-highlight-color: transparent;
     }

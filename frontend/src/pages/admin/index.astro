@@ -26,7 +26,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       </div>
       <div class="card">
         <div class="text-xs text-[var(--text-3)]">Active</div>
-        <div class="text-2xl font-bold counter text-green-400" id="stat-active"><span class="skeleton sk-num"></span></div>
+        <div class="text-2xl font-bold counter text-[var(--success)]" id="stat-active"><span class="skeleton sk-num"></span></div>
         <div class="text-xs text-[var(--text-3)]">paid accounts</div>
       </div>
     </div>
@@ -110,8 +110,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                   <div class="text-xs text-[var(--text-3)]">${esc(i.file_name || 'upload')} · ${esc(i.created_at)}</div>
                 </div>
                 <div class="text-right text-xs">
-                  <div class="text-green-400">${i.rows_imported} imported</div>
-                  ${i.rows_failed ? `<div class="text-red-400">${i.rows_failed} failed</div>` : ''}
+                  <div class="text-[var(--success)]">${i.rows_imported} imported</div>
+                  ${i.rows_failed ? `<div class="text-[var(--danger)]">${i.rows_failed} failed</div>` : ''}
                 </div>
               </div>`
             )

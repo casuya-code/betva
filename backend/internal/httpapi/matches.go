@@ -854,3 +854,139 @@ func (s *Server) handleImportLog(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"imports": out})
 }
+
+// handleMatchHistory returns published matches from the last six months, grouped
+// by day, with the signed-in user's bets on each match (if any). It powers the
+// History page so users see the status of every admin-posted match, not only
+// their own slips.
+func (s *Server) handleMatchHistory(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var userID string
+	if tok := bearerToken(r); tok != "" {
+		if claims, err := s.parseToken(tok); err == nil && !claims.IsAdmin {
+			userID = claims.Subject
+		}
+	}
+
+	rows, err := s.Pool.Query(ctx, `
+		SELECT m.id, to_char(m.match_date, 'YYYY-MM-DD'), to_char(m.kickoff_time, 'HH24:MI'), COALESCE(m.league, ''),
+		       m.home_team, m.away_team, m.status, m.confidence,
+		       (m.settled_at IS NOT NULL),
+		       m.home_goals, m.away_goals, m.home_goals_ht, m.away_goals_ht,
+		       COALESCE(array_agg(mm.market ORDER BY mm.market) FILTER (WHERE mm.market IS NOT NULL), '{}')
+		FROM matches m
+		LEFT JOIN match_markets mm ON mm.match_id = m.id
+		WHERE m.match_date >= (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Dar_es_Salaam')::date - INTERVAL '6 months'
+		GROUP BY m.id
+		ORDER BY m.match_date DESC, m.kickoff_time, m.home_team
+	`)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
+		return
+	}
+	defer rows.Close()
+
+	type matchRow struct {
+		ID          string   `json:"id"`
+		MatchDate   string   `json:"match_date"`
+		Kickoff     string   `json:"kickoff"`
+		League      string   `json:"league"`
+		HomeTeam    string   `json:"home_team"`
+		AwayTeam    string   `json:"away_team"`
+		Status      string   `json:"status"`
+		Confidence  string   `json:"confidence"`
+		Settled     bool     `json:"settled"`
+		HomeGoals   *int     `json:"home_goals"`
+		AwayGoals   *int     `json:"away_goals"`
+		HomeGoalsHT *int     `json:"home_goals_ht"`
+		AwayGoalsHT *int     `json:"away_goals_ht"`
+		Markets     []string `json:"markets"`
+		MyBets      []struct {
+			Market     string `json:"market"`
+			Status     string `json:"status"`
+			StakeCents int64  `json:"stake_cents"`
+			PayoutCents int64 `json:"payout_cents"`
+			OddsBP     int64  `json:"odds_bp"`
+		} `json:"my_bets"`
+	}
+
+	// Collect matches first.
+	matches := []matchRow{}
+	matchIDs := []string{}
+	for rows.Next() {
+		var m matchRow
+		m.MyBets = []struct {
+			Market      string `json:"market"`
+			Status      string `json:"status"`
+			StakeCents  int64  `json:"stake_cents"`
+			PayoutCents int64  `json:"payout_cents"`
+			OddsBP      int64  `json:"odds_bp"`
+		}{}
+		if err := rows.Scan(&m.ID, &m.MatchDate, &m.Kickoff, &m.League, &m.HomeTeam,
+			&m.AwayTeam, &m.Status, &m.Confidence, &m.Settled, &m.HomeGoals,
+			&m.AwayGoals, &m.HomeGoalsHT, &m.AwayGoalsHT, &m.Markets); err != nil {
+			continue
+		}
+		matches = append(matches, m)
+		matchIDs = append(matchIDs, m.ID)
+	}
+
+	// Fetch this user's bets on those matches, if signed in.
+	if userID != "" && len(matchIDs) > 0 {
+		betRows, err := s.Pool.Query(ctx, `
+			SELECT match_id, market, status, stake_cents, payout_cents, COALESCE(payout_multiplier_bp, $2)
+			FROM bets
+			WHERE user_id = $1 AND match_id = ANY($3)
+		`, userID, s.Cfg.PayoutMultiplier, matchIDs)
+		if err == nil {
+			defer betRows.Close()
+			betsByMatch := map[string][]struct {
+				Market      string `json:"market"`
+				Status      string `json:"status"`
+				StakeCents  int64  `json:"stake_cents"`
+				PayoutCents int64  `json:"payout_cents"`
+				OddsBP      int64  `json:"odds_bp"`
+			}{}
+			for betRows.Next() {
+				var mid, market, status string
+				var stake, payout, odds int64
+				if err := betRows.Scan(&mid, &market, &status, &stake, &payout, &odds); err != nil {
+					continue
+				}
+				betsByMatch[mid] = append(betsByMatch[mid], struct {
+					Market      string `json:"market"`
+					Status      string `json:"status"`
+					StakeCents  int64  `json:"stake_cents"`
+					PayoutCents int64  `json:"payout_cents"`
+					OddsBP      int64  `json:"odds_bp"`
+				}{Market: market, Status: status, StakeCents: stake, PayoutCents: payout, OddsBP: odds})
+			}
+			for i := range matches {
+				if bs, ok := betsByMatch[matches[i].ID]; ok {
+					matches[i].MyBets = bs
+				}
+			}
+		}
+	}
+
+	// Group by date.
+	dayMap := map[string][]matchRow{}
+	dayOrder := []string{}
+	for _, m := range matches {
+		if _, ok := dayMap[m.MatchDate]; !ok {
+			dayOrder = append(dayOrder, m.MatchDate)
+		}
+		dayMap[m.MatchDate] = append(dayMap[m.MatchDate], m)
+	}
+	type dayGroup struct {
+		Date    string     `json:"date"`
+		Matches []matchRow `json:"matches"`
+	}
+	days := []dayGroup{}
+	for _, d := range dayOrder {
+		days = append(days, dayGroup{Date: d, Matches: dayMap[d]})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"days": days})
+}

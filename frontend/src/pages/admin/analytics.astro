@@ -56,7 +56,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
             <tr><th>Day</th><th>Active</th><th>New users</th></tr>
           </thead>
           <tbody id="day-rows">
-            <tr><td colspan="3">Loading…</td></tr>
+            <tr><td colspan="3"><div class="skeleton h-6 w-full my-1"></div></td></tr>
+            <tr><td colspan="3"><div class="skeleton h-6 w-full my-1"></div></td></tr>
+            <tr><td colspan="3"><div class="skeleton h-6 w-5/6 my-1"></div></td></tr>
           </tbody>
         </table>
       </div>
@@ -69,7 +71,9 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         At the DAU target, suggests cost ÷ users rounded up to 500 TZS. The final amount is yours — set
         <code class="text-xs">ACCESS_FEE_DAU_TARGET</code> and <code class="text-xs">MONTHLY_OPERATING_COST_CENTS</code> on the server.
       </p>
-      <div id="fee" class="text-sm text-[var(--text-2)]">Loading…</div>
+      <div id="fee" class="text-sm text-[var(--text-2)]">
+        <div class="skeleton h-20 w-full" aria-hidden="true"></div>
+      </div>
     </section>
   </div>
 
@@ -81,7 +85,10 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     async function load() {
       try {
         const res = await adminFetch('/api/v1/admin/analytics?days=30');
-        if (!res.ok) return;
+        if (!res.ok) {
+          showAnalyticsError();
+          return;
+        }
         const d = await res.json().catch(() => ({}));
         setText('a-today', String(d.dau_today ?? 0));
         setText('a-avg', String(d.dau_avg_7d ?? 0));
@@ -93,8 +100,20 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         renderTable(d.days || []);
         renderFee(d.fee_plan || {});
       } catch {
-        /* adminFetch redirects on auth failure */
+        showAnalyticsError();
       }
+    }
+
+    function showAnalyticsError() {
+      const rows = document.getElementById('day-rows')!;
+      const fee = document.getElementById('fee')!;
+      rows.innerHTML = '<tr><td colspan="3"><div class="text-center text-[var(--text-2)] py-2 space-y-2"><p>Could not load analytics.</p><button type="button" class="btn btn-secondary text-sm" id="retryAnalytics">Retry</button></div></td></tr>';
+      fee.innerHTML = '<div class="text-center text-[var(--text-2)] space-y-2"><p>Could not load planner data.</p></div>';
+      document.getElementById('retryAnalytics')?.addEventListener('click', () => {
+        rows.innerHTML = '<tr><td colspan="3"><div class="skeleton h-6 w-full my-1"></div></td></tr><tr><td colspan="3"><div class="skeleton h-6 w-full my-1"></div></td></tr><tr><td colspan="3"><div class="skeleton h-6 w-5/6 my-1"></div></td></tr>';
+        fee.innerHTML = '<div class="skeleton h-20 w-full" aria-hidden="true"></div>';
+        void load();
+      }, { once: true });
     }
 
     function renderChart(days: any[]) {
@@ -113,17 +132,32 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       labels.innerHTML = `<span>${esc(first)}</span><span>${esc(last)}</span>`;
     }
 
+    function renderRowsChunked<T>(tbody: HTMLTableSectionElement, items: T[], render: (item: T) => string, size = 20) {
+      let i = 0;
+      const step = () => {
+        const end = Math.min(i + size, items.length);
+        let html = '';
+        for (; i < end; i++) html += render(items[i]);
+        if (html) tbody.insertAdjacentHTML('beforeend', html);
+        if (i < items.length) requestAnimationFrame(step);
+      };
+      step();
+    }
+
     function renderTable(days: any[]) {
       const el = document.getElementById('day-rows')!;
-      const rows = [...days].reverse().map(
-        (x: any) => `
+      const rows = [...days].reverse();
+      if (!rows.length) {
+        el.innerHTML = '<tr><td colspan="3">No data yet.</td></tr>';
+        return;
+      }
+      el.innerHTML = '';
+      renderRowsChunked(el as HTMLTableSectionElement, rows, (x: any) => `
         <tr>
           <td>${esc(x.day)}</td>
           <td>${x.dau}</td>
           <td>${x.new_users}</td>
-        </tr>`
-      );
-      el.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="3">No data yet.</td></tr>';
+        </tr>`);
     }
 
     function renderFee(f: any) {

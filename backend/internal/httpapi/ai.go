@@ -118,9 +118,28 @@ Rules:
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": userPrompt},
 		},
-		"temperature":     0,
-		"response_format": map[string]string{"type": "json_object"},
-		"max_tokens":      256,
+		"temperature": 0,
+		"response_format": map[string]interface{}{
+			"type": "json_schema",
+			"json_schema": map[string]interface{}{
+				"name":   "groq_result",
+				"strict": true,
+				"schema": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"home_goals":     map[string]interface{}{"type": "integer"},
+						"away_goals":     map[string]interface{}{"type": "integer"},
+						"home_goals_ht":  map[string]interface{}{"type": []string{"integer", "null"}},
+						"away_goals_ht":  map[string]interface{}{"type": []string{"integer", "null"}},
+						"confidence":     map[string]interface{}{"type": "string", "enum": []string{"high", "medium", "low"}},
+						"notes":          map[string]interface{}{"type": "string"},
+					},
+					"required":             []string{"home_goals", "away_goals", "home_goals_ht", "away_goals_ht", "confidence", "notes"},
+					"additionalProperties": false,
+				},
+			},
+		},
+		"max_tokens": 256,
 	})
 	gReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.groq.com/openai/v1/chat/completions", bytes.NewReader(groqBody))
 	if err != nil {

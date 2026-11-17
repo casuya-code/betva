@@ -70,6 +70,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 
 		// matches (public read)
 		api.Get("/matches", s.handleListMatches)
+		api.Get("/matches/history", s.handleMatchHistory)
 		api.Get("/config", s.handleConfig)
 		api.Get("/stats", s.handleStats)
 
@@ -104,6 +105,8 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			protected.Get("/self-exclusion", s.handleGetSelfExclusion)
 			protected.Post("/self-exclusion", s.handleSetSelfExclusion)
 		})
+
+	StartSettlementScheduler(s)
 
 		// admin
 		api.Route("/admin", func(adm chi.Router) {

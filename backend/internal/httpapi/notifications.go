@@ -475,8 +475,8 @@ func (s *Server) handleSetSelfExclusion(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad json"})
 		return
 	}
-	if body.Hours != 24 && body.Hours != 168 && body.Hours != 720 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "hours must be 24, 168, or 720"})
+	if body.Hours != 3 && body.Hours != 6 && body.Hours != 12 && body.Hours != 24 && body.Hours != 168 && body.Hours != 720 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "hours must be 3, 6, 12, 24, 168, or 720"})
 		return
 	}
 

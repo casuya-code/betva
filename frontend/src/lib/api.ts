@@ -161,11 +161,14 @@ export function betStatus(status: string): { cls: string; label: string } {
 export function toast(message: string, kind: 'ok' | 'error' = 'ok', ms = 3200) {
   const el = document.createElement('div');
   el.className = 'toast';
-  el.setAttribute('role', 'status');
+  el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
   el.textContent = message;
   if (kind === 'error') {
-    el.style.borderColor = 'rgba(239,68,68,0.5)';
-    el.style.color = '#fca5a5';
+    el.style.borderColor = 'rgba(217,48,37,0.35)';
+    el.style.color = 'var(--danger)';
+  } else {
+    el.style.borderColor = 'rgba(24,128,56,0.3)';
+    el.style.color = 'var(--success-strong)';
   }
   document.body.appendChild(el);
   setTimeout(() => el.remove(), ms);

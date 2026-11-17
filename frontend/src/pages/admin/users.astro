@@ -32,7 +32,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     </section>
 
     <section class="card">
-      <div id="list" class="text-sm text-[var(--text-2)]">Loading…</div>
+      <div id="list" class="text-sm text-[var(--text-2)]">
+        <div class="space-y-2 py-1" aria-hidden="true">
+          <div class="skeleton h-12 w-full"></div>
+          <div class="skeleton h-12 w-full"></div>
+          <div class="skeleton h-12 w-full"></div>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -47,11 +53,24 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       load();
     });
 
+    function renderRowsChunked<T>(tbody: HTMLTableSectionElement, items: T[], render: (item: T) => string, size = 25) {
+      let i = 0;
+      const step = () => {
+        const end = Math.min(i + size, items.length);
+        let html = '';
+        for (; i < end; i++) html += render(items[i]);
+        if (html) tbody.insertAdjacentHTML('beforeend', html);
+        if (i < items.length) requestAnimationFrame(step);
+      };
+      step();
+    }
+
     async function load() {
       const q = (document.getElementById('q') as HTMLInputElement).value.trim();
       const status = (document.getElementById('status') as HTMLSelectElement).value;
       const el = document.getElementById('list')!;
-      el.textContent = 'Loading…';
+      const countEl = document.getElementById('count')!;
+      el.innerHTML = '<div class="space-y-2 py-1" aria-hidden="true"><div class="skeleton h-12 w-full"></div><div class="skeleton h-12 w-full"></div><div class="skeleton h-12 w-full"></div></div>';
 
       try {
         const res = await adminFetch(
@@ -59,7 +78,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         );
         const data = await res.json().catch(() => ({}));
         const users = data.users || [];
-        document.getElementById('count')!.textContent = `${data.total ?? users.length} user(s)`;
+        countEl.textContent = `${data.total ?? users.length} user(s)`;
 
         if (!users.length) {
           el.innerHTML = '<div class="text-[var(--text-3)]">No users match this filter.</div>';
@@ -75,10 +94,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                   <th>Balance</th><th>Access until</th><th>Joined</th><th>Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                ${users
-                  .map(
-                    (u: any) => `
+              <tbody id="usersBody"></tbody>
+            </table>
+          </div>`;
+        const tbody = document.getElementById('usersBody') as HTMLTableSectionElement | null;
+        if (tbody) {
+          renderRowsChunked(tbody, users, (u: any) => `
                   <tr data-id="${esc(u.id)}">
                     <td class="font-medium">${esc(u.nickname)}</td>
                     <td class="counter">${esc(u.phone)}</td>
@@ -95,14 +116,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                         <button class="btn btn-danger text-xs admin-act" data-action="banned" type="button">Ban</button>
                       </div>
                     </td>
-                  </tr>`
-                  )
-                  .join('')}
-              </tbody>
-            </table>
-          </div>`;
+                  </tr>`);
+        }
       } catch {
-        el.textContent = 'Could not load users.';
+        el.innerHTML = '<div class="card text-center text-[var(--text-2)] space-y-3"><p>Could not load users.</p><button type="button" class="btn btn-secondary text-sm" id="retryUsers">Retry</button></div>';
+        document.getElementById('retryUsers')?.addEventListener('click', () => { void load(); }, { once: true });
       }
     }
 

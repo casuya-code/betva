@@ -140,7 +140,7 @@ import Layout from '../layouts/Layout.astro';
         // No autoplay, no preload: the user decides whether to spend data.
         return `<video class="post-media mt-3" controls preload="none" playsinline src="${src}"></video>`;
       }
-      return `<img class="post-media mt-3" src="${src}" alt="Photo shared by ${esc(p.nickname)}" loading="lazy" decoding="async" />`;
+      return `<img class="post-media mt-3" src="${src}" alt="Photo shared by ${esc(p.nickname)}" loading="lazy" decoding="async" fetchpriority="low" />`;
     }
 
     function reactionBar(p: Post): string {
@@ -171,11 +171,11 @@ import Layout from '../layouts/Layout.astro';
     function postHtml(p: Post): string {
       const initial = esc((p.nickname || '?').slice(0, 1).toUpperCase());
       const avatar = p.profile_pic
-        ? `<img src="${esc(p.profile_pic)}" alt="" class="w-10 h-10 rounded-full object-cover" loading="lazy" decoding="async" />`
+        ? `<img src="${esc(p.profile_pic)}" alt="" class="w-10 h-10 rounded-full object-cover" width="40" height="40" loading="lazy" decoding="async" />`
         : `<div class="w-10 h-10 rounded-full bg-[var(--brand)] text-white grid place-items-center font-semibold">${initial}</div>`;
 
       return `
-        <article class="card" data-post="${esc(p.id)}">
+        <article class="card cv-auto" data-post="${esc(p.id)}">
           <div class="flex items-center gap-3 mb-3">
             ${avatar}
             <div class="min-w-0 flex-1">
@@ -196,6 +196,19 @@ import Layout from '../layouts/Layout.astro';
           ${renderMedia(p)}
           ${reactionBar(p)}
         </article>`;
+    }
+
+    function appendPostsChunked(posts: Post[]) {
+      let i = 0;
+      const size = 4;
+      const step = () => {
+        const end = Math.min(i + size, posts.length);
+        let html = '';
+        for (; i < end; i++) html += postHtml(posts[i]);
+        if (html) feed.insertAdjacentHTML('beforeend', html);
+        if (i < posts.length) requestAnimationFrame(step);
+      };
+      step();
     }
 
     async function loadFeed(reset = false) {
@@ -219,16 +232,27 @@ import Layout from '../layouts/Layout.astro';
 
         if (!posts.length && reset) {
           feed.innerHTML =
-            '<div class="card text-center text-[var(--text-2)]">No posts yet. Be the first — say something real.</div>';
-        } else {
-          feed.insertAdjacentHTML('beforeend', posts.map(postHtml).join(''));
+            '<div class="card empty-state">No posts yet. Be the first — say something real.</div>';
+        } else if (posts.length) {
+          appendPostsChunked(posts);
         }
 
         cursor = data.next_before || null;
         done = !cursor;
         feedMsg.textContent = done && posts.length ? 'That is the start of the feed.' : '';
       } catch {
-        feedMsg.textContent = 'Could not load the feed. Check your connection.';
+        const isInitial = reset || feed.querySelector('.skeleton') !== null;
+        if (isInitial) {
+          feed.innerHTML = '<div class="card empty-state"><p>Could not load the feed. Check your connection.</p><button type="button" class="btn btn-secondary text-sm" id="retryFeed">Retry</button></div>';
+          feedMsg.textContent = '';
+          document.getElementById('retryFeed')?.addEventListener('click', () => {
+            feed.innerHTML = '<div class="card"><div class="skeleton h-28"></div></div><div class="card"><div class="skeleton h-28"></div></div>';
+            void loadFeed(true);
+          }, { once: true });
+        } else {
+          feedMsg.innerHTML = 'Could not load more. <button type="button" class="tap-link text-[var(--brand)]" id="retryMore">Retry</button>';
+          document.getElementById('retryMore')?.addEventListener('click', () => { void loadFeed(false); }, { once: true });
+        }
       } finally {
         loading = false;
       }
@@ -248,7 +272,7 @@ import Layout from '../layouts/Layout.astro';
       const limit = isVideo ? 3_000_000 : 400_000;
       if (file.size > limit) {
         composeMsg.textContent = `${isVideo ? 'Video' : 'Image'} is too large. Limit is ${Math.round(limit / 1000)} KB.`;
-        composeMsg.className = 'text-sm text-red-400';
+        composeMsg.className = 'text-sm text-[var(--danger)]';
         input.value = '';
         return;
       }
@@ -263,12 +287,12 @@ import Layout from '../layouts/Layout.astro';
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           composeMsg.textContent = data.error || 'Upload failed.';
-          composeMsg.className = 'text-sm text-red-400';
+          composeMsg.className = 'text-sm text-[var(--danger)]';
           return;
         }
         media = { url: data.url, type: data.media_type, bytes: data.bytes };
         composeMsg.textContent = 'Attached. Loads when opened.';
-        composeMsg.className = 'text-sm text-green-400';
+        composeMsg.className = 'text-sm text-[var(--success)]';
 
         const src = mediaSrc(media.url);
         mediaPreview.classList.remove('hidden');
@@ -277,7 +301,7 @@ import Layout from '../layouts/Layout.astro';
             ${
               media.type === 'video'
                 ? `<video src="${esc(src)}" class="w-20 h-14 rounded-lg object-cover" muted playsinline preload="metadata"></video>`
-                : `<img src="${esc(src)}" alt="Attachment preview" class="w-14 h-14 rounded-lg object-cover" />`
+                : `<img src="${esc(src)}" alt="Attachment preview" class="w-14 h-14 rounded-lg object-cover" loading="lazy" decoding="async" />`
             }
             <div class="text-sm flex-1">${media.type === 'video' ? 'Short video' : 'Photo'} attached</div>
             <button class="btn btn-ghost text-xs" type="button" id="removeMedia">Remove</button>
@@ -291,7 +315,7 @@ import Layout from '../layouts/Layout.astro';
         });
       } catch {
         composeMsg.textContent = 'Upload failed.';
-        composeMsg.className = 'text-sm text-red-400';
+        composeMsg.className = 'text-sm text-[var(--danger)]';
       }
     });
 
@@ -299,7 +323,7 @@ import Layout from '../layouts/Layout.astro';
       const body = bodyEl.value.trim();
       if (!body && !media) {
         composeMsg.textContent = 'Write something or attach media first.';
-        composeMsg.className = 'text-sm text-red-400';
+        composeMsg.className = 'text-sm text-[var(--danger)]';
         return;
       }
       postBtn.disabled = true;
@@ -318,7 +342,7 @@ import Layout from '../layouts/Layout.astro';
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           composeMsg.textContent = data.error || 'Could not post.';
-          composeMsg.className = 'text-sm text-red-400';
+          composeMsg.className = 'text-sm text-[var(--danger)]';
           return;
         }
         bodyEl.value = '';
@@ -328,7 +352,7 @@ import Layout from '../layouts/Layout.astro';
         mediaPreview.classList.add('hidden');
         (document.getElementById('mediaInput') as HTMLInputElement).value = '';
         composeMsg.textContent = 'Posted.';
-        composeMsg.className = 'text-sm text-green-400';
+        composeMsg.className = 'text-sm text-[var(--success)]';
         toast('Posted');
         cursor = null;
         done = false;
@@ -336,7 +360,7 @@ import Layout from '../layouts/Layout.astro';
         maybeAskPush();
       } catch {
         composeMsg.textContent = 'Network error. Try again.';
-        composeMsg.className = 'text-sm text-red-400';
+        composeMsg.className = 'text-sm text-[var(--danger)]';
       } finally {
         postBtn.disabled = false;
         postBtn.textContent = 'Post';
@@ -422,7 +446,7 @@ import Layout from '../layouts/Layout.astro';
       const msg = document.getElementById('reportMsg')!;
       if (!reason) {
         msg.textContent = 'Add a short reason.';
-        msg.className = 'text-sm mb-2 text-red-400';
+        msg.className = 'text-sm mb-2 text-[var(--danger)]';
         return;
       }
       try {
@@ -434,7 +458,7 @@ import Layout from '../layouts/Layout.astro';
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           msg.textContent = data.error || 'Could not send the report.';
-          msg.className = 'text-sm mb-2 text-red-400';
+          msg.className = 'text-sm mb-2 text-[var(--danger)]';
           return;
         }
         closeReport();
@@ -444,7 +468,7 @@ import Layout from '../layouts/Layout.astro';
         await loadFeed(true);
       } catch {
         msg.textContent = 'Could not send the report. Check your connection.';
-        msg.className = 'text-sm mb-2 text-red-400';
+        msg.className = 'text-sm mb-2 text-[var(--danger)]';
       }
     });
 

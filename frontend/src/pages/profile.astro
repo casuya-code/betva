@@ -81,29 +81,26 @@ import TrackRecord from '../components/TrackRecord.astro';
         Pauses betting, not browsing. Cannot be shortened.
       </p>
       <div id="exclusionStatus" class="text-sm text-[var(--text-2)]"></div>
-      <div class="grid grid-cols-3 gap-2">
-        <button class="btn btn-secondary text-sm exclusion" data-hours="24" type="button">24 hours</button>
-        <button class="btn btn-secondary text-sm exclusion" data-hours="168" type="button">7 days</button>
-        <button class="btn btn-secondary text-sm exclusion" data-hours="720" type="button">30 days</button>
-      </div>
+      <button class="btn btn-secondary w-full" id="openExclusion" type="button">Take a break</button>
       <div id="exclusionMsg" class="text-sm" aria-live="polite"></div>
     </div>
 
     <div class="glass p-4">
       <h2 class="font-semibold mb-3">Activate your account</h2>
       <p class="text-sm text-[var(--text-2)] mb-3">
-        Pay the official number below, then ask the admin to activate you. Only one payment number exists — never pay anyone else; the admin cannot be responsible for money sent elsewhere.
-        <strong>Your payment covers maintenance and internet service.</strong>
+        Pay the official number below, then ask admin to activate you. Use only this number. Payment covers internet, maintenance, and website costs so the admin can update the site and share tips.
       </p>
-      <div class="glass-el p-3 text-center">
-        <div class="text-xs text-[var(--text-3)]">Monthly access rate</div>
-        <div class="text-lg font-bold counter" id="access-fee">—</div>
-        <div class="text-xs text-[var(--text-3)]" id="access-fee-note"></div>
-      </div>
-      <div class="glass-el p-3 text-center mt-2">
-        <div class="text-xs text-[var(--text-3)]">Official payment number</div>
-        <div class="text-lg font-bold counter" id="admin-number">Ask the admin</div>
-        <div class="text-sm text-[var(--text-2)]" id="payment-name"></div>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="glass-el p-2 text-center min-w-0">
+          <div class="text-xs text-[var(--text-3)]">Monthly rate</div>
+          <div class="text-base sm:text-lg font-bold counter break-words" id="access-fee">—</div>
+          <div class="text-xs text-[var(--text-3)]" id="access-fee-note"></div>
+        </div>
+        <div class="glass-el p-2 text-center min-w-0">
+          <div class="text-xs text-[var(--text-3)]">Payment number</div>
+          <div class="text-base sm:text-lg font-bold counter break-words" id="admin-number">Ask the admin</div>
+          <div class="text-xs text-[var(--text-2)]" id="payment-name"></div>
+        </div>
       </div>
       <p class="text-xs text-[var(--text-3)] mt-2">
         Read the <a href="/terms" class="text-[var(--brand)]">Terms of Service</a> before paying. Bad content and payments to the wrong number are your responsibility.
@@ -123,6 +120,30 @@ import TrackRecord from '../components/TrackRecord.astro';
     </div>
 
     <button id="logoutBtn" class="btn btn-danger w-full" type="button">Logout</button>
+  </div>
+
+  <!-- Kept outside the .glass card: backdrop-filter on .glass creates a
+       containing block that would trap this fixed overlay inside the card. -->
+  <div id="exclusionConfirm" class="hidden modal-overlay" role="dialog" aria-modal="true" aria-labelledby="exclusionConfirmTitle">
+    <div class="glass modal-card space-y-3">
+      <h2 id="exclusionConfirmTitle" class="modal-title">Pause betting?</h2>
+      <div class="modal-options" id="exclusionOptions">
+        <button class="btn btn-secondary text-sm exclusion-opt" data-hours="3" type="button">3 hours</button>
+        <button class="btn btn-secondary text-sm exclusion-opt" data-hours="6" type="button">6 hours</button>
+        <button class="btn btn-secondary text-sm exclusion-opt" data-hours="12" type="button">12 hours</button>
+        <button class="btn btn-secondary text-sm exclusion-opt" data-hours="24" type="button">24 hours</button>
+        <button class="btn btn-secondary text-sm exclusion-opt" data-hours="168" type="button">7 days</button>
+        <button class="btn btn-secondary text-sm exclusion-opt" data-hours="720" type="button">30 days</button>
+      </div>
+      <p class="text-sm" id="exclusionConfirmText">Select a break length.</p>
+      <p class="modal-warning">
+        This is real and cannot be reversed or shortened. Betting stays paused for the full period you choose.
+      </p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="exclusionCancel" type="button">Cancel</button>
+        <button class="btn btn-danger" id="exclusionDo" type="button">Yes, pause now</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -325,7 +346,7 @@ import TrackRecord from '../components/TrackRecord.astro';
       btn.disabled = true;
       const result = await enablePush();
       msg.textContent = result.message;
-      msg.className = `text-sm ${result.ok ? 'text-green-400' : 'text-[var(--text-2)]'}`;
+      msg.className = `text-sm ${result.ok ? 'text-[var(--success)]' : 'text-[var(--text-2)]'}`;
       pushStatus();
       btn.disabled = false;
     });
@@ -336,51 +357,109 @@ import TrackRecord from '../components/TrackRecord.astro';
       const d = await res.json().catch(() => ({}));
       const badge = document.getElementById('exclusionBadge')!;
       const status = document.getElementById('exclusionStatus')!;
-      const buttons = document.querySelectorAll<HTMLButtonElement>('.exclusion');
+      const buttons = document.querySelectorAll<HTMLButtonElement>('.exclusion-opt');
+      const open = document.getElementById('openExclusion') as HTMLButtonElement | null;
 
       if (d.active) {
         badge.textContent = 'PAUSED';
         badge.className = 'badge badge-postponed';
         status.textContent = `Betting is paused until ${d.until}. This cannot be shortened.`;
         buttons.forEach((b) => (b.disabled = true));
+        if (open) open.disabled = true;
       } else {
         badge.textContent = 'NOT ACTIVE';
         badge.className = 'badge badge-pending';
         status.textContent = 'No pause is active.';
         buttons.forEach((b) => (b.disabled = false));
+        if (open) open.disabled = false;
       }
     }
 
-    document.querySelectorAll<HTMLButtonElement>('.exclusion').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const hours = Number(btn.dataset.hours);
-        const label = hours === 24 ? '24 hours' : hours === 168 ? '7 days' : '30 days';
-        if (!confirm(`Pause betting for ${label}? This cannot be undone early.`)) return;
+    let pendingExclusionHours: number | null = null;
 
-        const msg = document.getElementById('exclusionMsg')!;
-        btn.disabled = true;
-        try {
-          const res = await authFetch('/api/v1/self-exclusion', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ hours }),
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            msg.textContent = data.error || 'Could not pause betting.';
-            msg.className = 'text-sm text-red-400';
-            return;
-          }
-          msg.textContent = `Betting paused until ${data.until}.`;
-          msg.className = 'text-sm text-green-400';
-          await loadExclusion();
-        } catch {
-          msg.textContent = 'Could not pause betting. Check your connection.';
-          msg.className = 'text-sm text-red-400';
-        } finally {
-          btn.disabled = false;
-        }
+    const openBtn = document.getElementById('openExclusion') as HTMLButtonElement;
+    const doBtn = document.getElementById('exclusionDo') as HTMLButtonElement;
+    const confirmText = document.getElementById('exclusionConfirmText')!;
+    const panel = document.getElementById('exclusionConfirm')!;
+
+    function labelFor(hours: number): string {
+      return hours === 3
+        ? '3 hours'
+        : hours === 6
+          ? '6 hours'
+          : hours === 12
+            ? '12 hours'
+            : hours === 24
+              ? '24 hours'
+              : hours === 168
+                ? '7 days'
+                : '30 days';
+    }
+
+    openBtn.addEventListener('click', () => {
+      pendingExclusionHours = null;
+      document.querySelectorAll<HTMLButtonElement>('.exclusion-opt').forEach((b) => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
       });
+      confirmText.textContent = 'Select a break length.';
+      doBtn.disabled = true;
+      panel.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    });
+
+    document.querySelectorAll<HTMLButtonElement>('.exclusion-opt').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const hours = Number(btn.dataset.hours);
+        pendingExclusionHours = hours;
+        document.querySelectorAll<HTMLButtonElement>('.exclusion-opt').forEach((b) => {
+          b.classList.remove('btn-primary');
+          b.classList.add('btn-secondary');
+        });
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+        confirmText.textContent = `Pause betting for ${labelFor(hours)}? This cannot be undone early.`;
+        doBtn.disabled = false;
+      });
+    });
+
+    document.getElementById('exclusionCancel')!.addEventListener('click', () => {
+      pendingExclusionHours = null;
+      document.getElementById('exclusionConfirm')!.classList.add('hidden');
+      document.body.style.overflow = '';
+    });
+
+    document.getElementById('exclusionDo')!.addEventListener('click', async () => {
+      if (pendingExclusionHours == null) return;
+      const hours = pendingExclusionHours;
+      const msg = document.getElementById('exclusionMsg')!;
+      const panel = document.getElementById('exclusionConfirm')!;
+      doBtn.disabled = true;
+      try {
+        const res = await authFetch('/api/v1/self-exclusion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hours }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          msg.textContent = data.error || 'Could not pause betting.';
+          msg.className = 'text-sm text-[var(--danger)]';
+          return;
+        }
+        msg.textContent = `Betting paused until ${data.until}.`;
+        msg.className = 'text-sm text-[var(--success)]';
+        panel.classList.add('hidden');
+        document.body.style.overflow = '';
+        await loadExclusion();
+      } catch {
+        msg.textContent = 'Could not pause betting. Check your connection.';
+        msg.className = 'text-sm text-[var(--danger)]';
+      } finally {
+        doBtn.disabled = false;
+        pendingExclusionHours = null;
+        document.body.style.overflow = '';
+      }
     });
 
     // Load in parallel: on a slow connection five serial round-trips is five
@@ -413,11 +492,11 @@ import TrackRecord from '../components/TrackRecord.astro';
         });
         const data = await res.json().catch(() => ({}));
         msg.textContent = res.ok ? 'Saved.' : data.error || 'Failed';
-        msg.className = res.ok ? 'text-center text-sm text-green-400' : 'text-center text-sm text-red-400';
+        msg.className = res.ok ? 'text-center text-sm text-[var(--success)]' : 'text-center text-sm text-[var(--danger)]';
         if (res.ok) form.reset();
       } catch {
         msg.textContent = 'Could not save changes. Check your connection.';
-        msg.className = 'text-center text-sm text-red-400';
+        msg.className = 'text-center text-sm text-[var(--danger)]';
       }
     });
 

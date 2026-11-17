@@ -1,4 +1,4 @@
-﻿---
+---
 import AdminLayout from '../../layouts/AdminLayout.astro';
 ---
 <AdminLayout title="Betva Admin - AI Results" active="ai">
@@ -100,7 +100,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       const url = sourceUrl.value.trim();
       if (!matchId || !url) {
         genMsg.textContent = 'Pick a match and enter a result page URL.';
-        genMsg.className = 'text-sm text-red-400';
+        genMsg.className = 'text-sm text-[var(--danger)]';
         return;
       }
       genMsg.textContent = 'Analysing…';
@@ -116,18 +116,30 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           genMsg.textContent = data.error || 'Could not generate a suggestion.';
-          genMsg.className = 'text-sm text-red-400';
+          genMsg.className = 'text-sm text-[var(--danger)]';
           return;
         }
-        genMsg.innerHTML = `<span class="text-green-400">Suggestion ${esc(String(data.id || '').slice(0, 8))}: ${esc(data.suggested_home)}-${esc(data.suggested_away)} (HT ${data.suggested_home_ht ?? '?'}-${data.suggested_away_ht ?? '?'}) - confidence ${esc(data.confidence)}.</span>`;
+        genMsg.innerHTML = `<span class="text-[var(--success)]">Suggestion ${esc(String(data.id || '').slice(0, 8))}: ${esc(data.suggested_home)}-${esc(data.suggested_away)} (HT ${data.suggested_home_ht ?? '?'}-${data.suggested_away_ht ?? '?'}) - confidence ${esc(data.confidence)}.</span>`;
         genMsg.className = 'text-sm';
         void loadList();
       } catch {
         genMsg.textContent = 'Network error.';
-        genMsg.className = 'text-sm text-red-400';
+        genMsg.className = 'text-sm text-[var(--danger)]';
       } finally {
         btn.disabled = false;
       }
+    }
+
+    function renderRowsChunked<T>(tbody: HTMLTableSectionElement, items: T[], render: (item: T) => string, size = 20) {
+      let i = 0;
+      const step = () => {
+        const end = Math.min(i + size, items.length);
+        let html = '';
+        for (; i < end; i++) html += render(items[i]);
+        if (html) tbody.insertAdjacentHTML('beforeend', html);
+        if (i < items.length) requestAnimationFrame(step);
+      };
+      step();
     }
 
     async function loadList() {
@@ -147,8 +159,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           <div class="admin-table-wrap">
             <table class="admin-table">
               <thead><tr><th>When</th><th>Match</th><th>Suggested</th><th>Confidence</th><th>Status</th><th>Review</th></tr></thead>
-              <tbody>
-                ${items.map((s: any) => `
+              <tbody id="suggestionsBody"></tbody>
+            </table>
+          </div>`;
+        const tbody = document.getElementById('suggestionsBody') as HTMLTableSectionElement | null;
+        if (tbody) {
+          renderRowsChunked(tbody, items, (s: any) => `
                   <tr data-id="${esc(s.id)}">
                     <td class="text-xs text-[var(--text-3)] whitespace-nowrap">${esc(s.created_at)}</td>
                     <td>
@@ -173,10 +189,8 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                         ${s.review_reason ? `<div class="text-xs text-[var(--text-3)]">${esc(s.review_reason)}</div>` : ''}
                       `}
                     </td>
-                  </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>`;
+                  </tr>`);
+        }
       } catch {
         el.textContent = 'Could not load suggestions.';
       }

@@ -22,11 +22,11 @@ import Layout from '../layouts/Layout.astro';
               <div class="text-[11px] text-[var(--text-3)]">Settled</div>
             </div>
             <div>
-              <div class="text-xl font-bold counter text-green-400" id="h-wins">—</div>
+              <div class="text-xl font-bold counter text-[var(--success)]" id="h-wins">—</div>
               <div class="text-[11px] text-[var(--text-3)]">Wins</div>
             </div>
             <div>
-              <div class="text-xl font-bold counter text-red-400" id="h-losses">—</div>
+              <div class="text-xl font-bold counter text-[var(--danger)]" id="h-losses">—</div>
               <div class="text-[11px] text-[var(--text-3)]">Losses</div>
             </div>
             <div>
@@ -50,8 +50,18 @@ import Layout from '../layouts/Layout.astro';
         </div>
 
         <div id="list" class="space-y-3">
-          <div class="card"><div class="skeleton h-24"></div></div>
-          <div class="card"><div class="skeleton h-24"></div></div>
+          <div class="card" aria-hidden="true"><div class="skeleton h-28"></div></div>
+          <div class="card" aria-hidden="true"><div class="skeleton h-28"></div></div>
+        </div>
+
+        <div class="mt-6">
+          <div class="flex items-center justify-between gap-2 mb-3">
+            <h2 class="text-lg font-semibold">Published matches</h2>
+            <span class="text-xs text-[var(--text-3)]" id="m-count"></span>
+          </div>
+          <div id="matchHistory" class="space-y-4">
+            <div class="card" aria-hidden="true"><div class="skeleton h-28"></div></div>
+          </div>
         </div>
       </div>
     </div>
@@ -59,6 +69,17 @@ import Layout from '../layouts/Layout.astro';
 
   <script>
     import { authFetch, esc, money, MARKET_LABEL, oddsText, betStatus, toast } from '../lib/api';
+
+    const listEl = document.getElementById('list')!;
+    const settledEl = document.getElementById('h-settled')!;
+    const winsEl = document.getElementById('h-wins')!;
+    const lossesEl = document.getElementById('h-losses')!;
+    const rateEl = document.getElementById('h-rate')!;
+    const countEl = document.getElementById('h-count')!;
+    const rangeEl = document.getElementById('h-range')!;
+    const matchHistoryEl = document.getElementById('matchHistory')!;
+    const matchCountEl = document.getElementById('m-count')!;
+    const matchTarget = document.getElementById('matchHistory');
 
     type Bet = {
       id: string;
@@ -92,32 +113,50 @@ import Layout from '../layouts/Layout.astro';
       return s;
     }
 
-    function render(bets: Bet[]) {
-      const list = document.getElementById('list')!;
-      if (!bets.length) {
-        list.innerHTML =
-          '<div class="card text-center text-[var(--text-2)]">No slips from your account yet. Only bets you place appear here. The Betva track record on Home combines settled tips from everyone.</div>';
+    function appendChunked<T>(
+      container: HTMLElement,
+      items: T[],
+      renderItem: (item: T) => string,
+      size = 12,
+      onDone?: () => void,
+      onProgress?: (loaded: number, total: number) => void
+    ) {
+      let i = 0;
+      const total = items.length;
+      const step = () => {
+        const end = Math.min(i + size, total);
+        let html = '';
+        for (; i < end; i++) html += renderItem(items[i]);
+        if (html) container.insertAdjacentHTML('beforeend', html);
+        if (onProgress) onProgress(i, total);
+        if (i < total) requestAnimationFrame(step);
+        else if (onDone) onDone();
+      };
+      if (!total) {
+        if (onProgress) onProgress(0, 0);
+        if (onDone) onDone();
         return;
       }
+      step();
+    }
 
-      list.innerHTML = bets
-        .map((b) => {
-          const st = betStatus(b.status);
-          const payout =
-            b.status === 'win'
-              ? `<div class="text-green-400 counter">+${money(b.payout_cents)} TZS</div>`
-              : b.status === 'refunded'
-                ? `<div class="text-[var(--text-2)] counter">${money(b.stake_cents)} TZS returned</div>`
-                : b.status === 'loss'
-                  ? `<div class="text-red-400 counter">−${money(b.stake_cents)} TZS</div>`
-                  : `<div class="text-[var(--text-2)] counter">${money(b.stake_cents)} TZS at stake</div>`;
+    function betCardHtml(b: Bet): string {
+      const st = betStatus(b.status);
+      const payout =
+        b.status === 'win'
+          ? `<div class="text-[var(--success)] counter">+${money(b.payout_cents)} TZS</div>`
+          : b.status === 'refunded'
+            ? `<div class="text-[var(--text-2)] counter">${money(b.stake_cents)} TZS returned</div>`
+            : b.status === 'loss'
+              ? `<div class="text-[var(--danger)] counter">−${money(b.stake_cents)} TZS</div>`
+              : `<div class="text-[var(--text-2)] counter">${money(b.stake_cents)} TZS at stake</div>`;
 
-          const reason = b.void_reason
-            ? `<div class="mt-2 text-xs text-[var(--text-3)]">Reason: ${esc(b.void_reason)}</div>`
-            : '';
+      const reason = b.void_reason
+        ? `<div class="mt-2 text-xs text-[var(--text-3)]">Reason: ${esc(b.void_reason)}</div>`
+        : '';
 
-          return `
-            <div class="card">
+      return `
+            <div class="card cv-auto">
               <div class="flex items-start justify-between gap-2 mb-2">
                 <span class="text-xs text-[var(--text-3)] leading-snug break-words">
                   ${esc(b.league || 'Match')} · ${esc(b.match_date)} ${esc(b.kickoff)}
@@ -149,8 +188,33 @@ import Layout from '../layouts/Layout.astro';
               </div>
               ${reason}
             </div>`;
-        })
-        .join('');
+    }
+
+    function render(bets: Bet[]) {
+      if (!bets.length) {
+        listEl.innerHTML =
+          '<div class="card empty-state">No slips from your account yet. Only bets you place appear here. The Betva track record on Home combines settled tips from everyone.</div>';
+        return;
+      }
+
+      listEl.innerHTML = '';
+      let loadingEl: HTMLElement | null = null;
+      if (bets.length > 20) {
+        listEl.insertAdjacentHTML('beforeend', `<div class="text-xs text-[var(--text-3)] py-1" data-loading-bets>Loading 0/${bets.length} bets…</div>`);
+        loadingEl = listEl.querySelector('[data-loading-bets]') as HTMLElement | null;
+      }
+      appendChunked(
+        listEl,
+        bets,
+        betCardHtml,
+        bets.length > 120 ? 8 : 12,
+        () => {
+          loadingEl?.remove();
+        },
+        (loaded, total) => {
+          if (loadingEl) loadingEl.textContent = `Loading ${loaded}/${total} bets…`;
+        }
+      );
     }
 
     function summarise(bets: Bet[]) {
@@ -159,13 +223,13 @@ import Layout from '../layouts/Layout.astro';
       const losses = bets.filter((b) => b.status === 'loss').length;
       const rate = settled.length ? Math.round((wins / settled.length) * 100) : 0;
 
-      document.getElementById('h-settled')!.textContent = String(settled.length);
-      document.getElementById('h-wins')!.textContent = String(wins);
-      document.getElementById('h-losses')!.textContent = String(losses);
-      document.getElementById('h-rate')!.textContent = settled.length ? `${rate}%` : '—';
+      settledEl.textContent = String(settled.length);
+      winsEl.textContent = String(wins);
+      lossesEl.textContent = String(losses);
+      rateEl.textContent = settled.length ? `${rate}%` : '—';
 
-      document.getElementById('h-count')!.textContent = `${bets.length} bet${bets.length === 1 ? '' : 's'}`;
-      document.getElementById('h-range')!.textContent = 'Last 6 months';
+      countEl.textContent = `${bets.length} bet${bets.length === 1 ? '' : 's'}`;
+      rangeEl.textContent = 'Last 6 months';
     }
 
     async function load() {
@@ -177,12 +241,201 @@ import Layout from '../layouts/Layout.astro';
         summarise(bets);
         render(bets);
       } catch {
-        document.getElementById('list')!.innerHTML =
-          '<div class="card text-center text-[var(--text-2)]">Could not load your history. Check your connection.</div>';
+        listEl.innerHTML =
+          '<div class="card empty-state"><p>Could not load your history. Check your connection.</p><button type="button" class="btn btn-secondary text-sm" id="retryHistory">Retry</button></div>';
+        document.getElementById('retryHistory')?.addEventListener('click', () => {
+          listEl.innerHTML = '<div class="card" aria-hidden="true"><div class="skeleton h-28"></div></div><div class="card" aria-hidden="true"><div class="skeleton h-28"></div></div>';
+          void load();
+        }, { once: true });
         toast('Could not load history', 'error');
       }
     }
 
+    type MatchRow = {
+      id: string;
+      match_date: string;
+      kickoff: string;
+      league: string;
+      home_team: string;
+      away_team: string;
+      status: string;
+      confidence: string;
+      settled: boolean;
+      home_goals: number | null;
+      away_goals: number | null;
+      home_goals_ht: number | null;
+      away_goals_ht: number | null;
+      markets?: string[];
+      my_bets: Array<{ market: string; status: string; stake_cents: number; payout_cents: number; odds_bp: number }>;
+    };
+
+    function scoreMatch(m: MatchRow): string {
+      if (m.home_goals === null || m.away_goals === null) return '—';
+      let s = `${m.home_goals}–${m.away_goals}`;
+      if (m.home_goals_ht !== null && m.away_goals_ht !== null) {
+        s += ` <span class="text-[var(--text-3)]">(HT ${m.home_goals_ht}–${m.away_goals_ht})</span>`;
+      }
+      return s;
+    }
+
+    function marketOutcome(m: MatchRow, mk: string): boolean | null {
+      if (!m.settled || m.home_goals == null || m.away_goals == null) return null;
+      if (mk === 'ft_over_0_5') return m.home_goals + m.away_goals >= 1;
+      if (mk === 'ht_over_0_5') {
+        if (m.home_goals_ht == null || m.away_goals_ht == null) return null;
+        return m.home_goals_ht + m.away_goals_ht >= 1;
+      }
+      return null;
+    }
+
+    function marketOutcomeHtml(m: MatchRow): string {
+      const markets = m.markets || [];
+      if (!markets.length) return '';
+      const items = markets
+        .map((mk) => {
+          const won = marketOutcome(m, mk);
+          const label = esc(MARKET_LABEL[mk] || mk);
+          if (won === true) {
+            return `<span class="badge badge-win">${label} · <span aria-label="won">✔</span></span>`;
+          }
+          if (won === false) {
+            return `<span class="badge badge-loss">${label} · <span aria-label="lost">✘</span></span>`;
+          }
+          return `<span class="badge badge-pending">${label}</span>`;
+        })
+        .join('');
+      return `<div class="mt-2 flex items-center gap-2 flex-wrap text-sm" aria-label="Market outcomes">${items}</div>`;
+    }
+
+    function matchCardHtml(m: MatchRow): string {
+      const st = statusMap(m.status);
+      const betsHtml = (m.my_bets || [])
+        .map((b) => {
+          const bst = betStatus(b.status);
+          const payout =
+            b.status === 'win'
+              ? `+${money(b.payout_cents)} TZS`
+              : b.status === 'loss'
+                ? `−${money(b.stake_cents)} TZS`
+                : `${money(b.stake_cents)} TZS`;
+          return `<span class="badge ${bst.cls}">${esc(MARKET_LABEL[b.market] || b.market)} · ${bst.label}</span>
+                    <span class="text-xs text-[var(--text-3)]">@${oddsText(b.odds_bp)}× · ${payout}</span>`;
+        })
+        .join(' ');
+      const betLine = betsHtml
+        ? `<div class="mt-2 flex items-center gap-2 flex-wrap text-sm">${betsHtml}</div>`
+        : '<div class="mt-2 text-xs text-[var(--text-3)]">No bet placed on this match.</div>';
+      const outcomeLine = m.settled ? marketOutcomeHtml(m) : '';
+
+      return `
+                <div class="glass-el p-3">
+                  <div class="flex items-start justify-between gap-2 mb-1">
+                    <span class="text-xs text-[var(--text-3)] leading-snug break-words">
+                      ${esc(m.league || 'Match')} · ${esc(m.kickoff)}
+                    </span>
+                    <span class="badge ${st.cls} shrink-0">${st.label}</span>
+                  </div>
+                  <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                    <div class="font-semibold leading-tight break-words">${esc(m.home_team)}</div>
+                    <div class="counter text-sm">${scoreMatch(m)}</div>
+                    <div class="font-semibold leading-tight break-words text-right">${esc(m.away_team)}</div>
+                  </div>
+                  ${outcomeLine}
+                  ${betLine}
+                </div>`;
+    }
+
+    function renderMatches(days: Array<{ date: string; matches: MatchRow[] }>) {
+      const total = days.reduce((n, d) => n + d.matches.length, 0);
+      matchCountEl.textContent = `${total} match${total === 1 ? '' : 'es'}`;
+
+      if (!total) {
+        matchHistoryEl.innerHTML = '<div class="card empty-state">No published matches in the last 6 months.</div>';
+        return;
+      }
+
+      matchHistoryEl.innerHTML = '';
+      let dayIndex = 0;
+      const renderNextDay = () => {
+        if (dayIndex >= days.length) return;
+        const day = days[dayIndex++];
+        matchHistoryEl.insertAdjacentHTML(
+          'beforeend',
+          `<div class="card cv-auto-lg"><div class="font-semibold mb-3">${esc(day.date)}</div><div class="space-y-2"></div></div>`
+        );
+        const container = matchHistoryEl.lastElementChild?.querySelector('.space-y-2') as HTMLElement | null;
+        if (!container) {
+          renderNextDay();
+          return;
+        }
+        let loadingEl: HTMLElement | null = null;
+        if (day.matches.length > 12) {
+          container.insertAdjacentHTML('beforeend', `<div class="text-xs text-[var(--text-3)] py-1" data-loading>Loading 0/${day.matches.length} matches…</div>`);
+          loadingEl = container.querySelector('[data-loading]') as HTMLElement | null;
+        }
+        appendChunked(
+          container,
+          day.matches,
+          matchCardHtml,
+          total > 120 ? 6 : 10,
+          () => {
+            loadingEl?.remove();
+            renderNextDay();
+          },
+          (loaded, totalMatches) => {
+            if (loadingEl) loadingEl.textContent = `Loading ${loaded}/${totalMatches} matches…`;
+          }
+        );
+      };
+      renderNextDay();
+    }
+
+    function statusMap(s: string) {
+      return (
+        {
+          upcoming: { cls: 'badge-pending', label: '⏳ PENDING' },
+          live: { cls: 'badge-live', label: 'LIVE' },
+          finished: { cls: 'badge-pending', label: 'FINISHED' },
+          postponed: { cls: 'badge-postponed', label: '⟲ POSTPONED' },
+          cancelled: { cls: 'badge-loss', label: '✕ CANCELLED' },
+        }[s] || { cls: 'badge-pending', label: s.toUpperCase() }
+      );
+    }
+
+    async function loadMatches() {
+      try {
+        const res = await authFetch('/api/v1/matches/history');
+        if (!res.ok) throw new Error('failed');
+        const data = await res.json().catch(() => ({}));
+        renderMatches(data.days || []);
+      } catch {
+        matchHistoryEl.innerHTML =
+          '<div class="card empty-state"><p>Could not load published matches.</p><button type="button" class="btn btn-secondary text-sm" id="retryMatchHistory">Retry</button></div>';
+        document.getElementById('retryMatchHistory')?.addEventListener('click', () => {
+          matchHistoryEl.innerHTML = '<div class="card" aria-hidden="true"><div class="skeleton h-28"></div></div>';
+          void loadMatches();
+        }, { once: true });
+      }
+    }
+
     load();
+
+    let matchesTriggered = false;
+    const triggerMatches = () => {
+      if (matchesTriggered) return;
+      matchesTriggered = true;
+      void loadMatches();
+    };
+    if (matchTarget && 'IntersectionObserver' in window) {
+      const io = new IntersectionObserver((entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          io.disconnect();
+          triggerMatches();
+        }
+      }, { rootMargin: '200px 0px' });
+      io.observe(matchTarget);
+    } else {
+      triggerMatches();
+    }
   </script>
 </Layout>

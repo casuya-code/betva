@@ -16,12 +16,12 @@ const {
 const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 ---
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#0b0f14" />
+    <meta name="theme-color" content="#f6f5f2" />
     <meta name="betva-api" content={API} />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -36,6 +36,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <link rel="preconnect" href={API} crossorigin />
     <link rel="dns-prefetch" href={API} />
     <title>{title}</title>
+    <noscript><style>#page-preloader{display:none!important}</style></noscript>
   </head>
   <body>
     <div id="page-preloader" class="page-preloader" aria-hidden="true">
@@ -49,7 +50,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     </main>
 
     {!hideNav && (
-    <nav class="bottom-nav">
+    <nav class="bottom-nav" aria-label="Primary">
       <a href="/" class={`nav-item ${active === 'home' ? 'active' : ''}`}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
         <span>Home</span>
@@ -77,7 +78,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
       </div>
       <p class="text-sm text-[var(--text-2)] mb-3">Take a break? Your access stays active and betting pauses if you choose.</p>
       <div class="flex gap-2">
-        <button class="btn btn-primary flex-1" id="breakTake" type="button">Take a 24h break</button>
+        <button class="btn btn-primary flex-1" id="breakTake" type="button">Take a 3h break</button>
         <button class="btn btn-secondary" id="breakDismiss" type="button">Dismiss</button>
       </div>
       <div id="breakMsg" class="text-sm mt-2" aria-live="polite"></div>
@@ -87,16 +88,32 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
       import { registerServiceWorker } from '../lib/push';
       import { API } from '../lib/api';
 
-      const pre = document.getElementById('page-preloader');
-      const hidePre = () => pre?.classList.add('is-hidden');
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', hidePre, { once: true });
+      // Defer service worker registration so it doesn't compete with first paint/data fetch.
+      const ric = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => void) | undefined;
+      if (typeof ric === 'function') {
+        ric(() => registerServiceWorker(), { timeout: 2000 });
       } else {
-        hidePre();
+        window.addEventListener('load', () => registerServiceWorker(), { once: true });
       }
-      setTimeout(hidePre, 1200);
 
-      registerServiceWorker();
+      const pre = document.getElementById('page-preloader');
+      const hidePre = () => {
+        if (!pre || pre.classList.contains('is-hidden')) return;
+        pre.classList.add('is-hidden');
+        pre.addEventListener('transitionend', () => pre.remove(), { once: true });
+        // Fallback removal if transitions are disabled.
+        setTimeout(() => pre.remove(), 400);
+      };
+      const showContent = () => requestAnimationFrame(hidePre);
+      // Hide as soon as the DOM is usable to minimize perceived load time.
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        showContent();
+      } else {
+        document.addEventListener('DOMContentLoaded', showContent, { once: true });
+      }
+      window.addEventListener('load', hidePre, { once: true });
+      // Failsafe only: never let a stuck state block the UI.
+      setTimeout(hidePre, 1200);
 
       const HOUR_MS = 60 * 60 * 1000;
       const path = location.pathname;
@@ -104,61 +121,69 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
       const skip = path.startsWith('/admin') || path === '/login' || path === '/register';
 
       if (token && !skip) {
-        const KEY = 'betva_session_start';
-        let start = Number(localStorage.getItem(KEY) || 0);
-        if (!start || Number.isNaN(start)) {
-          start = Date.now();
-          localStorage.setItem(KEY, String(start));
-        }
-
-        const banner = document.getElementById('breakBanner');
-        const check = () => {
-          if (Date.now() - start >= HOUR_MS) banner?.classList.remove('hidden');
-        };
-        const timer = setInterval(check, 60_000);
-        check();
-
-        document.getElementById('breakDismiss')?.addEventListener('click', () => {
-          banner?.classList.add('hidden');
-          start = Date.now();
-          localStorage.setItem(KEY, String(start));
-        });
-
-        document.getElementById('breakTake')?.addEventListener('click', async () => {
-          const btn = document.getElementById('breakTake') as HTMLButtonElement | null;
-          const msg = document.getElementById('breakMsg')!;
-          if (!btn) return;
-          btn.disabled = true;
-          btn.textContent = 'Pausing…';
-          try {
-            const res = await fetch(`${API}/api/v1/self-exclusion`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${localStorage.getItem('betva_token') || ''}`,
-              },
-              body: JSON.stringify({ hours: 24 }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-              msg.textContent = data.error || 'Could not pause betting.';
-              msg.className = 'text-sm mt-2 text-red-400';
-              btn.disabled = false;
-              btn.textContent = 'Take a 24h break';
-              return;
-            }
-            msg.textContent = `Betting paused until ${data.until}. You can still browse.`;
-            msg.className = 'text-sm mt-2 text-green-400';
-            btn.remove();
-            clearInterval(timer);
-            setTimeout(() => banner?.classList.add('hidden'), 5000);
-          } catch {
-            msg.textContent = 'Network error. Try again.';
-            msg.className = 'text-sm mt-2 text-red-400';
-            btn.disabled = false;
-            btn.textContent = 'Take a 24h break';
+        const initNudge = () => {
+          const KEY = 'betva_session_start';
+          let start = Number(localStorage.getItem(KEY) || 0);
+          if (!start || Number.isNaN(start)) {
+            start = Date.now();
+            localStorage.setItem(KEY, String(start));
           }
-        });
+
+          const banner = document.getElementById('breakBanner');
+          const check = () => {
+            if (Date.now() - start >= HOUR_MS) banner?.classList.remove('hidden');
+          };
+          const timer = window.setInterval(check, 60_000);
+          check();
+
+          document.getElementById('breakDismiss')?.addEventListener('click', () => {
+            banner?.classList.add('hidden');
+            start = Date.now();
+            localStorage.setItem(KEY, String(start));
+          });
+
+          document.getElementById('breakTake')?.addEventListener('click', async () => {
+            const btn = document.getElementById('breakTake') as HTMLButtonElement | null;
+            const msg = document.getElementById('breakMsg')!;
+            if (!btn) return;
+            btn.disabled = true;
+            btn.textContent = 'Pausing…';
+            try {
+              const res = await fetch(`${API}/api/v1/self-exclusion`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${localStorage.getItem('betva_token') || ''}`,
+                },
+                body: JSON.stringify({ hours: 3 }),
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                msg.textContent = data.error || 'Could not pause betting.';
+                msg.className = 'text-sm mt-2 text-[var(--danger)]';
+                btn.disabled = false;
+                btn.textContent = 'Take a 3h break';
+                return;
+              }
+              msg.textContent = `Betting paused until ${data.until}. You can still browse.`;
+              msg.className = 'text-sm mt-2 text-[var(--success)]';
+              btn.remove();
+              window.clearInterval(timer);
+              setTimeout(() => banner?.classList.add('hidden'), 5000);
+            } catch {
+              msg.textContent = 'Network error. Try again.';
+              msg.className = 'text-sm mt-2 text-[var(--danger)]';
+              btn.disabled = false;
+              btn.textContent = 'Take a 3h break';
+            }
+          });
+        };
+        // Defer non-critical session-nudge setup so initial render/data work runs first.
+        if ('requestIdleCallback' in window) {
+          (window as any).requestIdleCallback(initNudge, { timeout: 3000 });
+        } else {
+          setTimeout(initNudge, 500);
+        }
       }
     </script>
   </body>

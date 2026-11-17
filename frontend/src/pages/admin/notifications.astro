@@ -72,7 +72,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         <h2 class="font-semibold">Recent sends</h2>
         <button class="btn btn-secondary text-sm" id="refresh" type="button">Refresh</button>
       </div>
-      <div id="recent" class="text-sm text-[var(--text-2)]">Loading…</div>
+      <div id="recent" class="text-sm text-[var(--text-2)]">
+        <div class="space-y-2 py-1" aria-hidden="true">
+          <div class="skeleton h-10 w-full"></div>
+          <div class="skeleton h-10 w-full"></div>
+          <div class="skeleton h-10 w-5/6"></div>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -107,7 +113,7 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
 
       if (!title) {
         msg.textContent = 'A title is required.';
-        msg.className = 'text-sm text-red-400';
+        msg.className = 'text-sm text-[var(--danger)]';
         return;
       }
       if (!confirm(`Send “${title}” to ${audience === 'active' ? 'active accounts' : 'all registered users'}?`)) return;
@@ -123,13 +129,13 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           msg.textContent = data.error || 'Send failed.';
-          msg.className = 'text-sm text-red-400';
+          msg.className = 'text-sm text-[var(--danger)]';
           return;
         }
         const notes: string[] = [];
         if (data.quiet_hours) notes.push('quiet hours now — inbox only, no push');
         if (!data.push_enabled) notes.push('push not configured — inbox delivered');
-        msg.innerHTML = `<span class="text-green-400">Sent to ${data.recipients} users (${data.inbox_created} inbox rows, ${data.push_users} with push).</span>${
+        msg.innerHTML = `<span class="text-[var(--success)]">Sent to ${data.recipients} users (${data.inbox_created} inbox rows, ${data.push_users} with push).</span>${
           notes.length ? ` <span class="text-[var(--text-2)]">${esc(notes.join(' · '))}</span>` : ''
         }`;
         msg.className = 'text-sm';
@@ -139,12 +145,24 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
         loadRecent();
       } catch {
         msg.textContent = 'Send failed.';
-        msg.className = 'text-sm text-red-400';
+        msg.className = 'text-sm text-[var(--danger)]';
       } finally {
         btn.disabled = false;
         btn.textContent = 'Send notification';
       }
     });
+
+    function renderRowsChunked<T>(tbody: HTMLTableSectionElement, items: T[], render: (item: T) => string, size = 20) {
+      let i = 0;
+      const step = () => {
+        const end = Math.min(i + size, items.length);
+        let html = '';
+        for (; i < end; i++) html += render(items[i]);
+        if (html) tbody.insertAdjacentHTML('beforeend', html);
+        if (i < items.length) requestAnimationFrame(step);
+      };
+      step();
+    }
 
     async function loadRecent() {
       const el = document.getElementById('recent')!;
@@ -160,10 +178,12 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
           <div class="overflow-x-auto">
             <table class="admin-table">
               <thead><tr><th>When</th><th>Category</th><th>Title</th><th>Recipients</th><th>Opens</th></tr></thead>
-              <tbody>
-                ${rows
-                  .map(
-                    (n: any) => `
+              <tbody id="recentBody"></tbody>
+            </table>
+          </div>`;
+        const tbody = document.getElementById('recentBody') as HTMLTableSectionElement | null;
+        if (tbody) {
+          renderRowsChunked(tbody, rows, (n: any) => `
                   <tr>
                     <td class="text-xs text-[var(--text-3)] whitespace-nowrap">${esc(n.created_at)}</td>
                     <td class="text-xs">${esc(n.category)}</td>
@@ -173,14 +193,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                     </td>
                     <td class="counter">${n.count}</td>
                     <td class="text-xs text-[var(--text-3)]">${esc(n.link || '—')}</td>
-                  </tr>`
-                  )
-                  .join('')}
-              </tbody>
-            </table>
-          </div>`;
+                  </tr>`);
+        }
       } catch {
-        el.textContent = 'Could not load recent sends.';
+        el.innerHTML = '<div class="text-center text-[var(--text-2)] space-y-3 py-2"><p>Could not load recent sends.</p><button type="button" class="btn btn-secondary text-sm" id="retryRecent">Retry</button></div>';
+        document.getElementById('retryRecent')?.addEventListener('click', () => { void loadRecent(); }, { once: true });
       }
     }
   </script>

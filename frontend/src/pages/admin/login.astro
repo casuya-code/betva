@@ -70,14 +70,14 @@ import Layout from '../../layouts/Layout.astro';
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           msg.textContent = data.error || 'Sign in failed';
-          msg.className = 'text-center text-sm text-red-400';
+          msg.className = 'text-center text-sm text-[var(--danger)]';
           return;
         }
         localStorage.setItem('betva_admin_token', data.token);
         window.location.href = '/admin';
       } catch {
         msg.textContent = 'Could not reach the server.';
-        msg.className = 'text-center text-sm text-red-400';
+        msg.className = 'text-center text-sm text-[var(--danger)]';
       }
     });
   </script>
