@@ -450,22 +450,27 @@ import BrandName from '../components/BrandName.astro';
     .slip-overlay {
       position: fixed;
       inset: 0;
-      z-index: 90;
+      z-index: 120;
       background: rgba(17, 24, 39, 0.35);
       backdrop-filter: blur(2px);
       display: flex;
       align-items: flex-end;
       justify-content: center;
+      padding: env(safe-area-inset-top) 0 0;
     }
     .slip-overlay.hidden { display: none; }
     .slip-sheet {
       width: 100%;
       max-width: 480px;
+      max-height: calc(100dvh - env(safe-area-inset-top) - var(--s2));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
       background: var(--surface, #ffffff);
       border: 1px solid var(--border);
       border-bottom: none;
       border-radius: var(--r-xl) var(--r-xl) 0 0;
-      padding: var(--s3) var(--s5) calc(var(--s5) + env(safe-area-inset-bottom));
+      padding: var(--s3) var(--s5) calc(var(--s6) + 88px + env(safe-area-inset-bottom));
       box-shadow: 0 -12px 32px rgba(17, 24, 39, 0.12);
       animation: sheetUp 220ms cubic-bezier(0.4, 0, 0.2, 1);
     }
@@ -483,7 +488,8 @@ import BrandName from '../components/BrandName.astro';
       .slip-sheet {
         border-radius: var(--r-xl);
         border-bottom: 1px solid var(--border);
-        padding-bottom: var(--s5);
+        padding: var(--s4) var(--s5) var(--s5);
+        max-height: calc(100dvh - 2 * var(--s4));
       }
       .slip-grip { display: none; }
     }
