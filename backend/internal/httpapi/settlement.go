@@ -110,54 +110,16 @@ func (s *Server) handleAdminSettleMatch(w http.ResponseWriter, r *http.Request) 
 
 	reversed := 0
 	if body.Correct {
-		rows, err := tx.Query(ctx, `
-			SELECT id, user_id, status, payout_cents
-			FROM bets WHERE match_id = $1 AND settled_at IS NOT NULL
-			FOR UPDATE
-		`, matchID)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
-			return
-		}
-		type oldBet struct {
-			ID, UserID, Status string
-			Payout             int64
-		}
-		var olds []oldBet
-		for rows.Next() {
-			var b oldBet
-			if err := rows.Scan(&b.ID, &b.UserID, &b.Status, &b.Payout); err == nil {
-				olds = append(olds, b)
-			}
-		}
-		rows.Close()
-
-		for _, b := range olds {
-			if b.Status == "win" && b.Payout > 0 {
-				if _, err := tx.Exec(ctx, `
-					UPDATE users SET balance_cents = balance_cents - $1, updated_at = NOW() WHERE id = $2
-				`, b.Payout, b.UserID); err != nil {
-					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "reversal failed"})
-					return
-				}
-				if _, err := tx.Exec(ctx, `
-					INSERT INTO ledger (user_id, amount_cents, reason, ref_id)
-					VALUES ($1, $2, 'bet_correction_reversal', $3)
-				`, b.UserID, -b.Payout, b.ID); err != nil {
-					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "reversal ledger failed"})
-					return
-				}
-				reversed++
-			}
-		}
-
-		if _, err := tx.Exec(ctx, `
+		// Virtual play: reset prior settlement outcomes without wallet/ledger changes.
+		tag, err := tx.Exec(ctx, `
 			UPDATE bets SET status = 'pending', payout_cents = 0, settled_at = NULL, result_id = NULL
 			WHERE match_id = $1 AND settled_at IS NOT NULL
-		`, matchID); err != nil {
+		`, matchID)
+		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "reset failed"})
 			return
 		}
+		reversed = int(tag.RowsAffected())
 	}
 
 	var resultID string
@@ -220,28 +182,13 @@ func (s *Server) handleAdminSettleMatch(w http.ResponseWriter, r *http.Request) 
 			losses++
 		}
 
+		// Virtual play: record outcome and virtual payout on the bet only.
 		if _, err := tx.Exec(ctx, `
 			UPDATE bets SET status = $1, payout_cents = $2, settled_at = NOW(), result_id = $3
 			WHERE id = $4
 		`, status, payout, resultID, b.ID); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "bet settle failed"})
 			return
-		}
-
-		if won {
-			if _, err := tx.Exec(ctx, `
-				UPDATE users SET balance_cents = balance_cents + $1, updated_at = NOW() WHERE id = $2
-			`, payout, b.UserID); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "payout failed"})
-				return
-			}
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO ledger (user_id, amount_cents, reason, ref_id)
-				VALUES ($1, $2, 'bet_won', $3)
-			`, b.UserID, payout, b.ID); err != nil {
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "payout ledger failed"})
-				return
-			}
 		}
 	}
 
@@ -388,24 +335,12 @@ func (s *Server) handleAdminRefundMatch(w http.ResponseWriter, r *http.Request) 
 
 	var refunded int64
 	for _, b := range pending {
+		// Virtual play: mark as refunded/void without wallet movement.
 		if _, err := tx.Exec(ctx, `
 			UPDATE bets SET status = 'refunded', payout_cents = 0, settled_at = NOW(), void_reason = $1
 			WHERE id = $2
 		`, body.Reason, b.ID); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "refund update failed"})
-			return
-		}
-		if _, err := tx.Exec(ctx, `
-			UPDATE users SET balance_cents = balance_cents + $1, updated_at = NOW() WHERE id = $2
-		`, b.Stake, b.UserID); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "refund failed"})
-			return
-		}
-		if _, err := tx.Exec(ctx, `
-			INSERT INTO ledger (user_id, amount_cents, reason, ref_id)
-			VALUES ($1, $2, 'bet_refund', $3)
-		`, b.UserID, b.Stake, b.ID); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "refund ledger failed"})
 			return
 		}
 		refunded += b.Stake
@@ -428,13 +363,13 @@ func (s *Server) handleAdminRefundMatch(w http.ResponseWriter, r *http.Request) 
 		refundUsers = append(refundUsers, b.UserID)
 	}
 	if len(refundUsers) > 0 {
-		title := "Match postponed â€” stake refunded"
+		title := "Match postponed — slip voided"
 		if body.Status == "cancelled" {
-			title = "Match cancelled â€” stake refunded"
+			title = "Match cancelled — slip voided"
 		}
 		s.notifyAndPush(refundUsers, catResults, title,
 			fmt.Sprintf("%s vs %s. %s. %s", homeTeam, awayTeam, body.Reason,
-				"Your stake is back in your wallet."), "/profile")
+				"This was virtual play, so no real money was won or lost."), "/history")
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{

@@ -56,14 +56,14 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx)
 
-	// Lock the wallet row so concurrent taps cannot overspend.
+	// Virtual play: lock the user row to check access/exclusion, but do not
+	// require or debit a real-money balance.
 	var status string
-	var balance int64
 	var accessExpiresAt *time.Time
 	err = tx.QueryRow(ctx, `
-		SELECT status, balance_cents, access_expires_at
+		SELECT status, access_expires_at
 		FROM users WHERE id = $1 FOR UPDATE
-	`, u.ID).Scan(&status, &balance, &accessExpiresAt)
+	`, u.ID).Scan(&status, &accessExpiresAt)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 		return
@@ -161,21 +161,6 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if balance < req.StakeCents {
-		writeJSON(w, http.StatusPaymentRequired, map[string]interface{}{
-			"error":   "insufficient balance",
-			"balance": balance,
-		})
-		return
-	}
-
-	newBalance := balance - req.StakeCents
-	if _, err := tx.Exec(ctx, `UPDATE users SET balance_cents = $1, updated_at = NOW() WHERE id = $2`,
-		newBalance, u.ID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "db error"})
-		return
-	}
-
 	var betID string
 	err = tx.QueryRow(ctx, `
 		INSERT INTO bets (user_id, match_id, market, stake_cents, status,
@@ -185,14 +170,6 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 	`, u.ID, req.MatchID, req.Market, req.StakeCents, confidence, multiplier).Scan(&betID)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "bet could not be placed"})
-		return
-	}
-
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO ledger (user_id, amount_cents, reason, ref_id)
-		VALUES ($1, $2, 'bet_placed', $3)
-	`, u.ID, -req.StakeCents, betID); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ledger write failed"})
 		return
 	}
 
@@ -212,7 +189,6 @@ func (s *Server) handlePlaceBet(w http.ResponseWriter, r *http.Request) {
 			"payout_if_win": req.StakeCents * multiplier / 10000,
 			"odds_bp":       multiplier,
 		},
-		"balance_cents": newBalance,
 	})
 }
 
