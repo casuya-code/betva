@@ -1,8 +1,16 @@
 /* Betva service worker: Web Push, notification clicks, and a small
    runtime cache for same-origin static assets (JS/CSS/images/fonts).
-   HTML is never cached, so deploys always reach users. */
-const CACHE_NAME = 'betva-static-v4';
+   HTML is never cached, so deploys always reach users.
+
+   Hashed /_astro/* files are immutable: cache-first forever.
+   Unhashed files (theme-init.js, manifest, icons) may change on deploy, so
+   they use stale-while-revalidate: served from cache immediately for speed
+   and offline use, then refreshed quietly once they are older than
+   REVALIDATE_MS. Updates reach returning users without adding latency to
+   the render-blocking theme script. */
+const CACHE_NAME = 'betva-static-v5';
 const ASSET_RE = /\.(?:js|css|svg|png|jpe?g|webp|avif|ico|woff2?|webmanifest)$/i;
+const REVALIDATE_MS = 15 * 60 * 1000;
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -31,23 +39,43 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     (async () => {
-      const cached = await caches.match(req);
-      if (cached) return cached;
-      try {
-        const res = await fetch(req);
-        if (res.ok) {
-          const copy = res.clone();
-          // Await the write: the worker can be terminated right after the
-          // response is returned, which used to make caching unreliable.
-          await caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
-        }
-        return res;
-      } catch {
-        return cached || Response.error();
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(req);
+
+      // Content-hashed build output never changes at a given URL.
+      if (url.pathname.startsWith('/_astro/')) {
+        if (cached) return cached;
+        return fetchAndCache(req, cache, event);
       }
+
+      // Unhashed assets: serve the cached copy first, refresh in background.
+      if (cached) {
+        const servedAt = Date.parse(cached.headers.get('date') || '') || 0;
+        if (Date.now() - servedAt < REVALIDATE_MS) return cached;
+        event.waitUntil(
+          fetch(req, { cache: 'no-store' })
+            .then((res) => (res.ok ? cache.put(req, res) : null))
+            .catch(() => null)
+        );
+        return cached;
+      }
+
+      return fetchAndCache(req, cache, event);
     })()
   );
 });
+
+// Never hold the response open for a disk write: clone synchronously (before
+// returning the original stream) and let waitUntil keep the worker alive.
+async function fetchAndCache(req, cache, event) {
+  try {
+    const res = await fetch(req);
+    if (res.ok) event.waitUntil(cache.put(req, res.clone()).catch(() => {}));
+    return res;
+  } catch {
+    return Response.error();
+  }
+}
 
 self.addEventListener('push', (event) => {
   let data = {};
