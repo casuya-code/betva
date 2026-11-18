@@ -32,9 +32,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	// only changes at settlement; a 60-second cache saves the full scan below
 	// on every browser/CDN cache miss without hiding real results.
 	if cached, ok := s.statsCache.Get(ctx); ok {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "public, max-age=60")
-		w.Write(cached)
+		writeCachedBody(w, r, http.StatusOK, "public, max-age=60", false, cached)
 		return
 	}
 
@@ -100,7 +98,5 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.statsCache.Set(ctx, body)
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "public, max-age=60")
-	w.Write(body)
+	writeCachedBody(w, r, http.StatusOK, "public, max-age=60", false, body)
 }

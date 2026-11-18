@@ -24,7 +24,7 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#f6f5f2" />
-    <script src="/theme-init.js" is:inline></script>
+    <script is:inline>(function(){var t='light';try{var s=localStorage.getItem('betva_theme');if(s==='dark'||s==='light')t=s;else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)t='dark';}catch(e){}document.documentElement.setAttribute('data-theme',t);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='dark'?'#141719':'#f6f5f2');})();</script>
     <meta name="betva-api" content={API} />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -133,11 +133,16 @@ const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
             }
 
             const banner = document.getElementById('breakBanner');
+            let timer = 0;
             const check = () => {
-              if (Date.now() - start >= HOUR_MS) banner?.classList.remove('hidden');
+              if (Date.now() - start >= HOUR_MS) {
+                banner?.classList.remove('hidden');
+                window.clearInterval(timer);
+              }
             };
-            const timer = window.setInterval(check, 60_000);
+            timer = window.setInterval(check, 60_000);
             check();
+            window.addEventListener('pagehide', () => window.clearInterval(timer), { once: true });
 
             document.getElementById('breakDismiss')?.addEventListener('click', () => {
               banner?.classList.add('hidden');

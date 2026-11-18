@@ -328,16 +328,15 @@ label:has(> input[type="radio"]) {
   .badge-live .dot { animation: none; }
 }
 
-/* skeleton */
+/* skeleton — opacity only, so it composites instead of repainting every frame */
 .skeleton {
-  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-el) 50%, var(--surface) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite;
+  background: var(--surface-el);
+  animation: skeletonPulse 1.2s ease-in-out infinite;
   border-radius: var(--r-sm);
 }
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 /* Skeleton shapes: a number-sized block for counters, a line for list rows.
    Both are replaced by real content as soon as the API responds, so the
@@ -450,7 +449,7 @@ label:has(> input[type="radio"]) {
 /* Performance: skip rendering work for off-screen list items. */
 .cv-auto {
   content-visibility: auto;
-  contain-intrinsic-size: auto 180px;
+  contain-intrinsic-size: auto 210px;
 }
 .cv-auto-lg {
   content-visibility: auto;

@@ -38,7 +38,7 @@ import BrandName from '../components/BrandName.astro';
       <div class="page-split-main">
         <div class="flex items-baseline justify-between gap-2 mb-3">
           <h2 class="text-lg font-semibold shrink-0">Matches</h2>
-          <span class="text-xs text-[var(--text-3)] text-right min-w-0">Bets close at kickoff</span>
+          <span id="matchesStatus" class="text-xs text-[var(--text-3)] text-right min-w-0" role="status" aria-live="polite">Bets close at kickoff</span>
         </div>
         <div class="day-tabs" id="day-tabs" role="tablist" aria-label="Match day">
           <button type="button" class="day-tab active" id="tab-today" role="tab" aria-selected="true" aria-controls="matches" data-day="today">
@@ -98,7 +98,7 @@ import BrandName from '../components/BrandName.astro';
   </div>
 
   <script>
-    import { API, getToken, authFetch, esc, money, toast, MARKET_LABEL, MARKET_SHORT, oddsText, payoutFor, fetchConfig } from '../lib/api';
+    import { getToken, authFetch, esc, money, toast, MARKET_LABEL, MARKET_SHORT, oddsText, payoutFor, fetchConfig, fetchMatches, setMatchesUpdateHandler } from '../lib/api';
     import { maybeAskPush } from '../lib/push';
 
     type BetConfig = { stake_tiers_cents: number[]; payout_multiplier_bp: number };
@@ -365,57 +365,66 @@ import BrandName from '../components/BrandName.astro';
       renderDay();
     }
 
+    function applyMatchesData(data: any) {
+      const status = document.getElementById('matchesStatus');
+      if (status) status.textContent = 'Bets close at kickoff';
+
+      allMatches = data.matches || [];
+      previewNote?.classList.toggle('hidden', !data.preview);
+
+      // The API only publishes the two days Home cares about. Keep the
+      // device-computed EAT dates as the tab labels; when only one day has
+      // matches, place it on the correct tab instead of showing it twice.
+      const dates = [...new Set(allMatches.map((m: any) => String(m.match_date)))].sort();
+      const eatToday = eatDateKey(0);
+      const eatTomorrow = eatDateKey(1);
+      if (dates.length >= 2) {
+        dayKeys.today = dates[0];
+        dayKeys.tomorrow = dates[1];
+      } else if (dates.length === 1) {
+        const only = dates[0];
+        dayKeys.today = eatToday;
+        dayKeys.tomorrow = eatTomorrow;
+        if (only === eatTomorrow) {
+          dayKeys.tomorrow = only;
+        } else {
+          dayKeys.today = only;
+        }
+      }
+
+      for (const day of ['today', 'tomorrow'] as const) {
+        const n = matchesFor(day).length;
+        const sub = document.getElementById(`tab-${day}-sub`);
+        if (sub) {
+          sub.textContent = `${shortDate(dayKeys[day])}${n ? ` · ${n} match${n === 1 ? '' : 'es'}` : ''}`;
+        }
+      }
+
+      if (!allMatches.length) {
+        matchesEl.innerHTML = '<div class="card empty-state">No matches yet.</div>';
+        return;
+      }
+
+      // If today has nothing but tomorrow does, land the user on tomorrow.
+      if (currentDay === 'today' && !matchesFor('today').length && matchesFor('tomorrow').length) {
+        setDay('tomorrow');
+      } else {
+        renderDay();
+      }
+    }
+
     async function load() {
       try {
-        // Send the token when signed in so an inactive account receives only
-        // the three-match preview instead of the full published list.
-        const token = getToken();
-        const res = token
-          ? await authFetch('/api/v1/matches')
-          : await fetch(`${API}/api/v1/matches`);
-        const data = await res.json().catch(() => ({}));
-        allMatches = data.matches || [];
-        previewNote?.classList.toggle('hidden', !data.preview);
-
-        // The API only publishes the two days Home cares about. Keep the
-        // device-computed EAT dates as the tab labels; when only one day has
-        // matches, place it on the correct tab instead of showing it twice.
-        const dates = [...new Set(allMatches.map((m: any) => String(m.match_date)))].sort();
-        const eatToday = eatDateKey(0);
-        const eatTomorrow = eatDateKey(1);
-        if (dates.length >= 2) {
-          dayKeys.today = dates[0];
-          dayKeys.tomorrow = dates[1];
-        } else if (dates.length === 1) {
-          const only = dates[0];
-          dayKeys.today = eatToday;
-          dayKeys.tomorrow = eatTomorrow;
-          if (only === eatTomorrow) {
-            dayKeys.tomorrow = only;
-          } else {
-            dayKeys.today = only;
-          }
+        // Cached matches render instantly; the refresh runs silently and
+        // applies fresh data through the handler when it lands.
+        const { data, refreshing } = await fetchMatches();
+        if (!data || typeof data !== 'object' || !Object.keys(data).length) {
+          throw new Error('no matches');
         }
-
-        for (const day of ['today', 'tomorrow'] as const) {
-          const n = matchesFor(day).length;
-          const sub = document.getElementById(`tab-${day}-sub`);
-          if (sub) {
-            sub.textContent = `${shortDate(dayKeys[day])}${n ? ` · ${n} match${n === 1 ? '' : 'es'}` : ''}`;
-          }
-        }
-
-        if (!allMatches.length) {
-          matchesEl.innerHTML =
-            '<div class="card empty-state">No matches yet.</div>';
-          return;
-        }
-
-        // If today has nothing but tomorrow does, land the user on tomorrow.
-        if (currentDay === 'today' && !matchesFor('today').length && matchesFor('tomorrow').length) {
-          setDay('tomorrow');
-        } else {
-          renderDay();
+        applyMatchesData(data);
+        if (refreshing) {
+          const status = document.getElementById('matchesStatus');
+          if (status) status.textContent = 'Refreshing odds…';
         }
       } catch {
         matchesEl.innerHTML =
@@ -444,6 +453,10 @@ import BrandName from '../components/BrandName.astro';
       const day = btn.dataset.day as 'today' | 'tomorrow' | undefined;
       if (day && day !== currentDay) setDay(day);
     });
+
+    // A silent background refresh replaces the cached list in place, so the
+    // odds update without a page reload or another visible loading state.
+    setMatchesUpdateHandler((data) => applyMatchesData(data));
 
     (async () => {
       await Promise.all([loadConfig(), load()]);

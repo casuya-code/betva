@@ -588,7 +588,10 @@ func (s *Server) handleListMatches(w http.ResponseWriter, r *http.Request) {
 		out = append(out, m)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"matches": out, "preview": previewLimit != nil})
+	// The body already encodes the preview/full variant, so a body-derived
+	// ETag is safe. Vary plus private caching keep the two auth states apart
+	// in browser caches and out of shared caches entirely.
+	writeCachedJSON(w, r, http.StatusOK, "private, max-age=60", true, map[string]interface{}{"matches": out, "preview": previewLimit != nil})
 }
 
 // handleAdminListMatches lists every match for one date, with its markets.

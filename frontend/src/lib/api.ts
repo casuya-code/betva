@@ -87,6 +87,112 @@ export async function fetchConfig(): Promise<any> {
   return configPromise;
 }
 
+// The published match list changes only when an admin publishes, but it used
+// to block every home-page visit on a network round trip. Cache the last good
+// response and render it instantly, then refresh quietly. The payload differs
+// for signed-in users (preview list), so the cache is keyed by auth scope.
+const MATCHES_CACHE_KEY = 'betva_matches_cache';
+const MATCHES_TTL_MS = 10 * 60 * 1000;
+const MATCHES_REFRESH_MS = 2 * 60 * 1000;
+
+type MatchesEnvelope = { v: any; t: number; s: string };
+type MatchesCache = { data: any; at: number; scope: string };
+
+let matchesCache: MatchesCache | null = null;
+let matchesPromise: Promise<any> | null = null;
+let matchesUpdateHandler: ((data: any) => void) | null = null;
+
+function matchesScope(): string {
+  try {
+    return getToken() ? 'auth' : 'guest';
+  } catch {
+    return 'guest';
+  }
+}
+
+export function setMatchesUpdateHandler(fn: ((data: any) => void) | null): void {
+  matchesUpdateHandler = fn;
+}
+
+export function readCachedMatches(): any | null {
+  const scope = matchesScope();
+  // A signed-in response can be a 3-match preview or the full list depending
+  // on account state, so only the identical anonymous payload is cacheable.
+  if (scope !== 'guest') return null;
+  if (matchesCache && matchesCache.scope === scope) return matchesCache.data;
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(MATCHES_CACHE_KEY);
+    if (!raw) return null;
+    const parsed: MatchesEnvelope = JSON.parse(raw);
+    if (!parsed || parsed.s !== scope || !parsed.v || typeof parsed.t !== 'number') return null;
+    if (Date.now() - parsed.t > MATCHES_TTL_MS) return null;
+    matchesCache = { data: parsed.v, at: parsed.t, scope };
+    return parsed.v;
+  } catch {
+    return null;
+  }
+}
+
+function storeMatches(data: any): void {
+  const scope = matchesScope();
+  if (scope !== 'guest') return;
+  const now = Date.now();
+  matchesCache = { data, at: now, scope };
+  try {
+    const envelope: MatchesEnvelope = { v: data, t: now, s: scope };
+    localStorage.setItem(MATCHES_CACHE_KEY, JSON.stringify(envelope));
+  } catch {
+    /* quota or private mode */
+  }
+}
+
+async function requestMatches(): Promise<any> {
+  const req = matchesScope() === 'auth'
+    ? authFetch('/api/v1/matches')
+    : fetch(`${API}/api/v1/matches`);
+  const res = await req;
+  if (!res.ok) throw new Error('matches request failed');
+  return res.json();
+}
+
+function refreshMatches(throwOnError: boolean): Promise<any> {
+  if (matchesPromise) return matchesPromise;
+  matchesPromise = requestMatches()
+    .then((data) => {
+      if (data && typeof data === 'object') {
+        storeMatches(data);
+        matchesUpdateHandler?.(data);
+      }
+      return data;
+    })
+    .catch((err) => {
+      if (throwOnError) throw err;
+      // A failed refresh must not leave the UI stuck on "Refreshing odds…".
+      if (matchesCache) matchesUpdateHandler?.(matchesCache.data);
+      return null;
+    })
+    .finally(() => {
+      matchesPromise = null;
+    });
+  return matchesPromise;
+}
+
+export async function fetchMatches(): Promise<{ data: any; fromCache: boolean; refreshing: boolean }> {
+  const cached = readCachedMatches();
+  if (cached) {
+    // Only spend data on a refresh when the cached copy is old enough.
+    let refreshing = false;
+    if (matchesCache && Date.now() - matchesCache.at >= MATCHES_REFRESH_MS) {
+      void refreshMatches(false);
+      refreshing = true;
+    }
+    return { data: cached, fromCache: true, refreshing };
+  }
+  const data = await refreshMatches(true);
+  return { data: data || {}, fromCache: false, refreshing: false };
+}
+
 const TOKEN_KEY = 'betva_token';
 
 export function getToken(): string | null {

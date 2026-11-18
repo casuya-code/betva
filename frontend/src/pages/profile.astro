@@ -204,6 +204,26 @@ import TrackRecord from '../components/TrackRecord.astro';
         : 'No active period';
     }
 
+    // One delegated listener survives every innerHTML refresh of the inbox.
+    const inboxEl = document.getElementById('inbox')!;
+    inboxEl.addEventListener('click', async (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>('[data-notif]');
+      if (!li) return;
+      const id = li.dataset.notif!;
+      const link = li.dataset.link!;
+      try {
+        await authFetch(`/api/v1/notifications/${id}/read`, { method: 'POST' });
+      } catch {
+        /* keep the inbox usable even if the read mark fails */
+      }
+      if (link) {
+        window.location.href = link;
+      } else {
+        li.classList.add('opacity-60');
+        li.querySelector('.badge')?.remove();
+      }
+    });
+
     async function loadInbox() {
       const res = await authFetch('/api/v1/notifications?limit=20');
       if (!res.ok) {
@@ -239,23 +259,6 @@ import TrackRecord from '../components/TrackRecord.astro';
             .join('')}
         </ul>`;
 
-      el.querySelectorAll('[data-notif]').forEach((li) => {
-        li.addEventListener('click', async () => {
-          const id = (li as HTMLElement).dataset.notif!;
-          const link = (li as HTMLElement).dataset.link!;
-          try {
-            await authFetch(`/api/v1/notifications/${id}/read`, { method: 'POST' });
-          } catch {
-            /* keep the inbox usable even if the read mark fails */
-          }
-          if (link) {
-            window.location.href = link;
-          } else {
-            (li as HTMLElement).classList.add('opacity-60');
-            (li.querySelector('.badge') as HTMLElement | null)?.remove();
-          }
-        });
-      });
     }
 
     document.getElementById('markAll')!.addEventListener('click', async () => {
