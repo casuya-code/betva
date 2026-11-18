@@ -57,6 +57,24 @@ func newMediaStore(cfg *config.Config) *mediaStore {
 	return ms
 }
 
+// allowsPostURL reports whether a media reference was issued by this store.
+// A post may only point at a local /media/ file or, when R2 is configured, at
+// the configured public bucket base — never at an arbitrary remote URL, which
+// would turn the feed into a tracking surface.
+func (m *mediaStore) allowsPostURL(raw string) bool {
+	if raw == "" || strings.Contains(raw, "..") || strings.ContainsAny(raw, "?#") {
+		return false
+	}
+	if strings.HasPrefix(raw, "/media/") && len(raw) > len("/media/") {
+		return true
+	}
+	if m != nil && m.r2Enabled && m.r2PublicBase != "" {
+		prefix := m.r2PublicBase + "/media/"
+		return strings.HasPrefix(raw, prefix) && len(raw) > len(prefix)
+	}
+	return false
+}
+
 func (m *mediaStore) store(ctx context.Context, name string, data []byte, contentType string) (string, error) {
 	if m.r2Enabled {
 		_, err := m.r2Client.PutObject(ctx, &s3.PutObjectInput{

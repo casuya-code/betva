@@ -154,9 +154,10 @@ func (s *Server) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.MediaURL != "" {
-		// Only media issued by our own upload endpoint is accepted, which stops
-		// arbitrary remote images from turning the feed into a tracking surface.
-		if !strings.HasPrefix(body.MediaURL, "/media/") || strings.Contains(body.MediaURL, "..") {
+		// Only media issued by our own upload endpoint is accepted: local
+		// /media/ files, or the configured R2 public base. This stops arbitrary
+		// remote images from turning the feed into a tracking surface.
+		if !s.Media.allowsPostURL(body.MediaURL) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid media url"})
 			return
 		}

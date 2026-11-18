@@ -1313,7 +1313,7 @@ The admin can create a backup **on demand**, at any time, with one click. This i
 
 - **Parameterized queries only** — every query uses pgx placeholders; no string-built SQL. ✅
 - **Input validation** on every endpoint, server-side, with allow-lists (stake tiers, markets, statuses, media MIME and size). ✅ Core paths; a full per-field audit is ⬜.
-- **XSS prevention** — user content is escaped before rendering, post media is restricted to `/media/...`, and a strict CSP with no inline script backstops it. ✅
+- **XSS prevention** — user content is escaped before rendering, post media is restricted to media issued by our upload endpoint (local `/media/...` or the configured R2 public base), and a strict CSP with no inline script backstops it. ✅
 - **CSRF protection** — the API authenticates with a bearer token in `Authorization`, not an ambient cookie, so classic CSRF does not apply. Any future cookie-based auth must add tokens. ✅/⬜
 - **Authentication:** phone + bcrypt-hashed password, normalized phone numbers, JWT with 30-day expiry. **Argon2 is not used** — bcrypt at the library default cost. ✅
 - **Admin 2FA** — when `ADMIN_TOTP_SECRET` is set, admin login requires a current six-digit TOTP code (or `ADMIN_RECOVERY_CODE`) in addition to the env-var password. Generate secrets with `go run ./cmd/totp`; the login form shows the code field only when 2FA is configured. ✅ TOTP; WebAuthn/passkeys remain ⬜.
@@ -1711,7 +1711,7 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 
 - `posts` stores text and at most one media reference; `status` is `visible`, `hidden`, or `deleted` — nothing is hard-deleted.
 - Media uploads are MIME-sniffed from the first 512 bytes, size-capped per type, written with a random hex name under `MEDIA_DIR`, and served from `/media/*`.
-- A post may only reference `/media/...` URLs, blocking remote images and tracking pixels.
+- A post may only reference media issued by `POST /api/v1/media`: local `/media/...` paths, or the configured `R2_MEDIA_PUBLIC_URL` base when R2 is enabled. Arbitrary remote images and tracking pixels are rejected.
 - `post_reports` has a unique `(post_id, reporter_id)` index, so one user cannot inflate a report count.
 - Three **distinct** reports set the post to `hidden` automatically. Admin hide/restore/delete records `moderated_by`, `moderation_reason`, `updated_at`, and resolves open reports.
 

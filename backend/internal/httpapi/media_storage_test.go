@@ -61,3 +61,32 @@ func TestNewMediaStoreEnabledWithR2(t *testing.T) {
 		t.Fatalf("base = %q", ms.r2PublicBase)
 	}
 }
+
+func TestAllowsPostURL(t *testing.T) {
+	local := &mediaStore{}
+	r2 := &mediaStore{r2Enabled: true, r2PublicBase: "https://pub.example.r2.dev"}
+
+	cases := []struct {
+		name string
+		ms   *mediaStore
+		url  string
+		want bool
+	}{
+		{"local", local, "/media/abc.jpg", true},
+		{"local missing name", local, "/media/", false},
+		{"local traversal", local, "/media/../secret.jpg", false},
+		{"r2", r2, "https://pub.example.r2.dev/media/abc.jpg", true},
+		{"r2 query", r2, "https://pub.example.r2.dev/media/abc.jpg?x=1", false},
+		{"r2 lookalike host", r2, "https://pub.example.r2.dev.evil.com/media/abc.jpg", false},
+		{"r2 disabled", local, "https://pub.example.r2.dev/media/abc.jpg", false},
+		{"arbitrary remote", r2, "https://example.com/tracker.gif", false},
+		{"javascript", r2, "javascript:alert(1)", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.ms.allowsPostURL(tc.url); got != tc.want {
+				t.Fatalf("allowsPostURL(%q) = %v, want %v", tc.url, got, tc.want)
+			}
+		})
+	}
+}
