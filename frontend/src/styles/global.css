@@ -7,9 +7,11 @@
   --surface: #ffffff;
   --surface-el: #ffffff;
   --border: rgba(60, 64, 67, 0.16);
-  --text: #202124;
-  --text-2: #4a4f54;
-  --text-3: #5c6166;
+  /* Deep charcoal text ramp (Gemini-like darkness): primary text is near-black,
+     secondary/meta stay clearly readable but darker than a typical gray. */
+  --text: #1b1d20;
+  --text-2: #3c4043;
+  --text-3: #4f5459;
   --nav-bg: rgba(246, 245, 242, 0.98);
   --hover-tint: rgba(60, 64, 67, 0.06);
   /* Brand palette — aligned with the Google-coloured Betva identity.
@@ -304,12 +306,14 @@ label:has(> input[type="radio"]) {
 .badge-win { background: #dcfce7; color: #166534; border-color: #86efac; }
 .badge-loss { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
 .badge-pending { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
-.badge-live { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+/* Amber (not orange-red) so MEDIUM confidence / LIVE reads clearly apart
+   from red LOSS/CANCELLED badges. */
+.badge-live { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
 .badge-postponed { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
 [data-theme="dark"] .badge-win { background: rgba(52, 168, 83, 0.18); color: #a5e6b8; border-color: rgba(52, 168, 83, 0.45); }
 [data-theme="dark"] .badge-loss { background: rgba(217, 48, 37, 0.18); color: #ffaba5; border-color: rgba(217, 48, 37, 0.45); }
 [data-theme="dark"] .badge-pending { background: rgba(148, 163, 184, 0.16); color: #d7dde3; border-color: rgba(148, 163, 184, 0.35); }
-[data-theme="dark"] .badge-live { background: rgba(234, 88, 12, 0.18); color: #ffc19a; border-color: rgba(234, 88, 12, 0.45); }
+[data-theme="dark"] .badge-live { background: rgba(245, 158, 11, 0.18); color: #fcd34d; border-color: rgba(245, 158, 11, 0.45); }
 [data-theme="dark"] .badge-postponed { background: rgba(139, 92, 246, 0.18); color: #cbb6ff; border-color: rgba(139, 92, 246, 0.45); }
 [data-theme="dark"] .glass,
 [data-theme="dark"] .card { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.2); }
@@ -317,7 +321,7 @@ label:has(> input[type="radio"]) {
 
 .badge-live .dot {
   width: 6px; height: 6px; border-radius: 50%;
-  background: #ea580c;
+  background: #f59e0b;
   animation: pulse 2s ease-in-out infinite;
 }
 @keyframes pulse {
@@ -845,6 +849,16 @@ a:focus-visible,
 video.post-media, .post-media video {
   aspect-ratio: 16 / 9;
   object-fit: contain;
+  background: #111827;
+}
+/* Admin-published YouTube embed: fixed 16:9 player, no intrinsic size. */
+.yt-frame {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
   background: #111827;
 }
 

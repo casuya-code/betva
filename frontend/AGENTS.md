@@ -26,7 +26,7 @@ Betva is a low-data betting + community app for Tanzania. Read the root `README.
 - **Low-data rules:** no autoplay, images `loading="lazy"`, video `preload="none"`, no background images, no fake activity.
 - **Dark only.** Do not add a light theme without a product decision.
 - **Responsive:** no horizontal overflow at 320px; every target ≥ 44px. Verify with `scripts/responsive-audit.html` (see `README.md`).
-- **Community media:** only `/media/*` URLs are accepted in posts; do not add remote image embeds.
+- **Community media:** users can only attach `/media/*` URLs issued by our upload endpoint — no remote image embeds. The one exception is an **admin-published YouTube post** (`media_type: 'youtube'`): the backend stores only the 11-character video ID, and the feed renders YouTube's iframe player plus an optional subscribe button. Never accept a YouTube URL from a normal user.
 
 ## Documentation
 

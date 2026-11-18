@@ -11,6 +11,23 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
     </div>
 
     <section class="card space-y-3">
+      <div>
+        <h2 class="font-semibold">Publish a YouTube video</h2>
+        <p class="text-xs text-[var(--text-3)]">
+          Posts the video to the community feed as an embedded player. Views and subscribers count on YouTube — nothing is uploaded here.
+        </p>
+      </div>
+      <label class="text-sm text-[var(--text-2)] block" for="ytBody">Caption (optional)</label>
+      <textarea id="ytBody" class="input" rows="2" maxlength="500" placeholder="What is this video about?"></textarea>
+      <label class="text-sm text-[var(--text-2)] block" for="ytUrl">YouTube URL</label>
+      <input id="ytUrl" class="input" type="url" inputmode="url" placeholder="https://youtu.be/…" autocomplete="off" />
+      <div class="flex items-center justify-between gap-2">
+        <div id="ytMsg" class="text-sm" aria-live="polite"></div>
+        <button class="btn btn-primary text-sm shrink-0" id="ytPublish" type="button">Publish video</button>
+      </div>
+    </section>
+
+    <section class="card space-y-3">
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div class="admin-filters" id="filters">
           <button class="btn btn-secondary text-sm filter active" data-status="reported" type="button">Reported</button>
@@ -47,6 +64,48 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
       });
     });
     document.getElementById('refresh')!.addEventListener('click', load);
+
+    // Publish a YouTube video: the backend extracts and stores only the
+    // 11-character video ID; the feed renders YouTube's iframe player.
+    document.getElementById('ytPublish')!.addEventListener('click', async () => {
+      const btn = document.getElementById('ytPublish') as HTMLButtonElement;
+      const msg = document.getElementById('ytMsg')!;
+      const url = (document.getElementById('ytUrl') as HTMLInputElement).value.trim();
+      const body = (document.getElementById('ytBody') as HTMLTextAreaElement).value.trim();
+      if (!url) {
+        msg.textContent = 'Paste a YouTube URL first.';
+        msg.className = 'text-sm text-[var(--danger)]';
+        return;
+      }
+      btn.disabled = true;
+      msg.textContent = 'Publishing…';
+      msg.className = 'text-sm text-[var(--text-2)]';
+      try {
+        const res = await adminFetch('/api/v1/admin/community/posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body, youtube_url: url }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          msg.textContent = data.error || 'Could not publish.';
+          msg.className = 'text-sm text-[var(--danger)]';
+          return;
+        }
+        (document.getElementById('ytUrl') as HTMLInputElement).value = '';
+        (document.getElementById('ytBody') as HTMLTextAreaElement).value = '';
+        msg.textContent = 'Published to the feed.';
+        msg.className = 'text-sm text-[var(--success)]';
+        currentStatus = 'visible';
+        document.querySelectorAll<HTMLButtonElement>('.filter').forEach((b) => b.classList.toggle('active', b.dataset.status === 'visible'));
+        await load();
+      } catch {
+        msg.textContent = 'Network error. Try again.';
+        msg.className = 'text-sm text-[var(--danger)]';
+      } finally {
+        btn.disabled = false;
+      }
+    });
 
     function renderRowsChunked<T>(tbody: HTMLTableSectionElement, items: T[], render: (item: T) => string, size = 20) {
       let i = 0;
@@ -93,9 +152,11 @@ import AdminLayout from '../../layouts/AdminLayout.astro';
                     <td class="max-w-[320px]">
                       <div class="text-[var(--text)] whitespace-pre-wrap break-words">${esc(p.body || '(media only)')}</div>
                       ${
-                        p.media_url
-                          ? `<a class="text-xs text-[var(--brand)]" href="${esc(API + p.media_url)}" target="_blank" rel="noopener">${esc(p.media_type)} attachment</a>`
-                          : ''
+                        p.media_type === 'youtube' && p.youtube_id
+                          ? `<a class="text-xs text-[var(--brand)]" href="https://www.youtube.com/watch?v=${esc(p.youtube_id)}" target="_blank" rel="noopener">youtube video</a>`
+                          : p.media_url
+                            ? `<a class="text-xs text-[var(--brand)]" href="${esc(p.media_url.startsWith('http') ? p.media_url : API + p.media_url)}" target="_blank" rel="noopener">${esc(p.media_type)} attachment</a>`
+                            : ''
                       }
                       ${p.moderation_reason ? `<div class="text-xs text-[var(--text-3)] mt-1">Reason: ${esc(p.moderation_reason)}</div>` : ''}
                     </td>

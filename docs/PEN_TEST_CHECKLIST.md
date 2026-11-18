@@ -52,7 +52,7 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 - [ ] SQL injection attempts on every query param and JSON field return 400/404, never 500.
 - [ ] XSS payloads in nickname, post body, and media alt text are escaped on render.
 - [ ] Media upload rejects non-image/non-video bytes and oversized files.
-- [ ] Only `/media/*` URLs accepted in posts (no SSRF / remote embed).
+- [ ] Only `/media/*` URLs accepted in posts from normal users (no SSRF / remote embed). A `media_type: 'youtube'` post can only be created via the admin endpoint, which extracts and stores an 11-character video ID (`[A-Za-z0-9_-]{11}`) — confirm a user POST with `media_type: 'youtube'` returns `403` and that a non-YouTube or lookalike URL (e.g. `evil.example/watch?v=…`) is rejected with `400`.
 - [ ] Uploaded filename is ignored; stored name is a content hash plus a sniffed extension.
 - [ ] `/media/*` cannot traverse outside `MEDIA_DIR` (`../`, encoded variants, Windows `..\`).
 - [ ] CSV upload rejects malformed rows with line numbers; no path traversal in file name.

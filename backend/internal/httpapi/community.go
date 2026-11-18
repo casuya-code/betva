@@ -41,7 +41,7 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.Pool.Query(r.Context(), `
-		SELECT p.id, p.body, COALESCE(p.media_url, ''), COALESCE(p.media_type, ''), p.media_bytes,
+		SELECT p.id, p.body, COALESCE(p.media_url, ''), COALESCE(p.media_type, ''), COALESCE(p.youtube_id, ''), p.media_bytes,
 		       to_char(p.created_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI'),
 		       p.created_at, p.user_id, u.nickname, COALESCE(u.profile_pic, ''),
 		       (p.user_id = $1),
@@ -85,6 +85,7 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 		Body        string    `json:"body"`
 		MediaURL    string    `json:"media_url"`
 		MediaType   string    `json:"media_type"`
+		YouTubeID   string    `json:"youtube_id"`
 		MediaBytes  int64     `json:"media_bytes"`
 		CreatedAt   string    `json:"created_at"`
 		CreatedRaw  time.Time `json:"-"`
@@ -103,7 +104,7 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 	out := []post{}
 	for rows.Next() {
 		var p post
-		if err := rows.Scan(&p.ID, &p.Body, &p.MediaURL, &p.MediaType, &p.MediaBytes,
+		if err := rows.Scan(&p.ID, &p.Body, &p.MediaURL, &p.MediaType, &p.YouTubeID, &p.MediaBytes,
 			&p.CreatedAt, &p.CreatedRaw, &p.UserID, &p.Nickname, &p.ProfilePic,
 			&p.IsMine, &p.Reported, &p.ReportCount,
 			&p.Likes, &p.Loves, &p.Hahas, &p.MyReaction); err != nil {
@@ -167,6 +168,12 @@ func (s *Server) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid media type"})
 			return
 		}
+	}
+	// YouTube posts are admin-only (see handleAdminCreateYouTubePost): they
+	// embed a third-party player and exist to drive channel subscribers.
+	if body.MediaType == "youtube" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "youtube posts are published by the admin"})
+		return
 	}
 
 	var id string
@@ -451,6 +458,55 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 // Admin moderation
 // ---------------------------------------------------------------------------
 
+// handleAdminCreateYouTubePost publishes a community post that embeds an
+// existing YouTube video. The client sends a full YouTube URL; only the
+// 11-character video ID is stored (never a URL), so the row costs ~11 bytes
+// and the Vercel frontend builds the iframe — the backend streams nothing.
+// Admin-only: the token subject ("admin") is not a users.id, so the post is
+// attributed to the reserved system account created in migration 014.
+func (s *Server) handleAdminCreateYouTubePost(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Body       string `json:"body"`
+		YouTubeURL string `json:"youtube_url"`
+	}
+	if err := jsonDecode(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad json"})
+		return
+	}
+	body.Body = strings.TrimSpace(body.Body)
+	body.YouTubeURL = strings.TrimSpace(body.YouTubeURL)
+
+	if utf8.RuneCountInString(body.Body) > maxPostBody {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "post is longer than 500 characters"})
+		return
+	}
+	videoID, ok := extractYouTubeID(body.YouTubeURL)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid youtube url"})
+		return
+	}
+
+	ctx := r.Context()
+	var authorID string
+	if err := s.Pool.QueryRow(ctx, `SELECT id FROM users WHERE phone = 'system' LIMIT 1`).Scan(&authorID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "system author missing (run migrations)"})
+		return
+	}
+
+	var id string
+	err := s.Pool.QueryRow(ctx, `
+		INSERT INTO posts (user_id, body, media_type, youtube_id)
+		VALUES ($1, NULLIF($2, ''), 'youtube', $3)
+		RETURNING id
+	`, authorID, body.Body, videoID).Scan(&id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not publish post"})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{"id": id, "youtube_id": videoID})
+}
+
 // handleAdminCommunityPosts lists posts for moderation.
 func (s *Server) handleAdminCommunityPosts(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
@@ -469,7 +525,7 @@ func (s *Server) handleAdminCommunityPosts(w http.ResponseWriter, r *http.Reques
 
 	ctx := r.Context()
 	rows, err := s.Pool.Query(ctx, `
-		SELECT p.id, p.body, COALESCE(p.media_url, ''), COALESCE(p.media_type, ''), p.status,
+		SELECT p.id, p.body, COALESCE(p.media_url, ''), COALESCE(p.media_type, ''), COALESCE(p.youtube_id, ''), p.status,
 		       COALESCE(p.moderation_reason, ''), p.user_id, u.nickname, u.phone,
 		       to_char(p.created_at AT TIME ZONE 'Africa/Dar_es_Salaam', 'YYYY-MM-DD HH24:MI'),
 		       COALESCE(rc.report_count, 0),
@@ -496,6 +552,7 @@ func (s *Server) handleAdminCommunityPosts(w http.ResponseWriter, r *http.Reques
 		Body             string `json:"body"`
 		MediaURL         string `json:"media_url"`
 		MediaType        string `json:"media_type"`
+		YouTubeID        string `json:"youtube_id"`
 		Status           string `json:"status"`
 		ModerationReason string `json:"moderation_reason"`
 		UserID           string `json:"user_id"`
@@ -508,7 +565,7 @@ func (s *Server) handleAdminCommunityPosts(w http.ResponseWriter, r *http.Reques
 	out := []row{}
 	for rows.Next() {
 		var p row
-		if err := rows.Scan(&p.ID, &p.Body, &p.MediaURL, &p.MediaType, &p.Status,
+		if err := rows.Scan(&p.ID, &p.Body, &p.MediaURL, &p.MediaType, &p.YouTubeID, &p.Status,
 			&p.ModerationReason, &p.UserID, &p.Nickname, &p.Phone, &p.CreatedAt,
 			&p.ReportCount, &p.OpenReports); err == nil {
 			p.MediaURL = s.Media.displayURL(r.Context(), p.MediaURL)

@@ -137,6 +137,7 @@ func Register(r *chi.Mux, cfg *config.Config, pool *pgxpool.Pool, rdb *redis.Cli
 			adm.Get("/analytics", s.handleAdminAnalytics)
 
 			adm.Get("/community/posts", s.handleAdminCommunityPosts)
+			adm.Post("/community/posts", s.handleAdminCreateYouTubePost)
 			adm.Put("/community/posts/{id}/status", s.handleAdminModeratePost)
 			adm.Post("/notifications/send", s.handleAdminSendNotification)
 			adm.Get("/notifications", s.handleAdminListNotifications)

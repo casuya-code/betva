@@ -95,6 +95,7 @@ import Layout from '../layouts/Layout.astro';
       body: string;
       media_url: string;
       media_type: string;
+      youtube_id: string;
       media_bytes: number;
       created_at: string;
       user_id: string;
@@ -133,7 +134,34 @@ import Layout from '../layouts/Layout.astro';
       return url.startsWith('http') ? url : `${API}${url}`;
     }
 
+    // Optional: set PUBLIC_YOUTUBE_CHANNEL_URL on Vercel to your channel link
+    // (e.g. https://www.youtube.com/@yourhandle). When set, every YouTube
+    // post gets a one-click subscribe button under the player.
+    const YT_CHANNEL: string = import.meta.env.PUBLIC_YOUTUBE_CHANNEL_URL || '';
+
+    function subscribeHtml(): string {
+      if (!YT_CHANNEL) return '';
+      const sep = YT_CHANNEL.includes('?') ? '&' : '?';
+      const href = esc(`${YT_CHANNEL}${sep}sub_confirmation=1`);
+      return `
+        <div class="mt-3">
+          <a class="btn btn-primary w-full" href="${href}" target="_blank" rel="noopener noreferrer">Subscribe on YouTube</a>
+        </div>`;
+    }
+
     function renderMedia(p: Post): string {
+      if (p.media_type === 'youtube' && p.youtube_id) {
+        // Admin-published: playback streams straight from YouTube, so the
+        // backend serves no video bytes and every play is a YouTube view.
+        // ?rel=0 keeps the end screen inside our own channel.
+        const id = esc(p.youtube_id);
+        return `
+          <iframe class="yt-frame mt-3" src="https://www.youtube-nocookie.com/embed/${id}?rel=0"
+            title="YouTube video player" loading="lazy" frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen></iframe>
+          ${subscribeHtml()}`;
+      }
       if (!p.media_url) return '';
       const src = esc(mediaSrc(p.media_url));
       if (p.media_type === 'video') {

@@ -322,7 +322,7 @@ On phones the composer sits directly above the feed. From 1024px it moves into t
 - Up to **500 characters** of text, optionally with **one** image or **one** video.
 - Images: JPEG, PNG, WebP, AVIF or GIF, **≤ 400 KB**. Video: MP4 or WebM, **≤ 3 MB**.
 - Media is sniffed from the bytes server-side; a client-supplied `Content-Type` is never trusted.
-- Only media issued by `POST /api/v1/media` is accepted in a post, so a post cannot embed a remote tracker.
+- Only media issued by `POST /api/v1/media` is accepted in a post, so a post cannot embed a remote tracker. Admins can additionally publish a **YouTube post**: only the 11-character video ID is stored, and the feed plays it in YouTube's iframe (streaming stays on YouTube; every play is a YouTube view).
 - Text-only is always the cheapest option and is stated in the composer.
 
 **What users never see**
@@ -1711,7 +1711,7 @@ The bet stores `confidence_at_placement` and `payout_multiplier_bp` so later cha
 
 - `posts` stores text and at most one media reference; `status` is `visible`, `hidden`, or `deleted` — nothing is hard-deleted.
 - Media uploads are MIME-sniffed from the first 512 bytes, size-capped per type, written with a random hex name under `MEDIA_DIR`, and served from `/media/*`.
-- A post may only reference media issued by `POST /api/v1/media`: local `/media/...` paths, or the configured `R2_MEDIA_PUBLIC_URL` base when R2 is enabled. Arbitrary remote images and tracking pixels are rejected.
+- A post may only reference media issued by `POST /api/v1/media`: local `/media/...` paths, or the configured `R2_MEDIA_PUBLIC_URL` base when R2 is enabled. Arbitrary remote images and tracking pixels are rejected. The one exception is the admin-only `POST /api/v1/admin/community/posts` (migration `014`), which accepts a YouTube URL, extracts the 11-character video ID with `extractYouTubeID` (host must be `youtube.com`/`youtu.be`/`youtube-nocookie.com`, ID must match `[A-Za-z0-9_-]{11}`), and stores only that ID — never a URL. Regular users get `403` for `media_type: 'youtube'`.
 - `post_reports` has a unique `(post_id, reporter_id)` index, so one user cannot inflate a report count.
 - Three **distinct** reports set the post to `hidden` automatically. Admin hide/restore/delete records `moderated_by`, `moderation_reason`, `updated_at`, and resolves open reports.
 

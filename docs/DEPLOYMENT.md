@@ -292,6 +292,7 @@ every name.
 | Variable | Target | Value |
 | --- | --- | --- |
 | `PUBLIC_API_URL` | Production, Preview | Railway API origin |
+| `PUBLIC_YOUTUBE_CHANNEL_URL` | Production, Preview (optional) | Channel URL, e.g. `https://www.youtube.com/@yourhandle` — when set, admin-published YouTube posts show a one-click subscribe button under the player |
 
 ---
 
