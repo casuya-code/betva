@@ -119,6 +119,15 @@ func foldTeamName(s string) string {
 		}
 		if unicode.IsSpace(r) {
 			b.WriteByte(' ')
+			continue
+		}
+		// Separators used in team names differ between feeds: Betva writes
+		// "Bosnia & Herzegovina", ESPN "Bosnia-Herzegovina". Normalise them
+		// to spaces so both fold to "bosnia herzegovina". Apostrophes are
+		// dropped instead, so "Côte d'Ivoire" stays "cote divoire".
+		switch r {
+		case '-', '–', '—', '/', '&', '.':
+			b.WriteByte(' ')
 		}
 	}
 	out := strings.Join(strings.Fields(b.String()), " ")

@@ -12,6 +12,10 @@ func TestFoldTeamName(t *testing.T) {
 		{"  São Paulo U20  ", "sao paulo u20"},
 		{"Atlético Mineiro U20", "atletico mineiro u20"},
 		{"Sint Maarten", "sint maarten"},
+		// The exact mismatch that broke Bosnia fixtures in production.
+		{"Bosnia & Herzegovina", "bosnia herzegovina"},
+		{"Bosnia-Herzegovina", "bosnia herzegovina"},
+		{"Republic of Ireland", "republic of ireland"},
 	}
 	for _, c := range cases {
 		if got := foldTeamName(c[0]); got != c[1] {
@@ -85,6 +89,33 @@ func TestFindESPNResult_IgnoresUnfinishedAndWrongTeams(t *testing.T) {
 	]}`)
 	if got := findESPNResult(board, "Ajax", "Sporting", "u"); got != nil {
 		t.Fatalf("must not use live score or wrong fixture: %+v", got)
+	}
+}
+
+// Real production fixture: Betva "Bosnia & Herzegovina", ESPN
+// "Bosnia-Herzegovina". Both must resolve to the same score.
+func TestFindESPNResult_BosniaAlias(t *testing.T) {
+	board := testESPNBoard(t, `{"events":[{"id":"1","competitions":[{
+		"status":{"type":{"state":"post","completed":true}},
+		"competitors":[
+			{"homeAway":"home","score":"1","team":{"displayName":"Bosnia-Herzegovina","id":"1"}},
+			{"homeAway":"away","score":"2","team":{"displayName":"Romania","id":"2"}}
+		],
+		"details":[
+			{"type":{"text":"Goal"},"clock":{"displayValue":"30'"},"team":{"id":"1"},"scoringPlay":true},
+			{"type":{"text":"Goal"},"clock":{"displayValue":"55'"},"team":{"id":"2"},"scoringPlay":true},
+			{"type":{"text":"Goal"},"clock":{"displayValue":"80'"},"team":{"id":"2"},"scoringPlay":true}
+		]
+	}]}]}`)
+	got := findESPNResult(board, "Bosnia & Herzegovina", "Romania", "u")
+	if got == nil {
+		t.Fatal("Bosnia fixture must match despite & vs -")
+	}
+	if got.HomeGoals != 1 || got.AwayGoals != 2 {
+		t.Fatalf("FT = %d-%d, want 1-2", got.HomeGoals, got.AwayGoals)
+	}
+	if got.HomeGoalsHT == nil || *got.HomeGoalsHT != 1 || got.AwayGoalsHT == nil || *got.AwayGoalsHT != 0 {
+		t.Fatalf("HT = %v-%v, want 1-0", intPtrStr(got.HomeGoalsHT), intPtrStr(got.AwayGoalsHT))
 	}
 }
 
