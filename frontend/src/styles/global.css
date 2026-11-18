@@ -463,6 +463,106 @@ label:has(> input[type="radio"]) {
   font-weight: 700;
 }
 
+/* Betting match card: grouped into a meta head, a fixture row, and a separate
+   odds zone so a match can be scanned in one pass. All classes live here (not
+   in a page <style>) because the markup is injected with innerHTML. */
+.match-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.match-meta {
+  min-width: 0;
+  font-size: var(--t-xs);
+  line-height: 1.35;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.match-badges {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s1);
+}
+.match-teams {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s3);
+}
+.match-team {
+  min-width: 0;
+  font-size: var(--t-md);
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.match-team--away { text-align: right; }
+.match-score {
+  text-align: center;
+  white-space: nowrap;
+  font-size: var(--t-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.match-score.is-final { color: var(--text); }
+.match-score-ht {
+  display: block;
+  font-size: var(--t-xs);
+  font-weight: 400;
+  color: var(--text-3);
+}
+.match-markets {
+  margin-top: var(--s4);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--border);
+}
+.match-markets-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+  font-size: var(--t-xs);
+  color: var(--text-3);
+}
+.match-market-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: var(--s2);
+}
+.market-btn {
+  justify-content: space-between;
+  gap: var(--s2);
+  padding-inline: var(--s3);
+  background: var(--surface-el);
+}
+.market-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.market-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  flex-shrink: 0;
+}
+.market-odds {
+  color: var(--brand);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.market-outcome { font-weight: 700; }
+.market-outcome--win { color: var(--success); }
+.market-outcome--loss { color: var(--danger); }
+
 /* toast */
 .toast {
   position: fixed;
