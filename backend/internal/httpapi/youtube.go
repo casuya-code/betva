@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"context"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -9,7 +11,18 @@ import (
 // youtubeIDRe matches a canonical 11-character YouTube video ID.
 var youtubeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 
-// extractYouTubeID pulls the 11-character video ID out of any common YouTube
+// youtubeChannelURL returns the admin-configured YouTube channel URL used by
+// the subscribe button on YouTube posts. Empty when unset (button hidden).
+func (s *Server) youtubeChannelURL(ctx context.Context) string {
+	if s.Pool == nil {
+		return ""
+	}
+	var v string
+	if err := s.Pool.QueryRow(ctx, `SELECT value FROM site_settings WHERE key = 'youtube_channel_url'`).Scan(&v); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(v)
+}
 // URL shape: youtu.be/<id>, youtube.com/watch?v=<id>, /shorts/<id>,
 // /embed/<id>, /live/<id>, with or without www/m./scheme and extra query
 // params. ok is false for anything that does not resolve to a valid ID, so
@@ -73,4 +86,32 @@ func extractYouTubeID(raw string) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+// handleAdminSetYouTubeChannel stores the YouTube channel URL used by the
+// subscribe button on admin-published YouTube posts. Empty clears it.
+func (s *Server) handleAdminSetYouTubeChannel(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := jsonDecode(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad json"})
+		return
+	}
+	body.URL = strings.TrimSpace(body.URL)
+	if body.URL != "" &&
+		!strings.Contains(body.URL, "youtube.com") && !strings.Contains(body.URL, "youtu.be") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "must be a YouTube channel URL"})
+		return
+	}
+	_, err := s.Pool.Exec(r.Context(), `
+		INSERT INTO site_settings (key, value, updated_at)
+		VALUES ('youtube_channel_url', $1, NOW())
+		ON CONFLICT (key) DO UPDATE
+		    SET value = EXCLUDED.value, updated_at = NOW()
+	`, body.URL)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not save setting"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"youtube_channel_url": body.URL})
 }

@@ -292,7 +292,7 @@ every name.
 | Variable | Target | Value |
 | --- | --- | --- |
 | `PUBLIC_API_URL` | Production, Preview | Railway API origin |
-| `PUBLIC_YOUTUBE_CHANNEL_URL` | Production, Preview (optional) | Channel URL, e.g. `https://www.youtube.com/@yourhandle` — when set, admin-published YouTube posts show a one-click subscribe button under the player |
+| `PUBLIC_YOUTUBE_CHANNEL_URL` | Production, Preview (optional fallback) | Channel URL, e.g. `https://www.youtube.com/@yourhandle`. The admin can also set/change this at runtime from **Admin → Community → YouTube channel** (stored in `site_settings`), so this env var is only a build-time fallback. |
 
 ---
 

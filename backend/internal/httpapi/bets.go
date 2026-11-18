@@ -330,6 +330,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		"payment_number":       s.Cfg.PaymentNumber,
 		"payment_name":         s.Cfg.PaymentName,
 		"terms_version":        TermsVersion,
+		"youtube_channel_url":  s.youtubeChannelURL(r.Context()),
 	})
 }
 

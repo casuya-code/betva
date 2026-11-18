@@ -134,10 +134,21 @@ import Layout from '../layouts/Layout.astro';
       return url.startsWith('http') ? url : `${API}${url}`;
     }
 
-    // Optional: set PUBLIC_YOUTUBE_CHANNEL_URL on Vercel to your channel link
-    // (e.g. https://www.youtube.com/@yourhandle). When set, every YouTube
-    // post gets a one-click subscribe button under the player.
-    const YT_CHANNEL: string = import.meta.env.PUBLIC_YOUTUBE_CHANNEL_URL || '';
+    // YouTube channel URL for the subscribe button comes from the backend
+    // (admin-configurable via the admin panel) so it can be changed without a
+    // Vercel redeploy. Falls back to the build-time env var if set.
+    let YT_CHANNEL: string = import.meta.env.PUBLIC_YOUTUBE_CHANNEL_URL || '';
+
+    async function loadChannelUrl(): Promise<void> {
+      try {
+        const res = await fetch(`${API}/api/v1/config`);
+        const data = await res.json().catch(() => ({}));
+        const fromApi = String(data.youtube_channel_url || '').trim();
+        if (fromApi) YT_CHANNEL = fromApi;
+      } catch {
+        /* keep fallback / empty */
+      }
+    }
 
     function subscribeHtml(): string {
       if (!YT_CHANNEL) return '';
@@ -533,6 +544,7 @@ import Layout from '../layouts/Layout.astro';
     // loading=true, so the reset load was skipped and the two skeleton cards
     // were never removed. Awaiting here also means no scroll can pre-empt it.
     await loadAccess();
+    await loadChannelUrl();
     await loadFeed(true);
     observer.observe(sentinel);
   </script>
