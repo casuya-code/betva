@@ -8,12 +8,19 @@
   --surface-el: #ffffff;
   --border: rgba(60, 64, 67, 0.16);
   --text: #202124;
-  --text-2: #5f6368;
-  --text-3: #70757a;
-  /* Brand palette — aligned with the Google-coloured Betva identity */
+  --text-2: #4a4f54;
+  --text-3: #5c6166;
+  --nav-bg: rgba(246, 245, 242, 0.98);
+  --hover-tint: rgba(60, 64, 67, 0.06);
+  /* Brand palette — aligned with the Google-coloured Betva identity.
+     `--brand` is for text/links/focus; `--brand-solid` is for filled surfaces
+     that carry white text, so it can stay dark when the theme flips. */
   --brand: #1a73e8;
   --brand-2: #1558b0;
+  --brand-solid: #1a73e8;
+  --brand-solid-2: #1558b0;
   --brand-glow: rgba(26, 115, 232, 0.18);
+  --brand-tint: rgba(26, 115, 232, 0.08);
   --danger: #d93025;
   --danger-strong: #c5221f; /* white text on this passes 4.5:1 */
   --warning: #e37400;
@@ -25,7 +32,7 @@
      Mathematical scale — every size in the UI derives from these.
      Spacing: 4px base grid (n × 4). Heights land on 44/48/56.
      Radii: 8 / 12 / 16 / 20 on the same grid, never arbitrary.
-     Type: 1.25 modular ratio rounded to the grid (11 13 16 20 24 30).
+     Type: 1.25 modular ratio rounded to the grid (12 13 16 20 24 30).
      ---------------------------------------------------------------- */
   --s1: 4px;  /* hairline gaps, icon-to-text */
   --s2: 8px;  /* intra-component rhythm */
@@ -42,7 +49,7 @@
   --r-xl: 20px;  /* bottom sheets */
   --r-pill: 999px; /* status badges, tabs */
 
-  --t-xs: 11px;  /* meta, table headers */
+  --t-xs: 12px;  /* meta, table headers, nav labels */
   --t-sm: 13px;  /* secondary text */
   --t-md: 16px;  /* body, inputs (16px stops iOS zoom) */
   --t-lg: 20px;  /* card titles */
@@ -53,11 +60,38 @@
   --control: 48px; /* standard form control height */
 }
 
+/* Deep charcoal theme. Off-white primary text and light-gray secondary text
+   keep long reading sessions comfortable; every palette below clears 4.5:1
+   against both the page and elevated surfaces. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-base: #141719;
+  --bg-grad: #0f1113;
+  --surface: #1d2124;
+  --surface-el: #252a2e;
+  --border: rgba(255, 255, 255, 0.14);
+  --text: #f2f4f5;
+  --text-2: #c8cdcf;
+  --text-3: #a7adb2;
+  --nav-bg: rgba(20, 23, 25, 0.98);
+  --hover-tint: rgba(255, 255, 255, 0.08);
+  --brand: #8ab4f8;
+  --brand-solid: #1a73e8;
+  --brand-solid-2: #1558b0;
+  --brand-glow: rgba(138, 180, 248, 0.18);
+  --brand-tint: rgba(138, 180, 248, 0.14);
+  --danger: #ff8a80;
+  --warning: #ffb74d;
+  --info: #8ab4f8;
+  --success: #81c995;
+}
+
 html, body {
   background: var(--bg-base);
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
+  /* Leave smoothing at the browser default: `antialiased` disables subpixel
+     antialiasing on Windows and makes body text look thin and washed out. */
   margin: 0;
 }
 html {
@@ -130,7 +164,7 @@ body {
 .btn:active { transform: scale(0.98); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary {
-  background: linear-gradient(180deg, var(--brand), var(--brand-2));
+  background: linear-gradient(180deg, var(--brand-solid), var(--brand-solid-2));
   color: #fff;
   box-shadow: 0 4px 16px var(--brand-glow);
 }
@@ -200,7 +234,7 @@ body {
   min-height: var(--control);
   padding: var(--s3) var(--s4);
   border-radius: var(--r-md);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
   font-size: var(--t-md);
@@ -272,6 +306,14 @@ label:has(> input[type="radio"]) {
 .badge-pending { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
 .badge-live { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
 .badge-postponed { background: #ede9fe; color: #5b21b6; border-color: #c4b5fd; }
+[data-theme="dark"] .badge-win { background: rgba(52, 168, 83, 0.18); color: #a5e6b8; border-color: rgba(52, 168, 83, 0.45); }
+[data-theme="dark"] .badge-loss { background: rgba(217, 48, 37, 0.18); color: #ffaba5; border-color: rgba(217, 48, 37, 0.45); }
+[data-theme="dark"] .badge-pending { background: rgba(148, 163, 184, 0.16); color: #d7dde3; border-color: rgba(148, 163, 184, 0.35); }
+[data-theme="dark"] .badge-live { background: rgba(234, 88, 12, 0.18); color: #ffc19a; border-color: rgba(234, 88, 12, 0.45); }
+[data-theme="dark"] .badge-postponed { background: rgba(139, 92, 246, 0.18); color: #cbb6ff; border-color: rgba(139, 92, 246, 0.45); }
+[data-theme="dark"] .glass,
+[data-theme="dark"] .card { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.2); }
+[data-theme="dark"] .admin-nav-link.active { background: var(--brand-tint); }
 
 .badge-live .dot {
   width: 6px; height: 6px; border-radius: 50%;
@@ -334,7 +376,7 @@ label:has(> input[type="radio"]) {
   position: fixed;
   bottom: 0; left: 0; right: 0;
   height: 64px;
-  background: rgba(246, 245, 242, 0.98);
+  background: var(--nav-bg);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -361,8 +403,14 @@ label:has(> input[type="radio"]) {
   transition: color 150ms, background-color 150ms;
   touch-action: manipulation;
 }
-.nav-item.active { color: var(--brand); background: rgba(26, 115, 232, 0.08); }
+.nav-item.active { color: var(--brand); background: var(--brand-tint); }
 .nav-item svg { width: 22px; height: 22px; }
+
+/* Theme switch sits in the nav with a full 44px target but no text label, so
+   the four destinations keep their room at 320px. */
+.theme-toggle { flex: 0 0 var(--tap); min-width: var(--tap); padding-inline: 0; }
+[data-theme="light"] .theme-icon-sun,
+[data-theme="dark"] .theme-icon-moon { display: none; }
 
 /* Wider screens keep the same full-width bar: the four destinations always
    share the device width evenly instead of collapsing into a narrow pill. */
@@ -383,8 +431,8 @@ label:has(> input[type="radio"]) {
     min-height: var(--tap);
     padding: 0 var(--s3);
   }
-  .nav-item:hover { color: var(--text); background: rgba(60, 64, 67, 0.06); }
-  .nav-item.active { background: rgba(26, 115, 232, 0.1); }
+  .nav-item:hover { color: var(--text); background: var(--hover-tint); }
+  .nav-item.active { background: var(--brand-tint); }
   .nav-item svg { width: 20px; height: 20px; }
 }
 
@@ -765,60 +813,3 @@ video.post-media, .post-media video {
   box-shadow: 0 1px 2px rgba(60, 64, 67, 0.06);
 }
 
-/* Page preloader */
-.page-preloader {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: grid;
-  place-items: center;
-  background: var(--bg-base);
-  transition: opacity 160ms ease, visibility 160ms ease;
-}
-.page-preloader.is-hidden {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-.page-preloader-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.page-preloader-mark {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  animation: preloader-pulse 1.4s ease-in-out infinite;
-}
-.page-preloader-bar {
-  width: 96px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--surface-el);
-  overflow: hidden;
-  position: relative;
-}
-.page-preloader-bar::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: 40%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--brand), var(--brand-2));
-  animation: preloader-bar 1s ease-in-out infinite;
-}
-@keyframes preloader-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.65; transform: scale(0.97); }
-}
-@keyframes preloader-bar {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(260%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .page-preloader { transition: none; }
-  .page-preloader-mark,
-  .page-preloader-bar::after { animation: none; }
-}

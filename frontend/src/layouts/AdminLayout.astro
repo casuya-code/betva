@@ -25,6 +25,7 @@ const links = [
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Betva administration: matches, users, community moderation, and notifications." />
     <meta name="theme-color" content="#f6f5f2" />
+    <script src="/theme-init.js" is:inline></script>
     <meta name="betva-api" content={API} />
     <meta name="robots" content="noindex, nofollow" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -70,7 +71,7 @@ const links = [
     position: sticky;
     top: 0;
     z-index: 40;
-    background: rgba(246, 245, 242, 0.98);
+    background: var(--nav-bg);
     border-bottom: 1px solid var(--border);
   }
   .admin-header-inner {
@@ -151,8 +152,8 @@ const links = [
     cursor: pointer;
     white-space: nowrap;
   }
-  .admin-nav-link:hover { color: var(--text); background: rgba(60, 64, 67, 0.06); }
-  .admin-nav-link.active { color: var(--brand); background: rgba(26, 115, 232, 0.1); font-weight: 700; }
+  .admin-nav-link:hover { color: var(--text); background: var(--hover-tint); }
+  .admin-nav-link.active { color: var(--brand); background: var(--brand-tint); font-weight: 700; }
   .admin-logout { color: var(--danger); }
   .admin-main {
     max-width: 1120px;
