@@ -1438,10 +1438,10 @@ Heavy JavaScript frameworks (standard React, Angular) drain battery and freeze l
 ### Delivery & Compression: local today, Cloudflare later 🟡
 
 - **Images:** uploads are stored as received, capped at **400 KB**, and served from `/media/*`. Server-side MIME sniffing prevents a renamed executable from being served as an image. Auto-conversion to WebP/AVIF and blur-up placeholders are ⬜.
-- **Profile pictures:** `PUT /me` now accepts only local `/media/<name>.(jpg|jpeg|png|webp|gif)` paths, so a tracking pixel, `javascript:` URL, or remote embed cannot be stored as an avatar. There is still no upload UI or separate 10 KB image-size check. 🟡
+- **Profile pictures:** `PUT /me` accepts only image media references issued by Betva's media store (local `/media/<name>` images, or the configured R2 public/presigned media references for our bucket), so a tracking pixel, `javascript:` URL, or arbitrary remote embed cannot be stored as an avatar. There is still no upload UI or separate 10 KB image-size check. 🟡
 - **Videos:** uploads are capped at **3 MB**, served as a single file with `preload="none"` and native controls. No autoplay. HLS adaptive bitrate is ⬜.
-- **Storage:** local `MEDIA_DIR` with random 24-character hex filenames and `Cache-Control: public, max-age=31536000, immutable` by default; when the five `R2_*` media variables are set, uploads go straight to Cloudflare R2 behind the same endpoint. ✅
-- **Cloudflare Images/Stream** (auto WebP/AVIF, blur-up placeholders, adaptive HLS) is still ⬜.
+- **Storage & delivery:** local `MEDIA_DIR` by default (served from `/media/*` with immutable cache headers). When R2 is configured, uploads go straight to Cloudflare R2 behind the same endpoint: use `R2_MEDIA_PUBLIC_URL` (`r2.dev` is fine without a custom domain) for direct public delivery, or set `R2_MEDIA_PRESIGN_TTL_SECONDS` for short-lived signed GET URLs (private bucket / presigned delivery) without proxying media bytes through Railway. ✅
+- **Cloudflare Images/Stream** (auto WebP/AVIF, blur-up placeholders, adaptive HLS), custom-domain edge tuning, and presigned delivery for strictly private per-user media flows are still ⬜.
 
 ### Storage: Cloudflare R2 ✅ (opt-in via env vars)
 
@@ -1749,7 +1749,7 @@ All routes are under `/api/v1`. User routes require `Authorization: Bearer <user
 | `POST` | `/api/v1/auth/login` | Login → user JWT |
 | `POST` | `/api/v1/auth/logout` | Stateless: returns `logged out`; the client discards the token |
 | `GET` | `/api/v1/me` | Current profile |
-| `PUT` | `/api/v1/me` | Update password and/or `profile_pic` (no nickname change) |
+| `PUT` | `/api/v1/me` | Update password and/or `profile_pic` (Betva media image reference only; no nickname change) |
 | `GET` | `/api/v1/matches` | Today + tomorrow, with `is_open`, `market_odds`, and `preview: true` when an inactive account gets only three |
 | `POST` | `/api/v1/bets` | Place a slip: `match_id`, `market`, `stake_cents` |
 | `GET` | `/api/v1/wallet` | Balance + last 50 ledger entries |

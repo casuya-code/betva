@@ -5,6 +5,10 @@ import (
 	"net"
 	"net/url"
 	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 func TestIsPublicIP(t *testing.T) {
@@ -52,21 +56,31 @@ func TestPublicHTTPClientRejectsPrivateTargets(t *testing.T) {
 }
 
 func TestValidProfilePic(t *testing.T) {
+	local := &mediaStore{}
+	r2 := &mediaStore{r2Enabled: true, r2PublicBase: "https://pub.example.r2.dev"}
+	r2Presign := &mediaStore{r2Enabled: true, r2Bucket: "bucket", r2Presigner: s3.NewPresignClient(s3.NewFromConfig(aws.Config{Region: "auto"})), r2PresignTTL: time.Hour}
+
 	for _, tc := range []struct {
 		value string
+		ms    *mediaStore
 		want  bool
 	}{
-		{"/media/11fd479d0cd468144f79cb39.jpg", true},
-		{"/media/a_b-c.webp", true},
-		{"", false},
-		{"javascript:alert(1)", false},
-		{"data:image/svg+xml,<svg>", false},
-		{"https://evil.example/x.jpg", false},
-		{"/media/../etc/passwd.jpg", false},
-		{"/media/x.svg", false},
-		{"/media/x.png?x=1", false},
+		{"/media/11fd479d0cd468144f79cb39.jpg", local, true},
+		{"/media/a_b-c.webp", local, true},
+		{"", local, false},
+		{"javascript:alert(1)", local, false},
+		{"data:image/svg+xml,<svg>", local, false},
+		{"https://evil.example/x.jpg", local, false},
+		{"/media/../etc/passwd.jpg", local, false},
+		{"/media/x.svg", local, false},
+		{"/media/x.png?x=1", local, false},
+		{"https://pub.example.r2.dev/media/11fd479d0cd468144f79cb39.jpg", r2, true},
+		{"https://pub.example.r2.dev/media/11fd479d0cd468144f79cb39.mp4", r2, false},
+		{"https://evil.example/media/11fd479d0cd468144f79cb39.jpg", r2, false},
+		{"r2://bucket/media/11fd479d0cd468144f79cb39.jpg", r2Presign, true},
+		{"r2://other/media/11fd479d0cd468144f79cb39.jpg", r2Presign, false},
 	} {
-		if got := validProfilePic(tc.value); got != tc.want {
+		if got := validProfilePic(tc.value, tc.ms); got != tc.want {
 			t.Errorf("validProfilePic(%q) = %v, want %v", tc.value, got, tc.want)
 		}
 	}

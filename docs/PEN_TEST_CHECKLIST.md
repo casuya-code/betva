@@ -20,7 +20,7 @@ Scope: Go API (`/api/v1`), Astro frontend, Postgres, the Railway media volume (`
 - [ ] Registration requires `official_name` and `accepted_terms`; a missing checkbox returns `400`.
 - [ ] `consent_log` receives one row per registration with `notice_version` and timestamp.
 - [ ] `PUT /me` cannot change `nickname`, `phone`, `official_name`, `status`, `balance_cents`, or `access_expires_at`.
-- [ ] `PUT /me` now allows only `/media/<name>.(jpg|jpeg|png|webp|gif)` for `profile_pic`. Confirm a remote URL, `javascript:`, `data:`, `../`, or `.svg` value is rejected with `400` and cannot become a stored tracking pixel or XSS.
+- [ ] `PUT /me` accepts `profile_pic` only when it is an image reference issued by Betva's media store (a local `/media/<name>` image path, or the configured R2 public/presigned media reference for our bucket). Confirm an arbitrary remote URL, a lookalike host, `javascript:`, `data:`, `../`, a query string, or a non-image media path is rejected with `400` and cannot become a stored tracking pixel or XSS.
 - [ ] Admin and user tokens are not interchangeable (claims checked, not just signature).
 
 ## Money integrity

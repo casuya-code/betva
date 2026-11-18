@@ -35,13 +35,18 @@ type Config struct {
 	MaxImageBytes int64
 	MaxVideoBytes int64
 
-	// Optional Cloudflare R2 storage for media. When all are set, uploads go
-	// to R2 and the returned URL points at R2; otherwise MEDIA_DIR on disk.
-	R2AccountID       string
-	R2AccessKeyID     string
-	R2SecretAccessKey string
-	R2MediaBucket     string
-	R2MediaPublicBase string
+	// Optional Cloudflare R2 storage for media. When all five connection values
+	// are set, uploads go to R2; otherwise MEDIA_DIR on disk.
+	// R2MediaPublicBase is the public delivery base (r2.dev or a custom domain)
+	// used for stored media URLs. It may be left empty when presigned delivery
+	// is enabled (R2MediaPresignTTL > 0), in which case uploads are stored in
+	// R2 and short-lived signed URLs are generated on read.
+	R2AccountID        string
+	R2AccessKeyID      string
+	R2SecretAccessKey  string
+	R2MediaBucket      string
+	R2MediaPublicBase  string
+	R2MediaPresignTTL  int // seconds; 0 = disabled (use public base URLs)
 
 	// Automatic match settlement. Results are only settled once a score is
 	// available: either stored on the match by an admin or taken from the
@@ -122,6 +127,7 @@ func Load() *Config {
 		R2SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY"),
 		R2MediaBucket:     os.Getenv("R2_MEDIA_BUCKET"),
 		R2MediaPublicBase: getEnv("R2_MEDIA_PUBLIC_URL", ""),
+		R2MediaPresignTTL: Atoi(getEnv("R2_MEDIA_PRESIGN_TTL_SECONDS", "0"), 0),
 
 		AutoSettleEnabled:         getEnv("AUTO_SETTLE_ENABLED", "1") != "0",
 		AutoSettleGraceMinutes:    Atoi(getEnv("AUTO_SETTLE_GRACE_MINUTES", "120"), 120),
@@ -154,6 +160,9 @@ func Load() *Config {
 	}
 	if c.AutoResultFetchMaxDates < 1 {
 		c.AutoResultFetchMaxDates = 7
+	}
+	if c.R2MediaPresignTTL < 0 {
+		c.R2MediaPresignTTL = 0
 	}
 
 	// Bad push settings must not take the whole app down. Clamp them to sane

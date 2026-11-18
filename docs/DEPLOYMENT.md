@@ -33,6 +33,7 @@ redeploy or promote it.
 - Healthcheck: `GET /health` (timeout 120 s, restart on failure, max 10 retries).
 - Listens on `:8080`; Railway routes the public domain to port 8080.
 - `MEDIA_DIR=/data/media` on the attached volume, so uploads survive redeploys.
+- When R2 media variables are set, new uploads go to R2 and clients load media directly from R2/Cloudflare (no Railway bytes for playback). `r2.dev` works without a custom domain; a custom domain attached to the bucket is optional for edge/CDN control.
 - One replica. No autoscaling or load test yet.
 
 ### Railway: `Postgres`
@@ -238,6 +239,14 @@ cron cannot read it. Media is backed up manually until it moves to R2:
 railway volume files download /media ./media-backup --volume media
 ```
 
+**Delivery modes (no custom domain required):**
+
+- **Public/direct (recommended for community media):** set `R2_ACCOUNT_ID`, `R2_MEDIA_BUCKET`, `R2_MEDIA_PUBLIC_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` on `api`. Enable public access on the bucket and use its `r2.dev` public URL as `R2_MEDIA_PUBLIC_URL` if you do not have a custom domain. Uploads are stored in R2 with immutable cache headers and clients stream images/video directly from R2/Cloudflare, so Railway serves no media bytes. A custom domain attached to the bucket is optional and useful for CDN/edge control and branding.
+- **Presigned/private:** set `R2_MEDIA_PRESIGN_TTL_SECONDS` (e.g. `3600`) to store internal object references and return short-lived signed GET URLs on read. This lets browsers stream directly from R2 while keeping the bucket private and without a custom domain. It adds a small signing cost per media reference served by the API (not per streamed byte).
+- **Local fallback:** without R2, files live in `MEDIA_DIR` and are served by the API at `/media/*`. Keep this for development only; do not proxy production video traffic through Railway.
+
+**Playback gotchas:** community video uses `preload="none"` and no autoplay (good for low-data scroll). Do not proxy video bytes through the API or Vercel. Videos are capped at 3 MB today; if you allow longer videos, transcode to HLS (`.m3u8` + segments) and serve them directly from R2/CDN so browsers fetch only watched segments.
+
 ---
 
 ## 5. Environment variables
@@ -262,9 +271,10 @@ every name.
 | `PAYOUT_MULTIPLIER_BP` | `15000` | 1.50× return on a win |
 | `MEDIA_DIR` | `/data/media` | Railway volume (local fallback and legacy uploads) |
 | `R2_ACCOUNT_ID` | `de02bd0e1be4fc699d9003ad1eae5e2f` | Set to store new media in R2 |
-| `R2_MEDIA_BUCKET` | `media` | Bucket for community uploads (public access enabled) |
-| `R2_MEDIA_PUBLIC_URL` | `https://pub-38c751940ed148e4acbf1a55f886fca1.r2.dev` | Public bucket/domain URL |
+| `R2_MEDIA_BUCKET` | `media` | Bucket for community uploads (public access enabled for public mode) |
+| `R2_MEDIA_PUBLIC_URL` | `https://pub-38c751940ed148e4acbf1a55f886fca1.r2.dev` | Public bucket/domain URL; `r2.dev` is fine without a custom domain. Optional if `R2_MEDIA_PRESIGN_TTL_SECONDS > 0`. |
 | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | S3 API token for the media bucket | **Required for R2 uploads**; create in R2 → Manage R2 API Tokens (Object Read & Write). Not the Cloudflare bearer token. |
+| `R2_MEDIA_PRESIGN_TTL_SECONDS` | unset (`0`) | Set to e.g. `3600` to return short-lived signed GET URLs on read (private-bucket/presigned delivery) instead of the public base URL. |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | from the operator's local `.env` | Push enabled |
 | `PUSH_DAILY_CAP` | `2` | Enforced server-side |
 | `QUIET_START_HOUR` / `QUIET_END_HOUR` | `22` / `7` | EAT |
@@ -275,7 +285,7 @@ every name.
 | `GROQ_API_KEY` | set 2026-11-16 | AI suggestions enabled; never logged or returned to clients |
 | `ACCESS_FEE_DAU_TARGET` / `MONTHLY_OPERATING_COST_CENTS` | **not set** | Fee planner shows unconfigured |
 
-`REDIS_URL` is not set; the connection failure is non-fatal. When the R2 media variables are all set, uploads go to R2 and posts store the public URL; `/media/*` on the API still serves legacy local files.
+`REDIS_URL` is not set; the connection failure is non-fatal. When the R2 media variables are all set, uploads go to R2 and clients load media directly from R2/Cloudflare (`r2.dev` works without a custom domain; presigned mode works with a private bucket). `/media/*` on the API still serves legacy local files. Avoid proxying production video playback through the API.
 
 ### Vercel (`betva`)
 
@@ -352,10 +362,9 @@ The public TCP proxy used for the drill was deleted immediately afterwards.
 
 Launch blockers or follow-ups, in order:
 
-1. **Cloudflare is not fully configured.** No WAF, no edge cache in Dar es Salaam/Mombasa
-   (needs a custom domain), and the Vercel alias/Railway API are public directly. R2
-   **media uploads** are enabled in production: all five `R2_*` media variables are set on
-   `api`, so new uploads go to R2 while the `/data` volume only serves legacy local files.
+1. **Cloudflare edge/WAF is not fully configured.** No WAF and no custom domain in front of Vercel/Railway yet, so Dar es Salaam/Mombasa edge caching for the app/API is limited. R2
+   **media uploads and direct delivery** are enabled in production via the `r2.dev` public URL (custom domain optional): the required `R2_*` media variables are set on
+   `api`, so new uploads go to R2 and clients stream media directly from R2/Cloudflare while the `/data` volume only serves legacy local files. For private-bucket delivery without a custom domain, use `R2_MEDIA_PRESIGN_TTL_SECONDS`.
 2. **RPO is up to 24 hours.** Daily off-site dumps are live (section 4), but Railway
    managed volume backups and point-in-time recovery are Pro-only and this workspace is
    Hobby. Near-zero RPO for wallets needs Pro PITR or a WAL-shipping setup. Media on the

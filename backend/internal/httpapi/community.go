@@ -109,6 +109,8 @@ func (s *Server) handleCommunityFeed(w http.ResponseWriter, r *http.Request) {
 			&p.Likes, &p.Loves, &p.Hahas, &p.MyReaction); err != nil {
 			continue
 		}
+		p.MediaURL = s.Media.displayURL(r.Context(), p.MediaURL)
+		p.ProfilePic = s.Media.displayURL(r.Context(), p.ProfilePic)
 		out = append(out, p)
 	}
 
@@ -509,6 +511,7 @@ func (s *Server) handleAdminCommunityPosts(w http.ResponseWriter, r *http.Reques
 		if err := rows.Scan(&p.ID, &p.Body, &p.MediaURL, &p.MediaType, &p.Status,
 			&p.ModerationReason, &p.UserID, &p.Nickname, &p.Phone, &p.CreatedAt,
 			&p.ReportCount, &p.OpenReports); err == nil {
+			p.MediaURL = s.Media.displayURL(r.Context(), p.MediaURL)
 			out = append(out, p)
 		}
 	}
